@@ -1,6 +1,6 @@
 {
   "goal": "stand up Maestro v1",
-  "updated": "2026-07-08T01:08:30",
+  "updated": "2026-07-08T11:21:19",
   "skills": {
     "workflow-audit": {
       "status": "learning",
@@ -16,8 +16,8 @@
       "last_used": "2026-07-08T00:06:35"
     },
     "skill-creation": {
-      "status": "learning",
-      "uses": 2,
+      "status": "active",
+      "uses": 3,
       "desc": "Name it, drop it, ship it, reuse it: scaffold a new skill with a trigger verb",
       "branch": "meta",
       "trigger": "/newskill",
@@ -26,7 +26,7 @@
       ],
       "decay": 0,
       "created": "2026-07-07T23:00:00",
-      "last_used": "2026-07-07T23:00:00"
+      "last_used": "2026-07-08T11:21:06"
     },
     "automation": {
       "status": "active",
@@ -42,8 +42,8 @@
       "last_used": "2026-07-07T23:00:00"
     },
     "loop-engineering": {
-      "status": "learning",
-      "uses": 2,
+      "status": "active",
+      "uses": 3,
       "desc": "Critic->doer loop: iterate an agent toward a checkable /goal predicate under a max-iteration budget",
       "branch": "engineering",
       "trigger": "/loop-engineer",
@@ -52,7 +52,7 @@
       ],
       "decay": 0,
       "created": "2026-07-07T23:00:00",
-      "last_used": "2026-07-07T23:55:14"
+      "last_used": "2026-07-08T11:21:05"
     },
     "vault-gardening": {
       "status": "archived",
@@ -90,6 +90,19 @@
       "decay": 0,
       "created": "2026-07-08T00:21:24",
       "last_used": "2026-07-08T01:08:30"
+    },
+    "orchestration": {
+      "status": "learning",
+      "uses": 1,
+      "desc": "Autonomous worker-critic feedback loops: headless claude -p turns, verdict-gated resumes, human override",
+      "branch": "engineering",
+      "trigger": "/orchestrate",
+      "goals": [
+        "stand up Maestro v1"
+      ],
+      "decay": 0,
+      "created": "2026-07-08T11:21:05",
+      "last_used": "2026-07-08T11:21:05"
     }
   }
 }

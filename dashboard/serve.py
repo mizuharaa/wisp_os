@@ -10,6 +10,11 @@ POST /api/spawn          launch a session on this repo:
                          mode "background" -> headless claude -p, log in state/spawn-logs/
 POST /api/focus  {sid}   bring that window to the foreground (Win32).
 POST /api/close  {sid}   taskkill that window's process tree.
+POST /api/orchestrate    start a conductor feedback loop (orchestrator.py).
+GET  /api/orchestrations loop states with per-round worker/critic logs.
+POST /api/orch-action    {oid,action:accept|revise|reject|stop[,feedback]}.
+GET  /api/ssh-creds      saved ssh credential KEYS (never secrets).
+POST /api/ssh-forget     {key} drop a saved ssh credential.
 
 Binds 127.0.0.1 only — that IS the boundary; anyone who can POST here can spawn
 permission-skipping agents. Never bind 0.0.0.0.
@@ -32,7 +37,10 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "memory"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pipeline import vault_path  # single source of truth for the vault location
+import askpass                   # DPAPI ssh credential store
+import orchestrator              # the conductor feedback loop
 MIRROR = os.path.join(ROOT, ".claude", "hooks", "mirror.py")
 INBOX = os.path.join(ROOT, "state", "inbox.jsonl")
 WINDOWS = os.path.join(ROOT, "state", "windows.json")
@@ -238,6 +246,10 @@ class Handler(SimpleHTTPRequestHandler):
             if body is None:
                 return self._json(404, {"error": "note not found"})
             return self._json(200, {"content": body})
+        if self.path == "/api/orchestrations":
+            return self._json(200, {"orchestrations": orchestrator.list_all()})
+        if self.path == "/api/ssh-creds":
+            return self._json(200, {"keys": askpass.keys()})  # names only, never secrets
         return super().do_GET()
 
     def do_POST(self):
@@ -249,6 +261,9 @@ class Handler(SimpleHTTPRequestHandler):
         route = {
             "/api/message": self.api_message, "/api/spawn": self.api_spawn,
             "/api/focus": self.api_focus, "/api/close": self.api_close,
+            "/api/orchestrate": self.api_orchestrate,
+            "/api/orch-action": self.api_orch_action,
+            "/api/ssh-forget": self.api_ssh_forget,
         }.get(self.path)
         if not route:
             return self._json(404, {"error": "unknown endpoint"})
@@ -289,9 +304,12 @@ class Handler(SimpleHTTPRequestHandler):
         flag = " --dangerously-skip-permissions" if skip else ""
         mflag = (" --model " + model) if model else ""
         host_label = None
+        # MAESTRO_SID rides the env into claude, so the instance's hook events
+        # land on the wire under the SAME id the dashboard tracks it by.
+        env = dict(os.environ, MAESTRO_SID=sid)
         if ssh:
-            # Remote terminal. Password is typed INSIDE the window (ssh prompts);
-            # Maestro never stores or transmits credentials itself.
+            # Remote terminal. Password: typed in the window by default; with a
+            # saved/typed one, ssh fetches it from the DPAPI store via askpass.
             mode = "ssh"
             host = re.sub(r"[^\w.\-]", "", str(ssh.get("host", "")))
             user = re.sub(r"[^\w.\-]", "", str(ssh.get("user", "")))
@@ -303,11 +321,30 @@ class Handler(SimpleHTTPRequestHandler):
             if not host or not user:
                 return self._json(400, {"error": "ssh needs host and user"})
             host_label = "%s@%s" % (user, host)
+            key = "%s:%d" % (host_label, port)
+            pw = str(ssh.get("password") or "")
+            if pw and ssh.get("save", True):
+                askpass.store(key, pw)
+            if pw or askpass.fetch(key) is not None:
+                env.update(SSH_ASKPASS=os.path.join(ROOT, "dashboard", "askpass.cmd"),
+                           SSH_ASKPASS_REQUIRE="force", MAESTRO_SSH_KEY=key)
+                if pw and not ssh.get("save", True):
+                    env["MAESTRO_SSH_PW"] = pw  # use once, never written to disk
             rsafe = re.sub(r"[&|<>^%\"'`$\\\r\n]", " ", mission).strip()
             remote = ("cd '%s' && " % rdir) if rdir else ""
-            rcmd = "%sclaude%s%s '%s'" % (remote, flag, mflag, rsafe)
+            # ssh with a command runs a NON-login shell: ~/.profile and nvm never
+            # load, so claude (in ~/.local/bin or npm/nvm bin) is "command not
+            # found" even though interactive logins work. Recreate the login
+            # environment before running it. No double quotes here — the whole
+            # thing rides inside cmd.exe double quotes below.
+            boot = (". /etc/profile >/dev/null 2>&1; . ~/.profile >/dev/null 2>&1; "
+                    ". ~/.bashrc >/dev/null 2>&1; "
+                    "[ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null 2>&1; "
+                    "export PATH=~/.local/bin:~/.npm-global/bin:~/bin:/usr/local/bin:$PATH; "
+                    "command -v claude >/dev/null || echo '[Maestro] claude is not installed on this host (or not on PATH) - install Claude Code there first'; ")
+            rcmd = "%s%sclaude%s%s '%s'" % (boot, remote, flag, mflag, rsafe)
             cmd = 'conhost.exe cmd /k title %s && ssh -t -p %d %s "%s"' % (title, port, host_label, rcmd)
-            p = subprocess.Popen(cmd, cwd=ROOT,
+            p = subprocess.Popen(cmd, cwd=ROOT, env=env,
                                  creationflags=CREATE_NEW_CONSOLE if IS_WIN else 0)
         elif mode == "background":
             os.makedirs(LOGS, exist_ok=True)
@@ -317,14 +354,15 @@ class Handler(SimpleHTTPRequestHandler):
                 argv.insert(2, "--dangerously-skip-permissions")
             if model:
                 argv += ["--model", model]
-            p = subprocess.Popen(argv, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, shell=IS_WIN)
+            p = subprocess.Popen(argv, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+                                 shell=IS_WIN, env=env)
         else:
             mode = "tab"
             # conhost.exe hosts the window itself, so p.pid owns the HWND (used by
             # /api/focus) and it forces a real console even if Windows Terminal is
             # the default terminal (which would otherwise share one window).
             cmd = 'conhost.exe cmd /k title %s && claude%s%s "%s"' % (title, flag, mflag, safe)
-            p = subprocess.Popen(cmd, cwd=ROOT,
+            p = subprocess.Popen(cmd, cwd=ROOT, env=env,
                                  creationflags=CREATE_NEW_CONSOLE if IS_WIN else 0)
         doc = load_windows()
         doc["windows"].append({
@@ -338,6 +376,40 @@ class Handler(SimpleHTTPRequestHandler):
                      % (sid, name, (" @" + host_label) if host_label else "",
                         model or "default", skip, mission))[:200])
         return self._json(200, {"ok": True, "id": sid, "mode": mode, "model": model or "default"})
+
+    def api_orchestrate(self, data):
+        mission = (data.get("mission") or "").strip()
+        if not mission:
+            return self._json(400, {"error": "empty mission"})
+        try:
+            turns = max(1, min(100, int(data.get("turns") or 40)))
+            rounds = max(1, min(8, int(data.get("rounds") or 3)))
+        except (TypeError, ValueError):
+            turns, rounds = 40, 3
+        oid, err = orchestrator.start(
+            mission, name=(data.get("name") or "").strip(),
+            model=str(data.get("model") or "default"),
+            critic=str(data.get("critic") or "haiku"),
+            turns=turns, rounds=rounds, auto=bool(data.get("auto", True)),
+            skip=bool(data.get("skip", True)), workdir=str(data.get("dir") or ""))
+        if err:
+            return self._json(400, {"error": err})
+        return self._json(200, {"ok": True, "id": oid})
+
+    def api_orch_action(self, data):
+        err = orchestrator.action(data.get("oid", ""), data.get("action", ""),
+                                  str(data.get("feedback") or ""))
+        if err:
+            return self._json(409, {"error": err})
+        emit(session="operator", event="orch-action",
+             detail="%s -> %s %s" % (data.get("oid"), data.get("action"),
+                                     str(data.get("feedback") or ""))[:200])
+        return self._json(200, {"ok": True})
+
+    def api_ssh_forget(self, data):
+        ok = askpass.forget(str(data.get("key") or ""))
+        return self._json(200 if ok else 404,
+                          {"ok": ok, "error": None if ok else "no such credential"})
 
     def api_focus(self, data):
         sid = data.get("sid", "")

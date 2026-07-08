@@ -191,6 +191,15 @@
   .inst .spend b{color:var(--green); font-weight:650}
   .inst .mi{font-size:12.5px; color:var(--ink2); margin-bottom:10px; line-height:1.45;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+  .mi.x{cursor:pointer}
+  .mi.x:hover{color:var(--ink)}
+  .mi.open{-webkit-line-clamp:unset}
+  .mirow{display:flex; align-items:flex-start; gap:6px; min-width:0}
+  .mirow .mi{flex:1; min-width:0}
+  .ghostbtn{flex:none; width:24px; height:24px; border-radius:8px; display:grid; place-items:center;
+    color:var(--ink3); border:1px solid transparent; transition:.15s}
+  .ghostbtn:hover{color:var(--green); border-color:var(--line2); background:var(--canvas)}
+  .ghostbtn svg{width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
   .rail{display:flex; gap:4px; margin:10px 0 4px}
   .rail span{flex:1; text-align:center; font-size:9px; font-weight:600; color:var(--ink3);
     border-top:3px solid var(--canvas); padding-top:4px; font-family:var(--mono); transition:.3s}
@@ -248,6 +257,7 @@
   .hit.stale{opacity:.55}
   /* ============ graph ============ */
   #graph{width:100%; height:470px; display:block; cursor:grab}
+  #graph g.gnode, #graph line{transition:opacity .18s ease}
   .gnode{cursor:pointer}
   .gdetail .gt{font-size:11.5px; color:var(--ink3); font-family:var(--mono)}
   .gdetail .gp{font-weight:700; font-size:15px; margin:6px 0}
@@ -398,7 +408,18 @@
               <input class="qbox sshf" id="ssh-user" placeholder="user">
               <input class="qbox sshf" id="ssh-port" placeholder="22" style="max-width:74px">
               <input class="qbox sshf" id="ssh-dir" placeholder="remote dir (optional)">
-              <span class="hintline" style="flex-basis:100%">Password is asked inside the window — Maestro never stores it. Claude Code must be installed on the remote host.</span>
+              <input class="qbox sshf" id="ssh-pass" type="password" placeholder="password (optional)" autocomplete="off">
+              <label class="chk"><input type="checkbox" id="ssh-save" checked> Save password</label>
+              <span class="hintline" style="flex-basis:100%" id="sshhint">Saved passwords are encrypted to your Windows account (DPAPI) and used automatically next time. Leave blank to type it in the window. Claude Code must be installed on the remote host.</span>
+              <span class="hintline" style="flex-basis:100%" id="sshsaved"></span>
+            </div>
+            <div class="opts" id="orchbox" style="display:none">
+              <label>Rounds
+                <select id="opt-rounds"><option value="1">1 round</option><option value="2">2 rounds</option><option value="3" selected>3 rounds</option><option value="5">5 rounds</option></select></label>
+              <label>Critic
+                <select id="opt-critic"><option value="haiku" selected>Haiku · cheap</option><option value="sonnet">Sonnet</option></select></label>
+              <label class="chk"><input type="checkbox" id="opt-auto" checked> Auto-accept verdicts</label>
+              <input class="qbox sshf" id="orch-dir" placeholder="working directory (optional — defaults to this repo)">
             </div>
             <div class="opts">
               <label>Model
@@ -414,8 +435,9 @@
             </div>
             <div class="opts"><span style="font-weight:600">Run with</span>
               <span id="slashchips" style="display:flex;gap:6px;flex-wrap:wrap"></span></div>
-            <div style="display:flex; align-items:center; gap:14px">
+            <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
               <button class="btn solid" id="go">Launch</button>
+              <button class="btn line" id="quickgo" title="one click: last-used model & options, default mission — no prompts">Quick launch</button>
               <span class="hintline" id="hint"></span>
             </div>
           </div>
@@ -424,6 +446,10 @@
           <h3>Directive inbox <span class="tag">read at boot & between missions</span></h3>
           <div id="dirs"></div>
         </div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h3>Conductor loop <span class="tag">the core reads each run, critiques it, and re-prompts — no babysitting</span></h3>
+        <div class="icards" id="orchs"></div>
       </div>
       <div class="card" style="margin-bottom:14px">
         <h3>Terminals <span class="tag">Focus pops the real window — local or SSH</span></h3>
@@ -528,7 +554,7 @@ const CAPFILL=[GREEN, MINT, MID];              // rotating capsule fills (Donezo
 const PIE=[GREEN, MID, MINT, "#79b892", "#c9cec5", "#8a958c"]; // pie chart exempt from 3-color cap
 const STAGES=["think","plan","build","review","test","ship"];
 const LIVE_MS=15*60*1000;
-const S={events:[],skills:null,solved:[],approvals:{tokens:[]},inbox:[],instances:[],integ:null,wire:true,vault:"",vaultData:null,paused:false};
+const S={events:[],skills:null,solved:[],approvals:{tokens:[]},inbox:[],instances:[],integ:null,wire:true,vault:"",vaultData:null,paused:false,orchs:[],sshKeys:[]};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -539,13 +565,16 @@ const jsonl=t=>t.split("\n").filter(l=>l.trim()).map(l=>{try{return JSON.parse(l
 async function poll(){
   if(S.paused){render();return}
   try{
-    const [ev,reg,sol,app,inb,obs,inst,integ,vlt]=await Promise.all([
+    const [ev,reg,sol,app,inb,obs,inst,integ,vlt,orc,shk]=await Promise.all([
       jget("/state/events.jsonl"),jget("/skills/registry.json"),jget("/hermes/solved.jsonl"),
       jget("/state/approvals.json"),jget("/state/inbox.jsonl",1),jget("/memory/OBSIDIAN.md",1),
-      jget("/api/instances",1),jget("/api/integrations",1),jget("/api/vault",1)]);
+      jget("/api/instances",1),jget("/api/integrations",1),jget("/api/vault",1),
+      jget("/api/orchestrations",1),jget("/api/ssh-creds",1)]);
     S.events=jsonl(ev);S.skills=JSON.parse(reg);S.solved=jsonl(sol);
     S.approvals=JSON.parse(app);S.inbox=jsonl(inb);
     S.instances=(inst?JSON.parse(inst).windows:[])||[];S.integ=integ?JSON.parse(integ):null;
+    S.orchs=orc?(JSON.parse(orc).orchestrations||[]):[];
+    S.sshKeys=shk?(JSON.parse(shk).keys||[]):[];
     if(vlt){try{S.vaultData=JSON.parse(vlt)}catch(e){}}
     S.vault=(S.vaultData&&S.vaultData.vault)||(obs.split("\n").find(l=>l.toLowerCase().startsWith("vault:"))||"vault: ?").split(":").slice(1).join(":").trim();
     S.wire=true;
@@ -614,6 +643,11 @@ function gauge(segs,size,center,sub){
 
 /* ---------- components ---------- */
 const arrowSvg='<svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>';
+const copySvg='<svg viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+/* clamped text: click to expand (state survives the 2.5s re-render), copy button recopies the prompt */
+const OPEN=new Set();
+const miBlock=(key,text,cls="",style="")=>`<div class="mi x ${cls} ${OPEN.has(key)?"open":""}" data-k="${esc(key)}" title="click to expand"${style?` style="${style}"`:""}>${esc(text)}</div>`;
+const miRow=(key,text,cls="")=>`<div class="mirow">${miBlock(key,text,cls)}<button class="ghostbtn" data-cp title="copy">${copySvg}</button></div>`;
 function statCard(dark,label,num,unit,delta,deltaCls,go){
   return`<div class="card stat ${dark?"dark":""}">
     <button class="cbtn" data-go="${go}" title="open">${arrowSvg}</button>
@@ -716,24 +750,35 @@ function render(){
       <div class="bd"><div class="t" style="white-space:normal">${esc(d.text)}</div></div>
       <span class="pill ${done.has(d.id)?"live":"idle"}">${done.has(d.id)?"Done":"Queued"}</span></div>`
   ).join("")||`<div class="none">no directives queued</div>`;
-  $("instances").innerHTML=S.instances.length?S.instances.slice().reverse().map(w=>
-    `<div class="inst"><div class="top"><span class="iname">${esc(w.name||w.mission.slice(0,40))}</span>
+  // one identity: spawned instances carry MAESTRO_SID, so their wire session
+  // id === the instance sid — merge live telemetry straight into the card.
+  const byWire=new Map(ss.map(s=>[s.id,s]));
+  const railFor=s=>{const cur=STAGES.indexOf(s&&s.stage);
+    return`<div class="rail">${STAGES.map((st,i)=>`<span class="${i<cur?"on":i===cur?"cur":""}">${st}</span>`).join("")}</div>`};
+  $("instances").innerHTML=S.instances.length?S.instances.slice().reverse().map(w=>{
+    const sess=byWire.get(w.sid);
+    const chips=sess&&sess.agents.length?`<div class="achips">${sess.agents.map((a,i)=>`<span class="achip ${i<sess.exits?"done":""}" title="${esc(a.detail)}">${esc(a.name)}${i<sess.exits?" ✓":""}</span>`).join("")}</div>`:"";
+    return`<div class="inst"><div class="top"><span class="iname">${esc(w.name||w.mission.slice(0,40))}</span>
       <span class="pill ${w.alive?"live":"idle"}">${w.alive?"Running":"Exited"}</span></div>
       <div class="spend">${esc(w.sid)} · ${w.mode==="ssh"?("ssh "+esc(w.host||"")):w.mode==="tab"?"local window":"background run"} · model <b>${esc(w.model||"default")}</b>${w.budget?" · "+w.budget+" turns":""}${w.skip===false?" · asks permissions":""}</div>
-      <div class="mi" title="${esc(w.mission)}">${esc(w.mission)}</div>
-      <div style="display:flex;gap:8px"><button class="btn line sm" data-focus="${esc(w.sid)}" ${w.alive?"":"disabled"}>Focus window</button>
-      <button class="btn line sm danger" data-close="${esc(w.sid)}">Close</button></div></div>`
-  ).join(""):`<div class="none">No terminals launched yet — use the launcher above.</div>`;
+      ${miRow("i:"+w.sid,w.mission)}
+      ${sess?railFor(sess)+chips+miBlock("il:"+w.sid,"▸ "+(sess.lastline||"no detail yet"),"mono","-webkit-line-clamp:1;margin:6px 0 10px"):""}
+      <div style="display:flex;gap:8px">${w.mode!=="background"?`<button class="btn line sm" data-focus="${esc(w.sid)}" ${w.alive?"":"disabled"}>Focus window</button>`:""}
+      <button class="btn line sm danger" data-close="${esc(w.sid)}">Close</button></div></div>`;
+  }).join(""):`<div class="none">No terminals launched yet — use the launcher above.</div>`;
+  renderOrchs();
+  const named=new Map(S.instances.map(w=>[w.sid,w.name]));
   $("wire-sessions").innerHTML=ss.length?ss.map(s=>{
-    const cur=STAGES.indexOf(s.stage);
-    const rail=STAGES.map((st,i)=>`<span class="${i<cur?"on":i===cur?"cur":""}">${st}</span>`).join("");
     const chips=s.agents.map((a,i)=>`<span class="achip ${i<s.exits?"done":""}" title="${esc(a.detail)}">${esc(a.name)}${i<s.exits?" ✓":""}</span>`).join("");
-    return`<div class="inst"><div class="top"><span class="iname" title="${esc(s.job||"")}">${esc((s.job||"idle conductor").slice(0,48))}</span>
+    const label=named.get(s.id)?named.get(s.id)+" — "+(s.job||"working"):(s.job||"idle conductor");
+    return`<div class="inst"><div class="top"><span class="iname" title="${esc(s.job||"")}">${esc(label.slice(0,48))}</span>
       <span class="pill ${s.live?"live":"idle"}">${s.live?"Live":"Idle"}</span></div>
       <div class="spend">${esc(s.id)} · last seen ${esc((s.last||"").slice(11,19))}</div>
-      <div class="rail">${rail}</div>${s.agents.length?`<div class="achips">${chips}</div>`:""}
-      <div class="mi mono" style="-webkit-line-clamp:1;margin-top:8px">▸ ${esc(s.lastline||"no detail yet")}</div></div>`;
+      ${railFor(s)}${s.agents.length?`<div class="achips">${chips}</div>`:""}
+      ${miBlock("sl:"+s.id,"▸ "+(s.lastline||"no detail yet"),"mono","-webkit-line-clamp:1;margin-top:8px")}</div>`;
   }).join(""):`<div class="none">nothing reporting yet</div>`;
+  $("sshsaved").innerHTML=S.sshKeys.length?"Saved: "+S.sshKeys.map(k=>
+    `<span class="mono">${esc(k)}</span> <a href="#" data-forget="${esc(k)}">forget</a>`).join(" · "):"";
 
   // skill tree — conductor on top, branch columns below
   const branches={};for(const[n,v]of sk)(branches[v.branch||"misc"]??=[]).push([n,v]);
@@ -817,6 +862,30 @@ function renderInteg(){
     card("Skills","branch",Object.entries(g.skills).map(([k,v])=>`<li>${esc(k)}<span class="mono">${v}</span></li>`).join(""),`Add: <code>python skills/engine.py add …</code>`,(g.skills.active||0)+" earned");
 }
 
+/* ---------- conductor loop ---------- */
+const OPILL={running:"live",waiting:"warn",done:"live",rejected:"warn",error:"warn",stalled:"warn",exhausted:"idle",stopped:"idle"};
+function renderOrchs(){
+  $("orchs").innerHTML=S.orchs.length?S.orchs.slice(0,9).map(o=>{
+    const tl=o.turns_log||[],start=Math.max(0,tl.length-4);
+    const log=tl.slice(-4).map((t,i)=>{const k="ol:"+o.oid+":"+(start+i);
+      return t.role==="worker"
+      ?`<div class="mirow" style="margin-top:6px">${miBlock(k,"▸ r"+t.round+" worker"+(t.secs?" · "+t.secs+"s":"")+(t.error?" · ERROR":"")+": "+(t.result||"(no output)"),"mono","-webkit-line-clamp:2;margin:0")}<button class="ghostbtn" data-cp title="copy output">${copySvg}</button></div>`
+      :t.role==="critic"
+      ?`<div class="mirow" style="margin-top:4px"><span class="achip ${t.verdict==="accept"?"":"done"}" style="flex:none">${esc(t.verdict)}</span>${miBlock(k,t.feedback||"mission complete","","-webkit-line-clamp:2;margin:0")}</div>`
+      :miBlock(k,t.result||"","mono","-webkit-line-clamp:2;margin:4px 0 0")}).join("");
+    const waiting=o.status==="waiting"&&o.live;
+    const btns=(waiting?`<button class="btn line sm" data-orch-act="accept" data-oid="${o.oid}">Accept</button>
+      <button class="btn line sm" data-orch-act="revise" data-oid="${o.oid}">Revise</button>
+      <button class="btn line sm danger" data-orch-act="reject" data-oid="${o.oid}">Reject</button>`:"")+
+      (o.live?`<button class="btn line sm danger" data-orch-act="stop" data-oid="${o.oid}">Stop</button>`:"");
+    return`<div class="inst"><div class="top"><span class="iname" title="${esc(o.mission)}">${esc(o.name)}</span>
+      <span class="pill ${OPILL[o.status]||"idle"}">${esc(o.status)}</span></div>
+      <div class="spend">${esc(o.oid)} · round ${o.round}/${o.rounds} · worker <b>${esc(o.model)}</b> · critic ${esc(o.critic)} · $${(o.cost||0).toFixed(3)}${o.auto?"":" · manual approval"}</div>
+      ${miRow("o:"+o.oid,o.mission)}${log}
+      ${btns?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${btns}</div>`:""}</div>`;
+  }).join(""):`<div class="none">No loops yet — pick "Orchestrated" in the launcher and the core runs the mission hands-free.</div>`;
+}
+
 /* ---------- audit ---------- */
 const MUTED=new Set(["tool","session-stop","bootstrap"]);
 function renderAudit(){
@@ -838,8 +907,9 @@ function renderAudit(){
 
 /* ---------- launcher ---------- */
 const MODES=[["tab","New window","opens a real Claude Code terminal on this repo — focus & close it from here"],
-  ["ssh","Remote SSH","opens an SSH terminal to your host and starts Claude Code there; you type the password in the window"],
-  ["background","Background","headless run; log lands in state/spawn-logs/"],
+  ["managed","Orchestrated","the core runs it headless in a loop: reads the output, critiques, re-prompts until accepted"],
+  ["ssh","Remote SSH","opens an SSH terminal to your host and starts Claude Code there; saved passwords log in automatically"],
+  ["background","Background","headless one-shot; log lands in state/spawn-logs/"],
   ["directive","Directive","queues a note running sessions pick up at boot / between missions"]];
 $("modes").dataset.mode="tab";
 $("modes").innerHTML=MODES.map(([v,l],i)=>`<button class="mode ${i===0?"on":""}" data-v="${v}">${l}</button>`).join("");
@@ -848,11 +918,42 @@ $("modes").addEventListener("click",e=>{const b=e.target.closest(".mode");if(!b)
   $("modes").dataset.mode=b.dataset.v;
   $("modes").querySelectorAll(".mode").forEach(x=>x.classList.toggle("on",x===b));
   $("hint").textContent=MODES.find(m=>m[0]===b.dataset.v)[2];
-  $("sshbox").style.display=b.dataset.v==="ssh"?"flex":"none"});
+  $("sshbox").style.display=b.dataset.v==="ssh"?"flex":"none";
+  $("orchbox").style.display=b.dataset.v==="managed"?"flex":"none"});
+/* launcher defaults persist so one click is a full launch, no prompts */
+const DEFAULTS_KEY="maestro-launch";
+function saveDefaults(){try{localStorage.setItem(DEFAULTS_KEY,JSON.stringify({
+  model:$("opt-model").value,budget:$("opt-budget").value,skip:$("opt-skip").checked,
+  rounds:$("opt-rounds").value,critic:$("opt-critic").value,auto:$("opt-auto").checked}))}catch(e){}}
+(function restoreDefaults(){try{const d=JSON.parse(localStorage.getItem(DEFAULTS_KEY)||"{}");
+  if(d.model)$("opt-model").value=d.model;if(d.budget)$("opt-budget").value=d.budget;
+  if("skip" in d)$("opt-skip").checked=d.skip;if(d.rounds)$("opt-rounds").value=d.rounds;
+  if(d.critic)$("opt-critic").value=d.critic;if("auto" in d)$("opt-auto").checked=d.auto}catch(e){}})();
+const DEFAULT_MISSION="Run the boot sequence (python bootstrap.py boot), then read the tail of state/inbox.jsonl and work every directive without a matching directive-done event. If the inbox is clear, run python bootstrap.py and fix any FAIL.";
 function toast(msg,err){const n=document.createElement("div");n.className="note"+(err?" err":"");
   n.textContent=msg;$("toast").appendChild(n);setTimeout(()=>n.remove(),5000)}
 async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
+async function launch(text,mode){
+  const model=$("opt-model").value,budget=+$("opt-budget").value;
+  const iname=$("iname").value.trim(),skip=$("opt-skip").checked;
+  saveDefaults();
+  if(mode==="directive"){const j=await post("/api/message",{text});return`Directive ${j.id} queued.`}
+  if(mode==="managed"){
+    const j=await post("/api/orchestrate",{mission:text,name:iname,model,turns:budget,
+      rounds:+$("opt-rounds").value,critic:$("opt-critic").value,auto:$("opt-auto").checked,
+      skip,dir:$("orch-dir").value.trim()});
+    return`Loop "${iname||j.id}" running — the core takes it from here.`}
+  const body={mission:text,mode:mode==="ssh"?"tab":mode,model,budget,name:iname,skip};
+  if(mode==="ssh"){body.ssh={host:$("ssh-host").value.trim(),user:$("ssh-user").value.trim(),
+    port:$("ssh-port").value.trim(),dir:$("ssh-dir").value.trim(),
+    password:$("ssh-pass").value,save:$("ssh-save").checked};
+    $("ssh-pass").value=""}
+  const j=await post("/api/spawn",body);
+  return mode==="ssh"?`SSH terminal "${iname||j.id}" opening.`
+    :mode==="tab"?`Terminal "${iname||j.id}" opening (${j.model}).`
+    :`Background run "${iname||j.id}" started (${j.model}, ${budget}t).`;
+}
 $("go").addEventListener("click",async()=>{
   const base=$("mission").value.trim();
   const cmds=[...document.querySelectorAll("#slashchips input:checked")].map(c=>c.value);
@@ -861,27 +962,41 @@ $("go").addEventListener("click",async()=>{
   if(cmds.length===1)text=(cmds[0]+" "+base).trim();
   else if(cmds.length>1)text=(cmds[0]+" "+base).trim()+"\nWhen that completes, run in order: "+cmds.slice(1).join(", ");
   if(!text)return toast("Write a mission or tick a command first.",true);
-  const mode=$("modes").dataset.mode,btn=$("go");btn.disabled=true;
-  const model=$("opt-model").value,budget=+$("opt-budget").value;
-  const iname=$("iname").value.trim(),skip=$("opt-skip").checked;
-  const body={mission:text,mode:mode==="ssh"?"tab":mode,model,budget,name:iname,skip};
-  if(mode==="ssh")body.ssh={host:$("ssh-host").value.trim(),user:$("ssh-user").value.trim(),
-    port:$("ssh-port").value.trim(),dir:$("ssh-dir").value.trim()};
-  try{const j=mode==="directive"?await post("/api/message",{text}):await post("/api/spawn",body);
+  const btn=$("go");btn.disabled=true;
+  try{const msg=await launch(text,$("modes").dataset.mode);
     $("mission").value="";$("iname").value="";
     document.querySelectorAll("#slashchips input:checked").forEach(c=>c.checked=false);
-    toast(mode==="directive"?`Directive ${j.id} queued.`
-      :mode==="ssh"?`SSH terminal "${iname||j.id}" opening — type the password in the window.`
-      :mode==="tab"?`Terminal "${iname||j.id}" opening (${j.model}).`
-      :`Background run "${iname||j.id}" started (${j.model}, ${budget}t).`);
-    poll();
+    toast(msg);poll();
   }catch(e){toast("Failed: "+e.message,true)}btn.disabled=false});
+$("quickgo").addEventListener("click",async()=>{
+  // one click, zero prompts: saved defaults + the standing default mission
+  const btn=$("quickgo");btn.disabled=true;
+  try{toast(await launch(DEFAULT_MISSION,"tab"));poll()}
+  catch(e){toast("Failed: "+e.message,true)}btn.disabled=false});
 document.addEventListener("click",async e=>{
   const g=e.target.closest("[data-go]");if(g){location.hash=g.dataset.go;return}
   const f=e.target.closest("[data-focus]"),c=e.target.closest("[data-close]");
+  const oa=e.target.closest("[data-orch-act]"),fg=e.target.closest("[data-forget]");
   if(f){try{await post("/api/focus",{sid:f.dataset.focus});toast("Window brought to front.")}catch(err){toast("Focus failed: "+err.message,true)}}
   if(c){if(!confirm("Close this Claude Code window?"))return;
     try{await post("/api/close",{sid:c.dataset.close});toast("Window closed.");poll()}catch(err){toast("Close failed: "+err.message,true)}}
+  if(oa){const act=oa.dataset.orchAct;
+    let feedback="";
+    if(act==="revise"){feedback=prompt("Next instruction for the worker:")||"";if(!feedback)return}
+    if(act==="stop"&&!confirm("Stop this loop? The running turn is killed."))return;
+    try{await post("/api/orch-action",{oid:oa.dataset.oid,action:act,feedback});
+      toast(act==="stop"?"Loop stopped.":"Verdict sent: "+act);poll()}
+    catch(err){toast("Action failed: "+err.message,true)}}
+  if(fg){e.preventDefault();
+    try{await post("/api/ssh-forget",{key:fg.dataset.forget});toast("Credential forgotten.");poll()}
+    catch(err){toast("Forget failed: "+err.message,true)}}
+  const cp=e.target.closest("[data-cp]");
+  if(cp){const t=cp.parentElement.querySelector(".mi");
+    try{await navigator.clipboard.writeText((t?t.textContent:"").replace(/^▸ r\d+ worker[^:]*: /,""));toast("Copied.")}
+    catch(err){toast("Copy failed: "+err.message,true)}return}
+  const mx=e.target.closest(".mi.x");
+  if(mx&&mx.dataset.k){mx.classList.toggle("open");
+    mx.classList.contains("open")?OPEN.add(mx.dataset.k):OPEN.delete(mx.dataset.k)}
 });
 $("pausebtn").addEventListener("click",()=>{S.paused=!S.paused;
   toast(S.paused?"Polling paused.":"Polling resumed.");render()});
@@ -893,7 +1008,7 @@ const Graph=(function(){
   const W=820,H=470;
   // deterministic per-folder color so clusters read as folders (max palette reused, Obsidian-like)
   const FOLDCOL=["#135c38","#1e7c4c","#3f7c9a","#9a6a3f","#7d5c9a","#b6bfb6","#5d675f","#c48a3f"];
-  let nodes=[],links=[],sig="",raf=0,hover=false,selected=null,drag=null,src="vault",folders={};
+  let nodes=[],links=[],adj=[],sig="",raf=0,hover=false,selected=null,drag=null,src="vault",folders={};
   function colorFor(folder){
     if(!(folder in folders)){const keys=Object.keys(folders);folders[folder]=FOLDCOL[keys.length%FOLDCOL.length]}
     return folders[folder];
@@ -933,6 +1048,8 @@ const Graph=(function(){
         if(!(rw.tags||[]).length)links.push([0,ci,1])});
       seedNewest("card");
     }
+    adj=nodes.map(()=>new Set());
+    links.forEach(lk=>{adj[lk[0]].add(lk[1]);adj[lk[1]].add(lk[0])});
     draw();renderLegend();
   }
   const rnd=m=>Math.random()*m-m/2;
@@ -969,7 +1086,7 @@ const Graph=(function(){
       ? fs.map(([f,c])=>`<span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${c};margin-right:5px"></i>${esc(f)}</span>`).join("")
       : `<span>Hermes core · tag clusters · solved-problem cards</span>`;
   }
-  function physics(){
+  function physics(spd){
     for(let i=0;i<nodes.length;i++){const a=nodes[i];if(a===drag)continue;
       for(let j=i+1;j<nodes.length;j++){const b=nodes[j];
         let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy;if(d2<1)d2=1;if(d2>36000)continue;
@@ -980,9 +1097,9 @@ const Graph=(function(){
       const rest=hub?54:40,f=(d-rest)*0.01;
       a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f}
     for(const n of nodes){if(n===drag)continue;
-      if(!hover&&!reduced){n.vx+=rnd(.08);n.vy+=rnd(.08)}
+      if(spd===1&&!reduced){n.vx+=rnd(.08);n.vy+=rnd(.08)}
       n.vx*=0.85;n.vy*=0.85;
-      n.x=Math.max(20,Math.min(W-20,n.x+n.vx));n.y=Math.max(18,Math.min(H-18,n.y+n.vy))}
+      n.x=Math.max(20,Math.min(W-20,n.x+n.vx*spd));n.y=Math.max(18,Math.min(H-18,n.y+n.vy*spd))}
   }
   function position(){
     nodes.forEach(nd=>{if(nd._el)nd._el.setAttribute("transform",`translate(${nd.x.toFixed(1)},${nd.y.toFixed(1)})`)});
@@ -990,8 +1107,25 @@ const Graph=(function(){
       if(lk._el){lk._el.setAttribute("x1",a.x.toFixed(1));lk._el.setAttribute("y1",a.y.toFixed(1));
         lk._el.setAttribute("x2",b.x.toFixed(1));lk._el.setAttribute("y2",b.y.toFixed(1))}});
   }
-  function loop(){if((!hover||drag)&&!reduced){physics()}position();raf=requestAnimationFrame(loop)}
+  // hover no longer freezes the sim — it drops into slow motion so the web
+  // keeps breathing while you aim (Daniel: "animate more, just slow it down")
+  function loop(){if(!reduced){physics(drag?1:hover?0.22:1)}position();raf=requestAnimationFrame(loop)}
   function highlight(nd){nodes.forEach(n=>{if(n._c){const on=n===nd;n._c.setAttribute("stroke",on?GREEN:"none");n._c.setAttribute("stroke-width",on?"2.5":"0")}})}
+  const LKCOL=lk=>lk[2]?"#d4d8cf":"#b9c6bd";
+  function hi(i){if(!adj[i])return;
+    nodes.forEach((n,k)=>{if(n._el)n._el.setAttribute("opacity",k===i||adj[i].has(k)?"1":"0.16")});
+    links.forEach(lk=>{const on=lk[0]===i||lk[1]===i;if(!lk._el)return;
+      lk._el.setAttribute("opacity",on?"1":"0.08");
+      lk._el.setAttribute("stroke",on?"#7fa88f":LKCOL(lk));
+      lk._el.setAttribute("stroke-width",on?"1.6":(lk[2]?"1":"1.3"))});
+    if(nodes[i]&&nodes[i]._c){nodes[i]._c.setAttribute("stroke",GREEN);nodes[i]._c.setAttribute("stroke-width","2.5")}}
+  function unhi(){
+    nodes.forEach(n=>{if(n._el)n._el.setAttribute("opacity","1")});
+    links.forEach(lk=>{if(!lk._el)return;lk._el.setAttribute("opacity","1");
+      lk._el.setAttribute("stroke",LKCOL(lk));lk._el.setAttribute("stroke-width",lk[2]?"1":"1.3")});
+    highlight(selected!=null?nodes[selected]:null)}
+  svg.addEventListener("pointerover",e=>{const g=e.target.closest(".gnode");if(g)hi(+g.dataset.i)});
+  svg.addEventListener("pointerout",e=>{if(e.target.closest(".gnode"))unhi()});
   async function select(i){
     const nd=nodes[i];if(!nd)return;selected=i;highlight(nd);
     $("gtitle").textContent=nd.type==="note"?"Note":nd.type==="folder"?"Folder":nd.type==="card"?"Solved problem":nd.type==="tag"?"Tag":"Core";
@@ -1019,7 +1153,7 @@ const Graph=(function(){
   // pointer: click selects, drag moves (bigger hit targets make both easy)
   function toSvg(e){const r=svg.getBoundingClientRect();return[(e.clientX-r.left)/r.width*W,(e.clientY-r.top)/r.height*H]}
   svg.addEventListener("pointerenter",()=>hover=true);
-  svg.addEventListener("pointerleave",()=>{hover=false;drag=null});
+  svg.addEventListener("pointerleave",()=>{hover=false;drag=null;unhi()});
   svg.addEventListener("pointerdown",e=>{const g=e.target.closest(".gnode");if(!g)return;
     const i=+g.dataset.i;drag=nodes[i];drag._down=[...toSvg(e)];drag._moved=false;
     try{svg.setPointerCapture(e.pointerId)}catch(_){}});

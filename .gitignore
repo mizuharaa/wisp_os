@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 state/.appwindow/
 state/spawn-logs/
+state/ssh-creds.json
+state/orchestrations/

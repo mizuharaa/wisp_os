@@ -87,7 +87,9 @@ def main():
     needle = "jar" + "vis"
     dirty = []
     for dirpath, dirs, files in os.walk(ROOT):
-        dirs[:] = [d for d in dirs if d not in (".git", "__pycache__")]
+        # .appwindow is Edge's app-mode browser profile (desktop.py) — browser
+        # junk, not Maestro's writing; it can legitimately contain any string.
+        dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", ".appwindow")]
         for fn in files:
             p = os.path.join(dirpath, fn)
             try:

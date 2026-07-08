@@ -1,5 +1,12 @@
 {
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python .claude/hooks/recall.py" }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

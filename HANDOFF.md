@@ -8,8 +8,8 @@ Read `soul/soul.md` and `CLAUDE.md` first — this file is the operational map o
 Claude Code as a personal AI operating system for **Daniel (Khang Daniel Tran)**. One
 *conductor* that keeps memory fresh, reuses hard-won skills, spawns specialist agents only
 when needed, and never re-solves a solved problem. It is a **substrate**: a future consumer
-(`open_jarvis`) will run on top of it. Maestro must contain **zero references to that
-consumer** — `bootstrap.py` has a hygiene check that fails if the string appears anywhere,
+will run on top of it (Daniel's memory holds its name). Maestro must contain **zero
+references to that consumer** — `bootstrap.py` has a hygiene check that fails if it appears anywhere,
 including the event log. Naming history: **AIOS → EMBER → Maestro** (Daniel rejected EMBER;
 run any new product name past him before committing to it).
 
@@ -54,7 +54,11 @@ bind `0.0.0.0`.
 | `.claude/agents/*.md` | 9 specialists (ceo, eng-manager, designer, reviewer, qa-lead, security-officer, release-engineer, doc-engineer, hermes). Spawn-on-demand via `/spawn`. |
 | `.claude/commands/*.md` | Mission loop: `/office-hours → /plan-ceo-review → /plan-eng-review → build → /review → /qa → /ship`, plus `/spawn /goal /hermes /skill`. |
 | `memory/pipeline.py` | Non-rot memory. No naked facts — every write carries a source + freshness stamp. `vault_path()` is the single source of truth for the Obsidian vault location (read from `memory/OBSIDIAN.md`). |
+| `memory/harvest.py` | Workspace scraper: walks the parent workspace dir, mines each project's docs, writes sourced knowledge cards to the vault at `Maestro/Knowledge/` (+ `_index` MOC). Re-run to refresh. |
 | `hermes/hermes.py` | The flywheel. `note`/`query`/`stale`. Notes append to `solved.jsonl` AND mirror a card into the vault at `Maestro/Hermes/` with an auto-regenerated `_index.md` MOC. |
+| `.claude/hooks/recall.py` | UserPromptSubmit hook: queries Hermes with EVERY prompt and injects prior solutions into context — the relearn-before-resolve step is automatic now, in every session. |
+| `dashboard/orchestrator.py` | The conductor loop: headless worker (`claude -p`, `--resume` between rounds) → haiku critic → accept/revise/reject verdicts, auto or gated on Daniel. State in `state/orchestrations/`, everything on the wire under the loop's oid. |
+| `dashboard/askpass.py` | DPAPI ssh credential store (ctypes, this-Windows-account-only) + `SSH_ASKPASS` helper. Secrets live in gitignored `state/ssh-creds.json`; `askpass.cmd` is the shim ssh executes (`SSH_ASKPASS_REQUIRE=force`). |
 
 **The wire (`state/events.jsonl`) is the one file everything observable flows through.** If it
 isn't on the wire, it didn't happen. The dashboard reads only this + the registries + the vault.
@@ -77,7 +81,16 @@ Dashboard / Instances / Skill tree / Brain / Brain graph / Integrations / Audit 
 
 **Instance manager** lets Daniel launch local OR SSH Claude Code terminals, name them, tick
 model/budget/skip-permissions, and compose slash commands into the prompt. Focus pops the real
-window. **SSH password is typed inside the window — Maestro never stores or transmits it.**
+window. Since the orchestrator rebuild it also has: **Orchestrated mode** (the conductor loop
+runs the mission hands-free — see orchestrator.py), **Quick launch** (one click, saved
+defaults, standing default mission), an optional **DPAPI-encrypted ssh password store**
+(typed-in-window remains the default), and **click-to-expand / copy buttons** on every
+clamped mission or output (state survives the 2.5s re-render via the `OPEN` set).
+
+**Every spawn exports `MAESTRO_SID=<sid>`** and mirror.py prefers it, so an instance's wire
+events land under the id the dashboard tracks — instance cards show the live stage rail,
+agent chips, and last action of their own session. This is the one mechanism that unifies
+Terminals ↔ Session feed ↔ orchestrations; don't break it.
 
 **Brain graph** renders the *actual vault* (folder-clustered, wikilinks as edges, drag +
 click-to-read with an Obsidian deep link), with a toggle to the Hermes solved-problem view.
@@ -116,6 +129,12 @@ browser does — bump `?v=` after editing `index.html`.
   use ctypes/taskkill. `focus_by()` uses the undocumented `SwitchToThisWindow` (only reliable
   foreground-from-background call) — upgrade to AttachThreadInput if it ever regresses.
 - **SSH assumes Claude Code is installed on the remote host** and that `ssh` is on PATH.
+  The remote command now recreates a login-shell PATH (profile/nvm/~/.local/bin) before
+  running claude — `ssh host "cmd"` is a non-login shell (hermes `26bcd4e`).
+- **Orchestrations don't survive a server restart** — the loop thread dies with the
+  process; the run's JSON stays and the dashboard shows it as "stalled". Relaunch it.
+- **askpass is a .cmd shim** — if Win32-OpenSSH ever refuses batch files as SSH_ASKPASS,
+  ssh silently falls back to prompting in the window (graceful, but saved passwords idle).
 - **`state/windows.json` accumulates stale entries** across restarts (dead PIDs show as Exited).
   It's reset to `{"windows": []}` during testing; harmless but not auto-pruned.
 - The **conscious-spend** rule is a live convention: every spawn picks model + turn budget

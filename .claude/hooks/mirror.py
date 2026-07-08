@@ -27,7 +27,9 @@ def from_hook():
         data = json.load(sys.stdin)
     except json.JSONDecodeError:
         return
-    sid = (data.get("session_id") or "local")[:8]
+    # MAESTRO_SID is set by /api/spawn and the orchestrator so an instance's
+    # wire events carry the SAME id the dashboard tracks it under.
+    sid = os.environ.get("MAESTRO_SID") or (data.get("session_id") or "local")[:8]
     he = data.get("hook_event_name", "")
     tool = data.get("tool_name", "")
     ti = data.get("tool_input") or {}
@@ -59,7 +61,8 @@ def from_hook():
 
 
 def from_args(argv):
-    ev = {"session": os.environ.get("AIOS_SESSION", "conductor"), "event": "stage"}
+    ev = {"session": os.environ.get("MAESTRO_SID")
+          or os.environ.get("AIOS_SESSION", "conductor"), "event": "stage"}
     i = 0
     while i < len(argv):
         key, val = argv[i].lstrip("-"), argv[i + 1] if i + 1 < len(argv) else ""
