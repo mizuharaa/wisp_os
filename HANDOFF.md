@@ -57,8 +57,9 @@ bind `0.0.0.0`.
 | `memory/harvest.py` | Workspace scraper: walks the parent workspace dir, mines each project's docs, writes sourced knowledge cards to the vault at `Maestro/Knowledge/` (+ `_index` MOC). Re-run to refresh. |
 | `hermes/hermes.py` | The flywheel. `note`/`query`/`stale`. Notes append to `solved.jsonl` AND mirror a card into the vault at `Maestro/Hermes/` with an auto-regenerated `_index.md` MOC. |
 | `.claude/hooks/recall.py` | UserPromptSubmit hook: queries Hermes with EVERY prompt and injects prior solutions into context — the relearn-before-resolve step is automatic now, in every session. |
-| `dashboard/orchestrator.py` | The conductor loop: headless worker (`claude -p`, `--resume` between rounds) → haiku critic → accept/revise/reject verdicts, auto or gated on Daniel. State in `state/orchestrations/`, everything on the wire under the loop's oid. |
+| `dashboard/orchestrator.py` | The conductor loop: headless worker (`claude -p`, `--resume` between rounds) → critic → accept/revise/reject verdicts, auto or gated on Daniel. **The critic defaults to OPUS — Daniel's explicit call ("we can't risk outputs"); never quietly downgrade it.** State in `state/orchestrations/`, everything on the wire under the loop's oid. |
 | `dashboard/askpass.py` | DPAPI ssh credential store (ctypes, this-Windows-account-only) + `SSH_ASKPASS` helper. Secrets live in gitignored `state/ssh-creds.json`; `askpass.cmd` is the shim ssh executes (`SSH_ASKPASS_REQUIRE=force`). |
+| `dashboard/pulse.py` | The outside-world strip: Claude 5h-window usage + reset countdown (from `~/.claude` transcripts), GitHub commits, Gmail unread (IMAP), Spotify now-playing (needs creds). Config = gitignored `state/pulse.json` (VALUES copied from the owner's env — never paths, hygiene). Background thread refreshes every 45s; `GET /api/pulse`. |
 
 **The wire (`state/events.jsonl`) is the one file everything observable flows through.** If it
 isn't on the wire, it didn't happen. The dashboard reads only this + the registries + the vault.

@@ -4,3 +4,6 @@ state/.appwindow/
 state/spawn-logs/
 state/ssh-creds.json
 state/orchestrations/
+state/pulse.json
+.env
+state/claude-seen.json

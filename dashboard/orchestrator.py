@@ -24,6 +24,8 @@ import threading
 import time
 import uuid
 
+import pulse  # account routing: which Claude account this loop delegates to
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ODIR = os.path.join(ROOT, "state", "orchestrations")
 MIRROR = os.path.join(ROOT, ".claude", "hooks", "mirror.py")
@@ -87,9 +89,11 @@ def list_all():
     return out
 
 
-def _claude(oid, argv, prompt, timeout, cwd):
+def _claude(oid, argv, prompt, timeout, cwd, config_dir=None):
     """One claude -p call; prompt via stdin (survives quotes/newlines on cmd)."""
     env = dict(os.environ, MAESTRO_SID=oid)
+    if config_dir:
+        env["CLAUDE_CONFIG_DIR"] = config_dir  # run under the delegated account
     p = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, text=True, encoding="utf-8",
                          shell=IS_WIN, env=env)
@@ -147,6 +151,16 @@ def _run(oid):
     cwd = o.get("dir") or ROOT
     prompt = o["mission"]
     sid = None
+    # resolve which Claude account this loop delegates to. "auto" picks the
+    # account with the most headroom right now (least tokens used this window).
+    acct = o.get("account") or ""
+    if acct == "auto":
+        acct = pulse.least_used()
+        o["account_resolved"] = acct
+        _save(o)
+    cfg_dir = pulse.dir_for(acct) if acct else ""
+    if acct:
+        emit(oid, "delegating to account: %s" % acct)
     try:
         for rnd in range(1, o["rounds"] + 1):
             with LOCK:
@@ -167,7 +181,7 @@ def _run(oid):
                 argv.append("--dangerously-skip-permissions")
             emit(oid, "round %d/%d worker: %s" % (rnd, o["rounds"], prompt))
             t0 = time.time()
-            w = _claude(oid, argv, prompt, WORKER_TIMEOUT, cwd)
+            w = _claude(oid, argv, prompt, WORKER_TIMEOUT, cwd, cfg_dir)
             sid = w.get("session_id") or sid
             o["cost"] = round(o.get("cost", 0) + (w.get("total_cost_usd") or 0), 4)
             # a worker that burns its whole turn budget mid-work is not a crash —
@@ -187,11 +201,14 @@ def _run(oid):
                 _save(o)
                 emit(oid, "worker error: " + report[:120])
                 return
+            # the critic IS the core's judgment — never a small model (Daniel's
+            # call: outputs are the product, don't risk them). One report per
+            # round keeps opus cost bounded.
             cargv = ["claude", "-p", "--output-format", "json", "--max-turns", "2",
                      "--disallowedTools", "*",
-                     "--model", o.get("critic") or "haiku"]
+                     "--model", o.get("critic") or "opus"]
             c = _claude(oid, cargv, CRITIC_PROMPT % (o["mission"], report),
-                        CRITIC_TIMEOUT, cwd)
+                        CRITIC_TIMEOUT, cwd, cfg_dir)
             o["cost"] = round(o.get("cost", 0) + (c.get("total_cost_usd") or 0), 4)
             verdict, feedback = _verdict(str(c.get("result") or ""))
             o["turns_log"].append({"role": "critic", "round": rnd,
@@ -210,6 +227,13 @@ def _run(oid):
                 o["status"] = "done"
                 _save(o)
                 emit(oid, "mission accepted after %d round(s), $%s" % (rnd, o["cost"]))
+                # learn: the accepted mission + outcome land in the brain so it
+                # is never re-solved from scratch (the flywheel, automatically).
+                subprocess.run([sys.executable, os.path.join(ROOT, "hermes", "hermes.py"),
+                                "note", o["mission"][:180],
+                                ("accepted after %d round(s): %s" % (rnd, report))[:400],
+                                "--tags", "mission,orchestrated", "--source", "loop:" + oid],
+                               capture_output=True)
                 return
             if verdict == "reject":
                 o["status"] = "rejected"
@@ -231,15 +255,15 @@ def _run(oid):
             LIVE.pop(oid, None)
 
 
-def start(mission, name="", model="default", critic="haiku", turns=40, rounds=3,
-          auto=True, skip=True, workdir=""):
+def start(mission, name="", model="default", critic="opus", turns=40, rounds=3,
+          auto=True, skip=True, workdir="", account=""):
     os.makedirs(ODIR, exist_ok=True)
     oid = uuid.uuid4().hex[:8]
     workdir = workdir.strip()
     if workdir and not os.path.isdir(workdir):
         return None, "workdir does not exist: " + workdir
     o = {"oid": oid, "name": name[:40] or mission[:40], "mission": mission[:2000],
-         "dir": workdir, "model": model, "critic": critic,
+         "dir": workdir, "model": model, "critic": critic, "account": account,
          "turns": max(1, min(100, turns)), "rounds": max(1, min(8, rounds)),
          "auto": bool(auto), "skip": bool(skip), "status": "running", "round": 0,
          "cost": 0, "turns_log": [],

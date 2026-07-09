@@ -7,14 +7,15 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23135c38'/%3E%3Ctext x='8' y='12' text-anchor='middle' font-family='Segoe UI,sans-serif' font-size='11' font-weight='800' fill='%23fff'%3EM%3C/text%3E%3C/svg%3E">
 <style>
   :root{
-    --canvas:#eef0ea; --card:#ffffff; --line:#e5e8df; --line2:#d6dbcf;
-    --ink:#15211a; --ink2:#5c6a60; --ink3:#98a29a;
-    --green:#135c38; --green-deep:#0d2f1e; --green-dark:#0e2818;
-    --mint:#a9dcbd; --mint-soft:#ddefe4; --green-mid:#1e7c4c;
+    --canvas:#f0eaee; --card:#ffffff; --line:#e8dfe5; --line2:#dbcfd7;
+    --ink:#21151d; --ink2:#6a5c66; --ink3:#a2989f;
+    --green:#5c1346; --green-deep:#2f0d25; --green-dark:#280e20;
+    --mint:#dca9cd; --mint-soft:#efddea; --green-mid:#7c1e60;
     --red:#d05043;
+    --claude:#d97757;
     --mono:"Cascadia Mono",Consolas,monospace;
-    --shadow:0 1px 2px rgba(21,33,26,.04), 0 6px 18px -8px rgba(21,33,26,.10);
-    --lift:0 2px 4px rgba(21,33,26,.06), 0 16px 34px -12px rgba(21,33,26,.18);
+    --shadow:0 1px 2px rgba(33,21,29,.04), 0 6px 18px -8px rgba(33,21,29,.10);
+    --lift:0 2px 4px rgba(33,21,29,.06), 0 16px 34px -12px rgba(33,21,29,.18);
     --r:18px;
   }
   *{box-sizing:border-box; margin:0; padding:0}
@@ -26,15 +27,21 @@
   .mono{font-family:var(--mono)}
   a{color:var(--green); text-decoration:none}
   /* ============ shell ============ */
-  .shell{display:grid; grid-template-columns:224px minmax(0,1fr); min-height:100vh}
+  .shell{display:grid; grid-template-columns:224px minmax(0,1fr); min-height:100vh;
+    transition:grid-template-columns .34s cubic-bezier(.4,0,.2,1)}
+  .shell.navhidden{grid-template-columns:0 minmax(0,1fr)}
+  .shell.navhidden aside{opacity:0; pointer-events:none; border-right-color:transparent}
+  aside{z-index:16}
+  #navhover{position:fixed; left:0; top:0; width:16px; height:100vh; z-index:15}
   aside{background:var(--card); border-right:1px solid var(--line);
     padding:22px 14px 16px; display:flex; flex-direction:column; gap:2px;
-    position:sticky; top:0; height:100vh; overflow-y:auto}
+    position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden; white-space:nowrap; min-width:0;
+    transition:opacity .28s ease}
   .logo{display:block; padding:2px 10px 20px}
   .wordmark{
     font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
     font-size:24px; font-weight:800; letter-spacing:-.045em; line-height:1; display:inline-block;
-    background:linear-gradient(105deg,var(--green-deep) 0%,var(--green) 32%,#54b381 50%,var(--green) 68%,var(--green-deep) 100%);
+    background:linear-gradient(105deg,var(--green-deep) 0%,var(--green) 32%,#b35496 50%,var(--green) 68%,var(--green-deep) 100%);
     background-size:240% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
     animation:sheen 6s ease-in-out infinite;
   }
@@ -52,16 +59,74 @@
   nav a .bub{margin-left:auto; font-size:10.5px; font-family:var(--mono); background:var(--canvas);
     border-radius:99px; padding:1px 7px; min-width:22px; text-align:center; color:var(--ink2)}
   nav a.on .bub{background:#fff}
-  .side-dark{margin-top:auto; background:var(--green-dark); border-radius:14px; padding:13px 14px; color:#dfeee5; position:relative; overflow:hidden}
+  .sidebottom{margin-top:auto; display:flex; flex-direction:column; gap:10px}
+  /* ---- vinyl mini-player: lofi backdrop, album-cover record, controls ---- */
+  .vinyl{background:linear-gradient(rgba(16,10,26,.45),rgba(13,8,22,.86)),url("lofi.jpg") center/cover;
+    border:1px solid #362554; border-radius:16px; padding:13px 14px 13px; color:#f2ebfa;
+    position:relative; overflow:hidden; box-shadow:var(--shadow); text-shadow:0 1px 3px rgba(0,0,0,.55)}
+  .vlab{display:flex; align-items:center; gap:6px; font-size:9.5px; font-weight:700; letter-spacing:.1em;
+    text-transform:uppercase; color:rgba(242,235,250,.75); font-family:var(--mono); margin-bottom:10px}
+  .vlab .eq{display:inline-flex; gap:1.6px; align-items:flex-end; height:9px}
+  .vlab .eq i{width:2px; height:3px; background:#1db954; border-radius:1px}
+  .vinyl.playing .vlab .eq i{animation:eq 900ms ease-in-out infinite}
+  .vinyl.playing .vlab .eq i:nth-child(2){animation-delay:.2s} .vinyl.playing .vlab .eq i:nth-child(3){animation-delay:.4s}
+  @keyframes eq{0%,100%{height:3px}50%{height:9px}}
+  /* record = the album cover (smooth, not pixelated), cropped by the card */
+  .vdeck{position:relative; width:100%; height:140px; margin-top:2px}
+  .record{position:absolute; left:2px; top:-12px; width:142px; height:142px; border-radius:50%;
+    background:#141018 center/cover no-repeat; will-change:transform;
+    animation:spin 5s linear infinite; animation-play-state:paused;
+    box-shadow:0 8px 20px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.6)}
+  .vinyl.playing .record{animation-play-state:running}
+  .record::before{content:""; position:absolute; inset:0; border-radius:50%; pointer-events:none;
+    background:repeating-radial-gradient(circle at 50% 50%,rgba(0,0,0,.14) 0 1px,rgba(255,255,255,.045) 1px 4px);
+    box-shadow:inset 0 0 14px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.4)}
+  .record::after{content:""; position:absolute; inset:0; border-radius:50%; pointer-events:none;
+    background:linear-gradient(125deg,rgba(255,255,255,.2),transparent 36%,transparent 66%,rgba(255,255,255,.07))}
+  .record .hole{position:absolute; left:calc(50% - 4px); top:calc(50% - 4px); width:8px; height:8px; border-radius:50%;
+    background:#0a0a0d; box-shadow:0 0 0 3px rgba(255,255,255,.3)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* tonearm (SVG): lifts when idle, rests + bobs on the record when playing */
+  .tonearm{position:absolute; top:-8px; right:-2px; width:92px; height:118px; z-index:4; transform-origin:76% 16%;
+    transform:rotate(-30deg); will-change:transform; transition:transform .8s cubic-bezier(.45,-.35,.25,1.35)}
+  .vinyl.playing .tonearm{transform:rotate(0deg); animation:bob 3.4s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:rotate(0deg)}50%{transform:rotate(2.2deg)}}
+  .vmeta{margin-top:8px; text-align:center; min-width:0}
+  .vmeta .vt{font-size:13px; font-weight:750; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .vmeta .va{font-size:11px; color:#cdb9e2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px}
+  /* interactive progress bar — click to seek */
+  .vbar{position:relative; height:14px; margin-top:8px; cursor:pointer; display:flex; align-items:center}
+  .vbar .trk{width:100%; height:4px; border-radius:99px; background:rgba(255,255,255,.22); overflow:hidden}
+  .vbar .trk i{display:block; height:100%; border-radius:99px; background:#1db954}
+  .vbar .knob{position:absolute; top:50%; width:11px; height:11px; border-radius:50%; background:#fff;
+    transform:translate(-50%,-50%); box-shadow:0 1px 3px rgba(0,0,0,.5); pointer-events:none;
+    opacity:0; transition:opacity .15s}
+  .vbar:hover .knob{opacity:1}
+  .vtime{display:flex; justify-content:space-between; font-size:9.5px; font-family:var(--mono); color:rgba(242,235,250,.6); margin-top:2px}
+  /* transport controls */
+  .vctl{display:flex; align-items:center; justify-content:center; gap:14px; margin-top:7px}
+  .vbtn{width:32px; height:32px; border-radius:50%; display:grid; place-items:center; color:#f2ebfa;
+    background:rgba(255,255,255,.13); transition:background .15s, transform .1s}
+  .vbtn:hover{background:rgba(255,255,255,.28)} .vbtn:active{transform:scale(.92)}
+  .vbtn svg{width:15px; height:15px; fill:currentColor; stroke:none}
+  .vbtn.play{width:38px; height:38px; background:#1db954; color:#0b0b0d}
+  .vbtn.play:hover{background:#24d862}
+  .vcta{display:inline-flex; gap:6px; align-items:center; margin-top:10px; font-size:11px; font-weight:700;
+    color:#0b0b0d; background:#1db954; padding:5px 13px; border-radius:99px; text-shadow:none}
+  .vcta svg{width:13px; height:13px; stroke:#0b0b0d; fill:none; stroke-width:2; stroke-linecap:round}
+  @media (prefers-reduced-motion: reduce){ .record,.vinyl.playing .tonearm,.vinyl.playing .vlab .eq i{animation:none} }
+  .side-dark{background:var(--green-dark); border-radius:14px; padding:13px 14px; color:#eedfea; position:relative; overflow:hidden}
   .side-dark::before{content:""; position:absolute; inset:-40% -20% auto auto; width:120px; height:120px;
-    border:14px solid rgba(169,220,189,.10); border-radius:50%}
+    border:14px solid rgba(220,169,205,.10); border-radius:50%}
   .side-dark .t{font-size:12px; font-weight:650; color:#fff}
-  .side-dark .row{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; padding-top:6px; color:#9dbfa9}
+  .side-dark .row{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; padding-top:6px; color:#bf9db5}
   .side-dark .row b{color:var(--mint); font-weight:600}
   /* ============ main ============ */
   .main{min-width:0; padding:0 26px 40px; overflow-x:clip}
   .topbar{display:flex; align-items:center; gap:12px; padding:16px 0 8px; flex-wrap:wrap}
-  #burger{display:none; border:1px solid var(--line); background:var(--card); border-radius:9px; padding:6px 10px}
+  #burger{display:grid; place-items:center; width:36px; height:36px; border:1px solid var(--line);
+    background:var(--card); border-radius:10px; color:var(--ink2); box-shadow:var(--shadow); transition:.15s}
+  #burger:hover{color:var(--green); border-color:var(--green)}
   .search{flex:1; max-width:420px; min-width:180px; display:flex; align-items:center; gap:9px;
     background:var(--card); border:1px solid var(--line); border-radius:99px; padding:8.5px 16px; box-shadow:var(--shadow)}
   .search svg{width:15px; height:15px; stroke:var(--ink3); fill:none; stroke-width:2; stroke-linecap:round}
@@ -76,7 +141,7 @@
   .btn{display:inline-flex; align-items:center; gap:8px; border-radius:99px; padding:9px 18px;
     font-weight:620; font-size:13.5px; transition:transform .12s, box-shadow .2s, background .15s}
   .btn svg{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2.2; stroke-linecap:round}
-  .btn.solid{background:var(--green); color:#fff; box-shadow:0 6px 16px -6px rgba(19,92,56,.5)}
+  .btn.solid{background:var(--green); color:#fff; box-shadow:0 6px 16px -6px rgba(92,19,70,.5)}
   .btn.solid:hover{transform:translateY(-1px); background:var(--green-mid)}
   .btn.line{border:1.5px solid var(--line2); color:var(--ink); background:var(--card)}
   .btn.line:hover{border-color:var(--green); color:var(--green)}
@@ -118,15 +183,56 @@
   .stat.dark{background:var(--green); border-color:var(--green); color:#fff; overflow:hidden}
   .stat.dark::before{content:""; position:absolute; right:-34px; bottom:-52px; width:130px; height:130px;
     border:16px solid rgba(255,255,255,.09); border-radius:50%}
-  .stat.dark .lab{color:#cfe7d8}
+  .stat.dark .lab{color:#e7cfe0}
   .stat.dark .num{color:#fff}
-  .stat.dark .deltapill{background:rgba(255,255,255,.16); color:#dff3e6}
+  .stat.dark .deltapill{background:rgba(255,255,255,.16); color:#f3dfed}
   .stat.dark .cbtn{background:#fff; border-color:#fff; color:var(--green)}
+  /* ============ claude usage carousel ============ */
+  .ccarousel{position:relative}
+  .chead{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+  .chead h3{margin:0}
+  .cnav{margin-left:auto; display:flex; gap:8px}
+  .cnavb{width:32px; height:32px; border-radius:50%; border:1.5px solid var(--line2);
+    display:grid; place-items:center; color:var(--ink2); background:var(--card); transition:all .15s}
+  .cnavb:hover{background:var(--green); border-color:var(--green); color:#fff}
+  .cnavb svg{width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round}
+  .ctrack{display:flex; gap:14px; overflow-x:auto; scroll-snap-type:x proximity; scrollbar-width:none; padding-bottom:2px}
+  .ctrack::-webkit-scrollbar{display:none}
+  .ccard{scroll-snap-align:start; flex:0 0 300px; min-width:300px; border-radius:var(--r);
+    padding:18px 20px 16px; color:#fff; position:relative; overflow:hidden; box-shadow:var(--lift);
+    background:linear-gradient(142deg,#e8916f 0%,#d97757 44%,#c05733 100%)}
+  .ccard::before{content:""; position:absolute; right:-40px; top:-46px; width:150px; height:150px;
+    border:18px solid rgba(255,255,255,.10); border-radius:50%}
+  .ccard::after{content:""; position:absolute; right:-6px; top:24px; width:74px; height:74px;
+    border:12px solid rgba(255,255,255,.09); border-radius:50%}
+  .ctop{display:flex; align-items:center; gap:11px; position:relative; z-index:1}
+  .clogo{width:30px; height:30px; flex:none; stroke:#fff; fill:none; stroke-width:1.7; stroke-linecap:round}
+  .ccard *{text-shadow:0 1px 2px rgba(0,0,0,.22)}
+  .cname{font-size:16px; font-weight:800; letter-spacing:-.01em}
+  .csub{font-size:11.5px; font-weight:600; color:rgba(255,255,255,.92); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px}
+  .clive{margin-left:auto; font-size:11px; font-weight:750; font-family:var(--mono);
+    background:rgba(255,255,255,.26); border-radius:99px; padding:3px 10px; white-space:nowrap}
+  .cbig{font-family:var(--mono); font-size:40px; font-weight:800; letter-spacing:-.02em;
+    line-height:1; margin:16px 0 4px; position:relative; z-index:1}
+  .cbig em{font-style:normal; font-size:14px; color:rgba(255,255,255,.95); font-weight:700; margin-left:6px}
+  .cfoot{display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; position:relative; z-index:1}
+  .ccard .cchip{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:#fff;
+    background:rgba(255,255,255,.24); border-radius:99px; padding:4px 11px}
+  .ccard .cchip svg{width:12px; height:12px; stroke:#fff; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round}
+  .ccard .cchip b{font-family:var(--mono); font-variant-numeric:tabular-nums; display:inline-block}
+  /* iPhone-clock-style roll: the new countdown pans up into place, no layout jump */
+  .roll{animation:rollup .32s cubic-bezier(.3,.8,.3,1)}
+  @keyframes rollup{from{transform:translateY(55%);opacity:0}to{transform:translateY(0);opacity:1}}
+  .ccard .cchip.setup{cursor:pointer; border:1px solid rgba(255,255,255,.42); background:rgba(255,255,255,.16); transition:.13s}
+  .ccard .cchip.setup:hover{background:rgba(255,255,255,.38)}
+  .ctrk{height:5px; border-radius:99px; background:rgba(255,255,255,.22); overflow:hidden; margin-top:12px; position:relative; z-index:1}
+  .ctrk i{display:block; height:100%; border-radius:99px; background:#fff}
+  .cnone{color:var(--ink3); font-size:13px; padding:14px 2px}
   /* ============ capsule bar chart ============ */
   .caps{display:flex; align-items:flex-end; gap:14px; height:190px; padding:18px 6px 4px}
   .capcol{flex:1; display:flex; flex-direction:column; align-items:center; gap:8px; height:100%; min-width:0; position:relative}
   .captrack{flex:1; width:100%; max-width:34px; border-radius:99px; position:relative; overflow:hidden;
-    background:repeating-linear-gradient(45deg,#f2f4ee 0 4px,#e2e6dc 4px 6px)}
+    background:repeating-linear-gradient(45deg,#f4eef2 0 4px,#e6dce3 4px 6px)}
   .capfill{position:absolute; left:0; right:0; bottom:0; border-radius:99px; transition:height .5s ease}
   .capx{font-size:11px; color:var(--ink3); font-family:var(--mono)}
   .peakpill{position:absolute; top:-4px; left:50%; transform:translateX(-50%); background:var(--ink);
@@ -148,20 +254,8 @@
   .pill.live{background:var(--mint-soft); color:var(--green)}
   .pill.idle{background:var(--canvas); color:var(--ink2)}
   .pill.warn{background:#f7e4e2; color:var(--red)}
-  /* ============ dark wire card ============ */
-  .wirecard{background:var(--green-dark); border-color:var(--green-dark); color:#e8f3ec; overflow:hidden}
-  .wirecard::before{content:""; position:absolute; right:-46px; top:-40px; width:190px; height:190px;
-    border:1.5px solid rgba(169,220,189,.16); border-radius:50%; box-shadow:0 0 0 26px rgba(169,220,189,.05), 0 0 0 54px rgba(169,220,189,.035)}
-  .wirecard h3{color:#fff}
-  .wireclock{font-family:var(--mono); font-size:40px; font-weight:700; letter-spacing:.02em; padding:14px 0 4px}
-  .wiresub{font-size:12px; color:#9dbfa9; font-family:var(--mono)}
-  .wirebtns{display:flex; gap:10px; padding-top:16px}
-  .rbtn{width:40px; height:40px; border-radius:50%; display:grid; place-items:center; background:rgba(255,255,255,.12); color:#fff; transition:background .15s}
-  .rbtn:hover{background:rgba(255,255,255,.22)}
-  .rbtn.stop{background:var(--red)}
-  .rbtn svg{width:15px; height:15px; fill:currentColor; stroke:none}
   /* ============ launcher ============ */
-  .deck textarea{width:100%; min-height:84px; resize:vertical; background:#fbfcf9;
+  .deck textarea{width:100%; min-height:84px; resize:vertical; background:#fcf9fb;
     border:1.5px solid var(--line2); border-radius:14px; padding:12px 14px; outline:none; transition:.15s}
   .deck textarea:focus{border-color:var(--green); box-shadow:0 0 0 3.5px var(--mint-soft)}
   .modes{display:flex; gap:8px; margin:12px 0 10px; flex-wrap:wrap}
@@ -169,7 +263,7 @@
   .mode.on{background:var(--green); border-color:var(--green); color:#fff}
   .opts{display:flex; gap:14px; margin-bottom:13px; flex-wrap:wrap; font-size:12.5px; color:var(--ink2); align-items:center}
   .opts label{display:inline-flex; align-items:center; gap:7px; font-weight:600}
-  .opts select{background:#fbfcf9; border:1.5px solid var(--line2); border-radius:10px; padding:6px 10px; outline:none}
+  .opts select{background:#fcf9fb; border:1.5px solid var(--line2); border-radius:10px; padding:6px 10px; outline:none}
   .opts select:focus{border-color:var(--green)}
   .hintline{font-size:12px; color:var(--ink3)}
   .opts .chk input{accent-color:var(--green); width:15px; height:15px}
@@ -210,42 +304,162 @@
   .achip.done{opacity:.55; background:var(--canvas); color:var(--ink3)}
   .none{color:var(--ink3); padding:18px 4px; text-align:center; font-size:13px}
   .dirs .lrow .id{font-family:var(--mono); font-size:11px; color:var(--ink3)}
-  /* ============ skill tree ============ */
-  .tree{display:flex; flex-direction:column; align-items:center; padding-top:8px}
-  .youpill{border:1.5px solid var(--line2); border-radius:99px; padding:5px 20px; font-weight:650;
-    font-size:12.5px; color:var(--ink2); background:var(--canvas)}
-  .stem{width:2px; height:20px; background:var(--line2)}
-  .cond{background:var(--green-dark); color:#fff; border-radius:14px; padding:10px 28px; text-align:center;
-    box-shadow:0 8px 20px -8px rgba(13,47,30,.45)}
-  .cond b{font-size:14.5px}
-  .cond small{display:block; color:#9dbfa9; font-size:11px}
-  .branchrow{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:14px;
-    width:100%; position:relative; padding-top:24px}
-  .branchrow>*{min-width:0}
-  .branchrow::before{content:""; position:absolute; top:0; left:11%; right:11%; height:2px; background:var(--line2)}
-  .bcol{position:relative}
-  .bcol::before{content:""; position:absolute; top:-24px; left:50%; width:2px; height:24px; background:var(--line2)}
-  .bhead{border:1.5px solid var(--green); color:var(--green); border-radius:12px; text-align:center;
-    padding:7px 10px; font-weight:700; font-size:13px; background:var(--mint-soft)}
-  .bhead small{display:block; font-weight:500; color:var(--ink2); font-size:11px}
-  .snode{border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-top:10px;
-    background:var(--card); box-shadow:var(--shadow); transition:box-shadow .2s, transform .2s}
-  .snode:hover{box-shadow:var(--lift); transform:translateY(-1px)}
-  .snode .sn{display:flex; align-items:center; gap:8px; font-weight:650; font-size:13px; min-width:0}
-  .snode .sn span:first-child{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  .snode .sn .pill{margin-left:auto; flex:none}
-  .snode .tr{font-family:var(--mono); font-size:11px; color:var(--ink3); margin:3px 0 8px;
+  /* ============ topbar pulse ============ */
+  .tbtn{width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:var(--card);
+    display:grid; place-items:center; color:var(--ink2); box-shadow:var(--shadow); transition:.15s}
+  .tbtn:hover{color:var(--green); border-color:var(--green)}
+  .tbtn svg{width:14px; height:14px}
+  .tbtn.paused{background:var(--green); color:#fff; border-color:var(--green)}
+  /* per-service brand cards (share .ccard layout; only the gradient changes) */
+  .ccard.gmail{background:linear-gradient(142deg,#ea6a5f 0%,#d0392b 52%,#a41e12 100%)}
+  .ccard.github{background:linear-gradient(142deg,#3b424a 0%,#24292e 52%,#0d1117 100%)}
+  .ccard.spotify{background:linear-gradient(142deg,#22e365 0%,#1db954 48%,#12813b 100%)}
+  .ccard.dim{opacity:.94}
+  .cline{font-size:12.5px; font-weight:600; color:rgba(255,255,255,.96); margin-top:11px; position:relative; z-index:1;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  .snode.dim{opacity:.55}
-  .captiny{display:flex; align-items:center; gap:8px}
-  .captiny .trk{flex:1; height:8px; border-radius:99px; overflow:hidden;
-    background:repeating-linear-gradient(45deg,#f2f4ee 0 4px,#e2e6dc 4px 6px)}
-  .captiny .trk i{display:block; height:100%; border-radius:99px; background:var(--green); transition:width .5s}
-  .captiny .n{font-size:11px; color:var(--ink2); font-family:var(--mono)}
-  .treelegend{display:flex; gap:16px; justify-content:center; padding-top:20px; font-size:12px;
-    color:var(--ink2); flex-wrap:wrap}
+  .spnow{display:flex; align-items:center; gap:12px; margin-top:15px; position:relative; z-index:1}
+  .cart{width:52px; height:52px; border-radius:11px; object-fit:cover; flex:none; box-shadow:0 4px 12px rgba(0,0,0,.25)}
+  .spmeta{min-width:0}
+  .sptrack{font-size:15px; font-weight:750; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .spartist{font-size:12px; font-weight:600; color:rgba(255,255,255,.92); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  /* topbar status — the one thing that needs Daniel */
+  .topstat{display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600;
+    color:var(--ink2); background:var(--card); border:1px solid var(--line); border-radius:99px;
+    padding:6px 14px; box-shadow:var(--shadow)}
+  .topstat .dot{width:8px; height:8px; border-radius:50%; background:var(--green-mid)}
+  .topstat .wxi{font-size:15px; line-height:1}
+  .topstat.attn{color:#fff; background:var(--claude); border-color:var(--claude); cursor:pointer}
+  .topstat.attn .dot{background:#fff; animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  /* ============ command bar — tell Maestro what to do ============ */
+  .cmdwrap{max-width:780px; margin:4px auto 18px}
+  .cmdbar{display:flex; align-items:center; gap:12px; background:var(--card); border:1.5px solid var(--line2);
+    border-radius:18px; padding:9px 10px 9px 19px; box-shadow:var(--lift); transition:border-color .15s, box-shadow .15s}
+  .cmdbar:focus-within{border-color:var(--green); box-shadow:0 0 0 4px var(--mint-soft), var(--lift)}
+  .cmdbar .spark{width:21px; height:21px; flex:none; stroke:var(--green); fill:none; stroke-width:2; stroke-linecap:round}
+  .cmdbar input{flex:1; border:0; outline:0; background:none; font:inherit; font-size:15px; color:var(--ink); min-width:0}
+  .cmdbar input::placeholder{color:var(--ink3)}
+  .cmdbar{position:relative}
+  .cmdbar input{min-width:0}
+  .cmdsplit{display:flex; flex:none}
+  .cmdgo{display:inline-flex; align-items:center; gap:7px; background:var(--green); color:#fff;
+    font-weight:750; font-size:13.5px; border-radius:13px 0 0 13px; padding:10px 16px 10px 19px; transition:.15s}
+  .cmdgo:hover{background:var(--green-mid)} .cmdgo:disabled{opacity:.5; cursor:default}
+  .cmddrop{width:36px; border-radius:0 13px 13px 0; background:var(--green); color:#fff; display:grid;
+    place-items:center; border-left:1px solid rgba(255,255,255,.28); transition:.15s; position:relative}
+  .cmddrop:hover{background:var(--green-mid)}
+  .cmddrop svg{width:13px; height:13px; stroke:#fff; fill:none; stroke-width:2.4; stroke-linecap:round;
+    stroke-linejoin:round; transition:transform .2s}
+  .cmdbar.optsopen .cmddrop svg{transform:rotate(180deg)}
+  .cmddrop .dot{position:absolute; top:5px; right:5px; width:7px; height:7px; border-radius:50%;
+    background:#fff; box-shadow:0 0 0 2px var(--green); opacity:0; transition:opacity .15s}
+  .cmddrop.tuned .dot{opacity:1}
+  /* options popover — anchored bottom-right of the bar, shrinks on small screens */
+  .cmdpop{position:absolute; right:0; top:calc(100% + 10px); width:330px; max-width:calc(100vw - 40px);
+    background:var(--card); border:1px solid var(--line2); border-radius:16px; padding:14px 16px;
+    box-shadow:var(--lift); z-index:30; display:none}
+  .cmdpop.open{display:block; animation:popin .18s cubic-bezier(.2,.7,.2,1)}
+  @keyframes popin{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none}}
+  .cmdpop .phead{font-size:10.5px; font-weight:750; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink3); padding:0 0 7px}
+  .cmdpop .prow{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 0}
+  .cmdpop .prow label{font-size:12.5px; font-weight:650; color:var(--ink2); flex:none}
+  .cmdpop .prow select{flex:1; min-width:0; max-width:180px; border:1px solid var(--line2); border-radius:9px;
+    padding:5.5px 9px; font:inherit; font-size:12.5px; background:var(--card); color:var(--ink)}
+  .cmdpop .chk{display:flex; align-items:center; gap:9px; font-size:12.5px; font-weight:650;
+    color:var(--ink2); padding:8px 0 2px; cursor:pointer}
+  .cmdpop .chk input{accent-color:var(--green); width:15px; height:15px}
+  .cmdpop .pnote{font-size:11px; color:var(--ink3); border-top:1px solid var(--line); margin-top:9px;
+    padding-top:9px; line-height:1.5}
+  .cmdflow{display:flex; flex-direction:column; gap:8px; margin-top:10px}
+  .cmdmsg{font-size:13.5px; line-height:1.55; border-radius:13px; padding:10px 15px; overflow-wrap:anywhere}
+  .cmdmsg.u{background:var(--green); color:#fff; align-self:flex-end; max-width:78%; border-bottom-right-radius:5px}
+  .cmdmsg.a{background:var(--card); border:1px solid var(--line); color:var(--ink); align-self:flex-start; max-width:94%; border-bottom-left-radius:5px}
+  .cmdmsg.a a{font-weight:750}
+  .cmdmsg .brief{margin-top:8px; font-size:11.5px; color:var(--ink3); font-family:var(--mono); line-height:1.5;
+    border-top:1px solid var(--line); padding-top:8px}
+  .cmdmsg .dots i{display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--green);
+    margin-right:3px; animation:pulse 1s ease-in-out infinite}
+  .cmdmsg .dots i:nth-child(2){animation-delay:.2s} .cmdmsg .dots i:nth-child(3){animation-delay:.4s}
+  /* ============ skill tree — sleek, ink + one plum accent, progress rings ============ */
+  .treecard{background:var(--card); border:1px solid var(--line); color:var(--ink); padding:0; overflow:hidden; position:relative}
+  /* stat tiles */
+  .skstats{display:flex; align-items:stretch; padding:24px 26px; border-bottom:1px solid var(--line); flex-wrap:wrap; gap:20px 0}
+  .skstat{flex:1; min-width:130px; padding:0 26px; border-left:1px solid var(--line)}
+  .skstat:first-child{padding-left:0; border-left:0}
+  .skstat .k{font-size:10.5px; font-weight:700; color:var(--ink3); letter-spacing:.09em; text-transform:uppercase}
+  .skstat .n{font-family:var(--mono); font-size:34px; font-weight:800; letter-spacing:-.03em; color:var(--ink); line-height:1; margin:9px 0 6px}
+  .skstat .n em{font-style:normal; font-size:16px; font-weight:600; color:var(--ink3)}
+  .skstat .up{display:inline-flex; align-items:center; gap:2px; font-size:12.5px; font-weight:800; color:var(--green-mid); margin-left:9px}
+  .skstat .sub{font-size:11.5px; color:var(--ink3)}
+  .skstat .goalchip{display:inline-block; font-size:10.5px; font-family:var(--mono); font-weight:600; color:#fff;
+    background:var(--green); border-radius:99px; padding:4px 11px; margin-top:8px}
+  /* an ACTUAL tree: root → genre branches → skill leaves, connector lines */
+  .sktree{overflow-x:auto; padding:18px 22px 22px}
+  .stree,.stree ul{list-style:none; margin:0; padding:0}
+  .stree{width:fit-content; min-width:100%}
+  .stree ul{display:flex; justify-content:center; padding-top:26px; position:relative}
+  .stree li{position:relative; display:flex; flex-direction:column; align-items:center; padding:26px 9px 0}
+  /* dendrogram connectors (each li draws its half of the fork) */
+  .stree li::before,.stree li::after{content:""; position:absolute; top:0; right:50%; width:50%; height:26px; border-top:2px solid var(--line2)}
+  .stree li::after{right:auto; left:50%; border-left:2px solid var(--line2)}
+  .stree li:only-child{padding-top:0}
+  .stree li:only-child::before,.stree li:only-child::after{border:0}
+  .stree li:first-child::before,.stree li:last-child::after{border:0}
+  .stree li:last-child::before{border-right:2px solid var(--line2); border-radius:0 7px 0 0}
+  .stree li:first-child::after{border-radius:7px 0 0 0}
+  .stree ul ul::before{content:""; position:absolute; top:0; left:50%; height:26px; border-left:2px solid var(--line2)}
+  .stree>li{padding-top:0}
+  .stree>li::before,.stree>li::after{display:none}
+  /* nodes */
+  .tnode{position:relative; z-index:1}
+  .tnode.root{background:linear-gradient(140deg,var(--green-deep),var(--green) 60%,var(--green-mid));
+    color:#fff; border-radius:15px; padding:13px 22px; text-align:center; box-shadow:var(--lift)}
+  .tnode.root b{font-size:16px; font-weight:800; letter-spacing:-.02em; display:block}
+  .tnode.root small{font-size:10.5px; font-family:var(--mono); color:rgba(255,255,255,.72); margin-top:2px; display:block}
+  .tnode.genre{display:inline-flex; align-items:center; gap:8px; background:var(--card); border:1.5px solid var(--line2);
+    border-radius:12px; padding:9px 15px; font-size:14px; font-weight:800; color:var(--ink); text-transform:capitalize; white-space:nowrap}
+  .tnode.genre .c{font-size:10px; font-weight:750; font-family:var(--mono); color:var(--green); background:var(--mint-soft); border-radius:99px; padding:2px 8px; text-transform:none}
+  .tnode.genre.locked{border-style:dashed; color:var(--ink3)} .tnode.genre.locked .c{color:var(--ink3); background:var(--canvas)}
+  .tnode.skill{display:flex; align-items:center; gap:11px; cursor:pointer; background:var(--card); border:1px solid var(--line);
+    border-radius:13px; padding:10px 15px 10px 11px; min-width:150px; transition:border-color .16s,box-shadow .16s,transform .16s}
+  .tnode.skill:hover{border-color:var(--green); box-shadow:var(--shadow); transform:translateY(-2px)}
+  .tnode.skill.sel{border-color:var(--green); box-shadow:0 0 0 3px var(--mint-soft)}
+  .tnode.skill.locked{cursor:default; border-style:dashed}
+  .tnode.skill.archived{opacity:.5}
+  .tring{width:34px; height:34px; border-radius:50%; flex:none; position:relative; display:grid; place-items:center;
+    background:conic-gradient(var(--green) var(--p,0%), var(--line2) 0)}
+  .tring::after{content:""; position:absolute; inset:3px; border-radius:50%; background:var(--card)}
+  .tring span{position:relative; z-index:1; font:800 12px/1 var(--mono); color:var(--green)}
+  .tnode.skill.earned .tring{background:var(--green)} .tnode.skill.earned .tring::after{background:var(--green)}
+  .tnode.skill.earned .tring span{color:#fff; font-size:15px}
+  .tnode.skill.locked .tring{background:var(--line2)} .tnode.skill.locked .tring span{color:var(--ink3); font-size:13px}
+  .tmeta{min-width:0}
+  .tmeta .tt{font-size:13.5px; font-weight:750; color:var(--ink); letter-spacing:-.01em; white-space:nowrap}
+  .tnode.skill.archived .tt{text-decoration:line-through}
+  .tnode.skill.locked .tt{color:var(--ink3)}
+  .tmeta .ts{font-size:9.5px; font-weight:750; letter-spacing:.06em; text-transform:uppercase; font-family:var(--mono); color:var(--ink3); margin-top:2px}
+  .tnode.skill.earned .ts{color:var(--green)}
+  /* detail panel below the tree */
+  .sdetail{border-top:1px solid var(--line); padding:16px 22px; min-height:64px}
+  .sdetail .h{display:flex; align-items:center; gap:10px; margin-bottom:7px}
+  .sdetail .dn{font-size:16px; font-weight:800; letter-spacing:-.02em; color:var(--ink)}
+  .sdetail p{font-size:13.5px; color:var(--ink2); line-height:1.55; margin:0 0 10px; max-width:640px}
+  .sdetail .hint{font-size:13px; color:var(--ink3)}
+  .sdetail .facts{display:flex; gap:7px; flex-wrap:wrap}
+  .sdetail .facts span{font-size:10.5px; font-weight:600; font-family:var(--mono); color:var(--ink2); background:var(--canvas);
+    border:1px solid var(--line); border-radius:7px; padding:4px 10px}
+  .skpill{flex:none; font-size:9.5px; font-weight:800; letter-spacing:.07em; text-transform:uppercase;
+    font-family:var(--mono); padding:5px 12px; border-radius:99px; border:1px solid transparent}
+  .skpill.earned{background:var(--green); color:#fff}
+  .skpill.learning{background:var(--mint-soft); color:var(--green)}
+  .skpill.candidate{background:var(--card); color:var(--ink2); border-color:var(--line2)}
+  .skpill.locked,.skpill.archived{background:var(--canvas); color:var(--ink3)}
+  /* fade the tree in on first open */
+  @keyframes skfade{from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none}}
+  .sktree.grow .stree{animation:skfade .5s cubic-bezier(.2,.75,.25,1) both}
   /* ============ brain ============ */
-  .qbox{width:100%; background:#fbfcf9; border:1.5px solid var(--line2); border-radius:12px; padding:10px 14px; outline:none; transition:.15s}
+  .qbox{width:100%; background:#fcf9fb; border:1.5px solid var(--line2); border-radius:12px; padding:10px 14px; outline:none; transition:.15s}
   .qbox:focus{border-color:var(--green); box-shadow:0 0 0 3.5px var(--mint-soft)}
   .hstats{color:var(--ink3); font-size:12px; margin:10px 2px 2px}
   .hit{border-top:1px solid var(--line); padding:11px 2px}
@@ -279,11 +493,11 @@
   .intcard .add code{font-family:var(--mono); background:var(--canvas); border-radius:6px; padding:1px 6px}
   /* ============ audit ============ */
   .filters{display:flex; gap:10px; padding:12px 0 0; flex-wrap:wrap}
-  .filters select,.filters input{background:#fbfcf9; border:1.5px solid var(--line2); border-radius:10px; padding:7px 11px; outline:none; font-size:13px}
+  .filters select,.filters input{background:#fcf9fb; border:1.5px solid var(--line2); border-radius:10px; padding:7px 11px; outline:none; font-size:13px}
   .filters input{flex:1; min-width:150px}
   .audit{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px; table-layout:fixed}
   .audit td{padding:6px 8px; border-top:1px solid var(--line); vertical-align:top}
-  .audit tr:hover td{background:#f7f9f4}
+  .audit tr:hover td{background:#f9f4f8}
   .audit .tm{white-space:nowrap; color:var(--ink3); width:112px}
   .audit .ss{white-space:nowrap; color:var(--ink2); width:88px; overflow:hidden; text-overflow:ellipsis}
   .audit .ty{white-space:nowrap; font-weight:700; width:102px; overflow:hidden; text-overflow:ellipsis; color:var(--green)}
@@ -297,7 +511,7 @@
   code.k{font-family:var(--mono); font-size:12px; background:var(--canvas); border-radius:6px; padding:2px 7px}
   /* ============ toast ============ */
   #toast{position:fixed; right:22px; bottom:22px; z-index:50; display:flex; flex-direction:column; gap:8px}
-  .note{background:var(--green-dark); color:#e8f3ec; border-radius:12px; padding:11px 16px; font-size:13px; box-shadow:var(--lift); animation:fade .25s ease; max-width:340px}
+  .note{background:var(--green-dark); color:#f3e8f0; border-radius:12px; padding:11px 16px; font-size:13px; box-shadow:var(--lift); animation:fade .25s ease; max-width:340px}
   .note.err{background:var(--red)}
   ::-webkit-scrollbar{width:10px; height:10px}
   ::-webkit-scrollbar-thumb{background:var(--line2); border-radius:6px; border:2.5px solid transparent; background-clip:padding-box}
@@ -308,6 +522,46 @@
     #burger{display:block}
     .main{padding:0 14px 32px}
   }
+  /* ============ performance line graph ============ */
+  .lgwrap{position:relative; padding-top:8px}
+  .lgsvg{width:100%; height:172px; display:block; overflow:visible}
+  .lgdot{fill:var(--green); stroke:#fff; stroke-width:2; cursor:pointer; transition:r .1s}
+  .lgdot:hover{r:6}
+  .lgx{font-size:10px; fill:var(--ink3); font-family:var(--mono)}
+  .lgtip{position:absolute; background:var(--green-deep); color:#fff; font-size:11px; font-family:var(--mono);
+    padding:6px 10px; border-radius:10px; pointer-events:none; opacity:0; transition:opacity .12s;
+    white-space:nowrap; transform:translate(-50%,-130%); z-index:2}
+  .lgtip.show{opacity:1}
+  /* ============ chat assistant ============ */
+  #chatfab{position:fixed; right:22px; bottom:22px; width:56px; height:56px; border-radius:50%;
+    background:linear-gradient(140deg,var(--green-mid),var(--green)); color:#fff; display:grid; place-items:center;
+    box-shadow:0 10px 26px -6px rgba(92,19,70,.55); z-index:40; transition:transform .15s}
+  #chatfab:hover{transform:scale(1.07)}
+  #chatfab svg{width:24px; height:24px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  #chatpanel{position:fixed; right:22px; bottom:88px; width:382px; max-width:calc(100vw - 32px); height:524px;
+    max-height:calc(100vh - 120px); background:var(--card); border:1px solid var(--line); border-radius:18px;
+    box-shadow:var(--lift); z-index:41; display:none; flex-direction:column; overflow:hidden}
+  #chatpanel.open{display:flex; animation:slidein .2s cubic-bezier(.2,.7,.2,1)}
+  .chathead{background:linear-gradient(140deg,var(--green-deep),var(--green)); color:#fff; padding:14px 16px; display:flex; align-items:center; gap:11px}
+  .chathead .av{width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,.18); display:grid; place-items:center; flex:none}
+  .chathead .av svg{width:19px; height:19px; stroke:#fff; fill:none; stroke-width:1.8; stroke-linecap:round}
+  .chathead b{font-size:14px; font-weight:750; display:block}
+  .chathead small{font-size:11px; color:rgba(255,255,255,.75)}
+  .chathead .x{margin-left:auto; color:rgba(255,255,255,.8); font-size:22px; width:28px; height:28px; line-height:1}
+  .chathead .x:hover{color:#fff}
+  .chatlog{flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; background:var(--canvas)}
+  .msg{max-width:84%; padding:9px 13px; border-radius:15px; font-size:13px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere}
+  .msg.u{align-self:flex-end; background:var(--green); color:#fff; border-bottom-right-radius:5px}
+  .msg.a{align-self:flex-start; background:var(--card); border:1px solid var(--line); color:var(--ink); border-bottom-left-radius:5px}
+  .msg.think{color:var(--ink3); font-style:italic}
+  .msg .who{display:block; font-size:9.5px; font-family:var(--mono); opacity:.55; margin-bottom:3px; letter-spacing:.03em}
+  .chatin{display:flex; gap:8px; padding:12px; border-top:1px solid var(--line); background:var(--card)}
+  .chatin textarea{flex:1; resize:none; border:1px solid var(--line2); border-radius:12px; padding:9px 12px; font:inherit; font-size:13px; max-height:92px; line-height:1.4}
+  .chatin textarea:focus{outline:none; border-color:var(--green)}
+  .chatsend{width:40px; height:40px; flex:none; border-radius:12px; background:var(--green); color:#fff; display:grid; place-items:center; transition:.15s}
+  .chatsend:hover{background:var(--green-mid)}
+  .chatsend:disabled{opacity:.45; cursor:default}
+  .chatsend svg{width:17px; height:17px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
 </style>
 </head>
 <body>
@@ -331,11 +585,14 @@
       <a href="#/audit" data-s="audit"><svg viewBox="0 0 24 24"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>Audit log<span class="bub" id="n-audit">0</span></a>
       <a href="#/guard" data-s="guard"><svg viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Guard</a>
     </nav>
-    <div class="side-dark">
-      <div class="t">System</div>
-      <div class="row"><span>feed</span><b id="f-wire">–</b></div>
-      <div class="row"><span>guard</span><b id="f-guard">–</b></div>
-      <div class="row"><span>goal</span><b id="f-goal">–</b></div>
+    <div class="sidebottom">
+      <div class="vinyl" id="vinyl"></div>
+      <div class="side-dark">
+        <div class="t">System</div>
+        <div class="row"><span>feed</span><b id="f-wire">–</b></div>
+        <div class="row"><span>guard</span><b id="f-guard">–</b></div>
+        <div class="row"><span>goal</span><b id="f-goal">–</b></div>
+      </div>
     </div>
   </aside>
 
@@ -345,7 +602,11 @@
       <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
         <input id="topsearch" placeholder="Search the brain…" autocomplete="off"></div>
       <span class="spacer"></span>
+      <button class="topstat" id="topstatus" data-go="#/instances"><span class="dot"></span>—</button>
+      <span class="clockchip mono" id="datechip"></span>
       <span class="clockchip mono" id="clock">--:--:--</span>
+      <button class="tbtn" id="pausebtn" title="pause polling"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/></svg></button>
+      <button class="tbtn" id="refreshbtn" title="refresh now"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 4a8 8 0 1 0 8 8h-3"/><path d="M20 4v5h-5" stroke-linejoin="round"/></svg></button>
     </div>
 
     <!-- ============ OVERVIEW ============ -->
@@ -356,39 +617,66 @@
         <button class="btn solid" data-go="#/instances"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Launch instance</button>
         <button class="btn line" data-go="#/instances">Queue directive</button>
       </div>
+      <div class="cmdwrap">
+        <div class="cmdbar" id="cmdbarbox">
+          <svg class="spark" viewBox="0 0 24 24" id="cmdspark"></svg>
+          <input id="cmdinput" autocomplete="off" spellcheck="false" placeholder="Tell Maestro what to do…">
+          <div class="cmdsplit">
+            <button class="cmdgo" id="cmdgo">Run it</button>
+            <button class="cmddrop" id="cmddrop" title="mission options"><span class="dot"></span><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+          </div>
+          <div class="cmdpop" id="cmdpop">
+            <div class="phead">Mission options · auto = intake decides</div>
+            <div class="prow"><label>Worker model</label>
+              <select id="cmd-model"><option value="auto" selected>Auto</option><option value="haiku">Haiku · cheap</option><option value="sonnet">Sonnet · balanced</option><option value="opus">Opus · heavy</option><option value="default">Default (inherit)</option></select></div>
+            <div class="prow"><label>Effort</label>
+              <select id="cmd-turns"><option value="auto" selected>Auto</option><option value="15">Quick · 15 turns</option><option value="40">Standard · 40</option><option value="80">Deep · 80</option></select></div>
+            <div class="prow"><label>Critic rounds</label>
+              <select id="cmd-rounds"><option value="auto" selected>Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option></select></div>
+            <div class="prow"><label>Critic</label>
+              <select id="cmd-critic"><option value="opus" selected>Opus · the core</option><option value="sonnet">Sonnet</option></select></div>
+            <div class="prow"><label>Account</label>
+              <select id="cmd-account"><option value="auto" selected>Auto · most headroom</option></select></div>
+            <label class="chk"><input type="checkbox" id="cmd-gate"> Gate verdicts on me (no auto-accept)</label>
+            <div class="pnote">Anything on Auto is chosen by the intake per mission — conscious spend: it picks the smallest model and budget that fit the goal.</div>
+          </div>
+        </div>
+        <div class="cmdflow" id="cmdflow"></div>
+      </div>
       <div class="grid cols-4" id="kpis" style="margin-bottom:14px"></div>
-      <div class="grid row-mid" style="margin-bottom:14px">
+      <div class="ccarousel" style="margin-bottom:14px">
+        <div class="chead"><h3>Pulse <span class="tag">usage · mail · code · music</span></h3>
+          <div class="cnav" id="cnav" style="display:none">
+            <button class="cnavb" data-cscroll="-1" title="previous"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+            <button class="cnavb" data-cscroll="1" title="next"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+          </div>
+        </div>
+        <div class="ctrack" id="claudecards"></div>
+      </div>
+      <div class="grid cols-2" style="margin-bottom:14px">
         <div class="card">
-          <h3>Session activity <span class="tag" id="actlabel"></span></h3>
+          <h3>Changes day to day <span class="tag" id="actlabel">edits · writes · commands</span></h3>
           <div class="caps" id="caps"></div>
         </div>
         <div class="card">
-          <h3>Directives <span class="tag">inbox</span></h3>
-          <div id="dirbox"></div>
-        </div>
-        <div class="card">
-          <h3>Latest solutions <span class="tag" id="soltag"></span></h3>
-          <div id="sollist"></div>
+          <h3>Session stats <span class="tag">today</span></h3>
+          <div id="sessstats"></div>
         </div>
       </div>
-      <div class="grid row-bot">
+      <div class="card" style="margin-bottom:14px">
+        <h3>Performance <span class="tag">activity on the wire, last 12 hours</span></h3>
+        <div class="lgwrap"><svg class="lgsvg" id="perfsvg"></svg><div class="lgtip" id="perftip"></div></div>
+      </div>
+      <div class="grid cols-2">
         <div class="card">
-          <h3>Live terminals <span class="tag">every Claude Code session reporting in</span></h3>
-          <div id="sesslist"></div>
+          <h3>Live instances <span class="tag">terminals + loops running right now</span></h3>
+          <button class="cbtn" data-go="#/instances" title="open"><svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg></button>
+          <div id="livelist"></div>
         </div>
         <div class="card">
-          <h3>Goal progress <span class="tag">skills</span></h3>
-          <div class="gaugewrap"><div id="gauge"></div>
-            <div class="glegend" id="glegend"></div></div>
-        </div>
-        <div class="card wirecard">
-          <h3>Heartbeat</h3>
-          <div class="wireclock" id="wireclock">--:--:--</div>
-          <div class="wiresub" id="wiresub">–</div>
-          <div class="wirebtns">
-            <button class="rbtn" id="pausebtn" title="pause polling"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
-            <button class="rbtn stop" id="refreshbtn" title="refresh now"><svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 8 8h-3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          </div>
+          <h3>Latest changes <span class="tag">what actually changed</span></h3>
+          <button class="cbtn" data-go="#/audit" title="open"><svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg></button>
+          <div id="recentchanges"></div>
         </div>
       </div>
     </section>
@@ -417,8 +705,10 @@
               <label>Rounds
                 <select id="opt-rounds"><option value="1">1 round</option><option value="2">2 rounds</option><option value="3" selected>3 rounds</option><option value="5">5 rounds</option></select></label>
               <label>Critic
-                <select id="opt-critic"><option value="haiku" selected>Haiku · cheap</option><option value="sonnet">Sonnet</option></select></label>
+                <select id="opt-critic" title="the critic is the core's judgment — big model, one report per round"><option value="opus" selected>Opus · the core</option><option value="sonnet">Sonnet</option></select></label>
               <label class="chk"><input type="checkbox" id="opt-auto" checked> Auto-accept verdicts</label>
+              <label>Account
+                <select id="opt-orch-account" title="which account the loop delegates to — Auto picks the one with the most headroom"><option value="auto">Auto · least used</option></select></label>
               <input class="qbox sshf" id="orch-dir" placeholder="working directory (optional — defaults to this repo)">
             </div>
             <div class="opts">
@@ -431,6 +721,8 @@
                 </select></label>
               <label>Budget
                 <select id="opt-budget"><option value="15">15 turns</option><option value="40" selected>40 turns</option><option value="80">80 turns</option></select></label>
+              <label>Account
+                <select id="opt-account" title="which Claude account this runs under (CLAUDE_CONFIG_DIR)"></select></label>
               <label class="chk"><input type="checkbox" id="opt-skip" checked> Skip permission prompts</label>
             </div>
             <div class="opts"><span style="font-weight:600">Run with</span>
@@ -463,16 +755,24 @@
 
     <!-- ============ SKILLS ============ -->
     <section class="page" id="p-skills">
-      <div class="titlerow"><div><h1>Skill tree</h1><div class="sub">You → the conductor → branches. Skills earn after 3 real uses and decay when off-goal.</div></div></div>
-      <div class="card">
-        <div class="tree">
-          <div class="youpill">Daniel</div>
-          <div class="stem"></div>
-          <div class="cond"><b>Claude Code</b><small>the conductor</small></div>
-          <div class="stem"></div>
-          <div class="branchrow" id="branchrow"></div>
+      <div class="titlerow"><div><h1>Skill tree</h1><div class="sub">Skills earn after 3 real uses and decay when off-goal. Click one to see what it does.</div></div></div>
+      <div class="card treecard">
+        <div class="skstats" id="skstats"></div>
+        <div class="sktree" id="sktree"></div>
+        <div class="sdetail" id="sdetail"></div>
+      </div>
+      <div class="card deck" style="margin-top:14px">
+        <h3>Add a skill <span class="tag">admin · seeds a learning node (earns after 3 uses)</span></h3>
+        <div class="opts" style="padding-top:12px">
+          <input class="qbox sshf" id="sk-name" placeholder="skill name — e.g. 'data-pipeline'" maxlength="40" style="flex:2">
+          <label>Branch
+            <select id="sk-branch">
+              <option value="engineering">engineering</option><option value="design">design</option>
+              <option value="ops">ops</option><option value="meta">meta</option><option value="misc" selected>misc</option>
+            </select></label>
+          <input class="qbox sshf" id="sk-trig" placeholder="/trigger (optional)" style="flex:1">
+          <button class="btn solid" id="sk-add">Add skill</button>
         </div>
-        <div class="treelegend" id="treelegend"></div>
       </div>
     </section>
 
@@ -487,9 +787,15 @@
             <div class="hstats" id="hstats"></div><div id="hits"></div>
           </div>
         </div>
-        <div class="card">
-          <h3>Obsidian wire</h3>
-          <div id="vaultinfo" style="font-size:12.5px; color:var(--ink2); line-height:1.7; padding-top:10px"></div>
+        <div class="stack">
+          <div class="card">
+            <h3>Obsidian wire</h3>
+            <div id="vaultinfo" style="font-size:12.5px; color:var(--ink2); line-height:1.7; padding-top:10px"></div>
+          </div>
+          <div class="card">
+            <h3>Latest solutions <span class="tag" id="soltag"></span></h3>
+            <div id="sollist"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -517,8 +823,15 @@
 
     <!-- ============ AUDIT ============ -->
     <section class="page" id="p-audit">
-      <div class="titlerow"><div><h1>Audit log</h1><div class="sub">Every action from every session — the raw feed behind all the numbers (state/events.jsonl).</div></div></div>
+      <div class="titlerow"><div><h1>Audit log</h1><div class="sub" id="auditsub">Every action from every session (state/events.jsonl).</div></div></div>
       <div class="card">
+        <div class="modes" id="auditchips" style="margin:0 0 4px">
+          <button class="mode on" data-af="">All</button>
+          <button class="mode" data-af="changes">Changes</button>
+          <button class="mode" data-af="loops">Loops</button>
+          <button class="mode" data-af="spawns">Spawns</button>
+          <button class="mode" data-af="directives">Directives</button>
+        </div>
         <div class="filters"><select id="fl-sess"><option value="">all sessions</option></select><select id="fl-type"><option value="">all events</option></select><input id="fl-text" type="search" placeholder="search detail…"></div>
         <div class="auditwrap"><table class="audit" id="audit"></table></div>
       </div>
@@ -547,17 +860,139 @@
 </div>
 <div id="toast"></div>
 
+<button id="chatfab" title="Ask Maestro"><svg viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M8 12h8M8 9h5"/></svg></button>
+<div id="chatpanel">
+  <div class="chathead">
+    <div class="av"><svg viewBox="0 0 24 24" id="chatspark"></svg></div>
+    <div><b>Ask Maestro</b><small>the software · the brain · anything</small></div>
+    <button class="x" id="chatclose" aria-label="close">×</button>
+  </div>
+  <div class="chatlog" id="chatlog"></div>
+  <div class="chatin">
+    <textarea id="chatinput" rows="1" placeholder="Ask about Maestro, the brain, or anything…"></textarea>
+    <button class="chatsend" id="chatsendbtn" title="send"><svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg></button>
+  </div>
+</div>
+
 <script>
 "use strict";
-const GREEN="#135c38", MID="#1e7c4c", MINT="#a9dcbd", INK="#15211a";
+const GREEN="#5c1346", MID="#7c1e60", MINT="#dca9cd", INK="#21151d";
 const CAPFILL=[GREEN, MINT, MID];              // rotating capsule fills (Donezo style)
-const PIE=[GREEN, MID, MINT, "#79b892", "#c9cec5", "#8a958c"]; // pie chart exempt from 3-color cap
+const PIE=[GREEN, MID, MINT, "#b879a5", "#cec5cb", "#958a92"]; // pie chart exempt from 3-color cap
 const STAGES=["think","plan","build","review","test","ship"];
 const LIVE_MS=15*60*1000;
-const S={events:[],skills:null,solved:[],approvals:{tokens:[]},inbox:[],instances:[],integ:null,wire:true,vault:"",vaultData:null,paused:false,orchs:[],sshKeys:[]};
+const S={events:[],skills:null,solved:[],approvals:{tokens:[]},inbox:[],instances:[],integ:null,wire:true,vault:"",vaultData:null,paused:false,orchs:[],sshKeys:[],pulse:{}};
+const CHG=new Set(["Edit","Write","MultiEdit","NotebookEdit","Bash"]);
+const dayKey=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const fmtTok=n=>n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":String(n||0);
+const rel=ts=>{if(!ts)return"–";const s=Math.max(0,(Date.now()-Date.parse(ts))/1000);
+  return s<60?Math.floor(s)+"s ago":s<3600?Math.floor(s/60)+"m ago":s<86400?Math.floor(s/3600)+"h ago":Math.floor(s/86400)+"d ago"};
+const resetText=at=>{const r=at*1000-Date.now();return r>0?fmtDur(r):"window clear"};
+function fmtDur(ms){const s=Math.max(0,Math.floor(ms/1000));
+  return Math.floor(s/3600)+"h "+String(Math.floor(s%3600/60)).padStart(2,"0")+"m"}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const CLAUDE_LOGO=(()=>{let r="";for(let k=0;k<12;k++){const a=k*Math.PI/6,c=Math.cos(a),s=Math.sin(a);
+  r+=`<line x1="${(12+c*3).toFixed(1)}" y1="${(12+s*3).toFixed(1)}" x2="${(12+c*9.6).toFixed(1)}" y2="${(12+s*9.6).toFixed(1)}"/>`}
+  return`<svg class="clogo" viewBox="0 0 24 24">${r}</svg>`})();
+const SPARK=(()=>{let r="";for(let k=0;k<12;k++){const a=k*Math.PI/6,c=Math.cos(a),s=Math.sin(a);
+  r+=`<line x1="${(12+c*3).toFixed(1)}" y1="${(12+s*3).toFixed(1)}" x2="${(12+c*9.4).toFixed(1)}" y2="${(12+s*9.4).toFixed(1)}"/>`}return r})();
+
+/* ---------- performance line graph (activity on the wire) ---------- */
+function renderPerf(){
+  const svg=$("perfsvg");if(!svg)return;
+  const W=svg.clientWidth;if(!W)return;                    // hidden tab -> skip
+  const now=Date.now(),HRS=12,H=172,pad=26,b=new Array(HRS).fill(0);
+  for(const e of S.events){const t=Date.parse(e.ts);if(isNaN(t))continue;
+    const h=Math.floor((now-t)/3600000);if(h>=0&&h<HRS)b[HRS-1-h]++;}
+  const max=Math.max(4,...b),X=i=>pad+i*(W-pad*2)/(HRS-1),Y=v=>H-20-(v/max)*(H-42);
+  const pts=b.map((v,i)=>[X(i),Y(v)]);
+  const line=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  const area=line+` L${X(HRS-1).toFixed(1)} ${H-20} L${pad} ${H-20} Z`;
+  const lab=b.map((v,i)=>{if(i%3)return"";const hh=new Date(now-(HRS-1-i)*3600000).getHours();
+    return`<text class="lgx" x="${X(i).toFixed(1)}" y="${H-4}" text-anchor="middle">${String(hh).padStart(2,"0")}h</text>`}).join("");
+  const dots=pts.map((p,i)=>`<circle class="lgdot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" data-v="${b[i]}" data-h="${new Date(now-(HRS-1-i)*3600000).getHours()}"/>`).join("");
+  svg.innerHTML=`<defs><linearGradient id="lgfill" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="${GREEN}" stop-opacity=".22"/><stop offset="1" stop-color="${GREEN}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#lgfill)"/><path d="${line}" fill="none" stroke="${GREEN}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${lab}${dots}`;
+}
+
+/* ---------- command bar: goal -> refined mission -> orchestrator ---------- */
+const CMD={hist:[],busy:false};
+const CMD_EX=[
+  "Go through the codebase of this repo and map its architecture into the brain…",
+  "Find every TODO and half-finished idea in the workspace and rank them by impact…",
+  "Audit the event wire for repeated manual work and automate the worst one…",
+  "Review the dashboard for UX slop at 1280px and fix the three worst offenders…",
+  "Summarize yesterday's sessions and write the lessons to Hermes…",
+  "Check every skill still serves the goal and prune the dead ones…"];
+let cmdI=0,cmdPos=0,cmdDel=false;
+function cmdType(){
+  const inp=$("cmdinput");if(!inp)return;
+  if(document.activeElement===inp||inp.value){setTimeout(cmdType,900);return} // pause while typing
+  const ex=CMD_EX[cmdI];
+  cmdPos+=cmdDel?-1:1;
+  inp.setAttribute("placeholder",ex.slice(0,cmdPos)||"Tell Maestro what to do…");
+  let wait=cmdDel?16:40;
+  if(!cmdDel&&cmdPos>=ex.length){cmdDel=true;wait=1700}
+  else if(cmdDel&&cmdPos<=0){cmdDel=false;cmdI=(cmdI+1)%CMD_EX.length;wait=600}
+  setTimeout(cmdType,wait);
+}
+function cmdMsg(role,html){const d=document.createElement("div");d.className="cmdmsg "+role;
+  d.innerHTML=html;$("cmdflow").appendChild(d);return d}
+// dropdown overrides — "auto" everywhere means the intake decides
+function cmdOpts(){return{model:$("cmd-model").value,turns:$("cmd-turns").value,
+  rounds:$("cmd-rounds").value,critic:$("cmd-critic").value,
+  account:$("cmd-account").value,gate:$("cmd-gate").checked}}
+function cmdTuned(){const o=cmdOpts();
+  return o.model!=="auto"||o.turns!=="auto"||o.rounds!=="auto"||o.critic!=="opus"||o.account!=="auto"||o.gate}
+async function cmdSend(){
+  const inp=$("cmdinput"),text=inp.value.trim();
+  if(!text||CMD.busy)return;
+  CMD.busy=true;$("cmdgo").disabled=true;inp.value="";
+  $("cmdpop").classList.remove("open");$("cmdbarbox").classList.remove("optsopen");
+  cmdMsg("u",esc(text));
+  const th=cmdMsg("a",`<span class="dots"><i></i><i></i><i></i></span> refining the goal…`);
+  try{
+    const j=await post("/api/mission",{text,history:CMD.hist,opts:cmdOpts()});
+    CMD.hist.push({role:"user",content:text});
+    if(j.action==="clarify"){
+      th.innerHTML=esc(j.question||"Give me one more detail and I'll launch it.");
+      CMD.hist.push({role:"assistant",content:JSON.stringify(j)});
+      inp.focus();
+    }else{
+      th.innerHTML=`<b>${esc(j.name||"Mission")}</b> launched — loop <code>${esc(j.oid||"?")}</code> is running with an opus critic. <a href="#/instances">watch it →</a>
+        <div class="brief">${esc((j.mission||"").slice(0,260))}${(j.mission||"").length>260?"…":""}</div>`;
+      CMD.hist=[];poll();
+    }
+  }catch(e){th.innerHTML="⚠ "+esc(e.message)}
+  CMD.busy=false;$("cmdgo").disabled=false;
+}
+
+/* ---------- chat assistant ---------- */
+const CHAT={open:false,busy:false,history:[]};
+function chatToggle(v){CHAT.open=(v===undefined)?!CHAT.open:v;
+  $("chatpanel").classList.toggle("open",CHAT.open);
+  if(CHAT.open){$("chatinput").focus();
+    if(!CHAT.history.length)chatAdd("a","Hi — I'm your Maestro assistant. Ask me about the software, the brain, or anything else.");}}
+function chatAdd(role,text,think){const log=$("chatlog");
+  const d=document.createElement("div");d.className="msg "+role+(think?" think":"");
+  d.innerHTML=`<span class="who">${role==="u"?"you":"maestro"}</span>${esc(text)}`;
+  log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
+async function chatSend(){
+  const inp=$("chatinput"),text=inp.value.trim();
+  if(!text||CHAT.busy)return;
+  inp.value="";inp.style.height="auto";
+  chatAdd("u",text);
+  CHAT.busy=true;$("chatsendbtn").disabled=true;
+  const think=chatAdd("a","thinking…",true);
+  try{const j=await post("/api/chat",{message:text,history:CHAT.history});
+    think.remove();chatAdd("a",j.reply);
+    CHAT.history.push({role:"user",content:text},{role:"assistant",content:j.reply});
+  }catch(e){think.remove();chatAdd("a","⚠ "+e.message);}
+  CHAT.busy=false;$("chatsendbtn").disabled=false;$("chatinput").focus();
+}
 
 /* ---------- data ---------- */
 async function jget(p,opt){const r=await fetch(p,{cache:"no-store"});if(!r.ok){if(opt)return"";throw new Error(p)}return r.text()}
@@ -565,11 +1000,12 @@ const jsonl=t=>t.split("\n").filter(l=>l.trim()).map(l=>{try{return JSON.parse(l
 async function poll(){
   if(S.paused){render();return}
   try{
-    const [ev,reg,sol,app,inb,obs,inst,integ,vlt,orc,shk]=await Promise.all([
+    const [ev,reg,sol,app,inb,obs,inst,integ,vlt,orc,shk,pls]=await Promise.all([
       jget("/state/events.jsonl"),jget("/skills/registry.json"),jget("/hermes/solved.jsonl"),
       jget("/state/approvals.json"),jget("/state/inbox.jsonl",1),jget("/memory/OBSIDIAN.md",1),
       jget("/api/instances",1),jget("/api/integrations",1),jget("/api/vault",1),
-      jget("/api/orchestrations",1),jget("/api/ssh-creds",1)]);
+      jget("/api/orchestrations",1),jget("/api/ssh-creds",1),jget("/api/pulse",1)]);
+    S.pulse=pls?JSON.parse(pls):{};
     S.events=jsonl(ev);S.skills=JSON.parse(reg);S.solved=jsonl(sol);
     S.approvals=JSON.parse(app);S.inbox=jsonl(inb);
     S.instances=(inst?JSON.parse(inst).windows:[])||[];S.integ=integ?JSON.parse(integ):null;
@@ -588,8 +1024,9 @@ function sessions(){
   for(const e of S.events){
     const id=e.session||"?";
     if(id==="operator")continue;
-    if(!m.has(id))m.set(id,{id,agents:[],exits:0,stage:null,last:null,lastline:"",job:""});
-    const s=m.get(id);s.last=e.ts||s.last;
+    if(!m.has(id))m.set(id,{id,agents:[],exits:0,stage:null,last:null,lastline:"",job:"",n:0,chg:0});
+    const s=m.get(id);s.last=e.ts||s.last;s.n++;
+    if(e.event==="tool"&&CHG.has(e.tool))s.chg++;
     if(e.stage&&STAGES.includes(e.stage))s.stage=e.stage;
     if(e.event==="spawn")s.agents.push({name:e.agent||"agent",detail:e.detail||""});
     if(e.event==="agent-exit")s.exits++;
@@ -603,43 +1040,6 @@ function sessions(){
   return out;
 }
 const doneIds=()=>new Set(S.events.filter(e=>e.event==="directive-done").flatMap(e=>(String(e.detail||"").match(/[0-9a-f]{8}/g)||[])));
-function activitySeries(n){
-  const ts=S.events.map(e=>Date.parse(e.ts)).filter(x=>x);
-  if(!ts.length)return{arr:new Array(n).fill(0),labels:new Array(n).fill(""),label:"no events"};
-  const now=Date.now(),span=Math.min(24*3600e3,Math.max(30*60e3,now-Math.min(...ts)));
-  const start=now-span,size=span/n,arr=new Array(n).fill(0);
-  for(const t of ts){if(t>=start)arr[Math.min(n-1,Math.floor((t-start)/size))]++}
-  const labels=arr.map((_,i)=>{const d=new Date(start+i*size+size/2);
-    return span>3*3600e3?String(d.getHours()).padStart(2,"0"):String(d.getHours()).padStart(2,"0")+":"+String(Math.floor(d.getMinutes()/10)*10).padStart(2,"0")});
-  const m=Math.round(span/60000);
-  return{arr,labels,label:m<90?m+" min":(m/60).toFixed(m%60?1:0)+"h"};
-}
-
-/* ---------- svg builders ---------- */
-function sparkline(vals,w,h,color){
-  const max=Math.max(1,...vals),n=vals.length;
-  const pts=vals.map((v,i)=>[i/(n-1||1)*w,h-2-(v/max)*(h-4)]);
-  const d=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-}
-function arcPath(cx,cy,R,r,a0,a1){
-  const p=(rad,a)=>[cx+rad*Math.cos(a),cy+rad*Math.sin(a)];
-  const[x0,y0]=p(R,a0),[x1,y1]=p(R,a1),[x2,y2]=p(r,a1),[x3,y3]=p(r,a0);
-  const big=(a1-a0)>Math.PI?1:0;
-  return`M${x0.toFixed(1)} ${y0.toFixed(1)}A${R} ${R} 0 ${big} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}A${r} ${r} 0 ${big} 0 ${x3.toFixed(1)} ${y3.toFixed(1)}Z`;
-}
-function gauge(segs,size,center,sub){
-  // 270° gauge, remainder hatched — circular motif per the reference
-  const total=segs.reduce((s,d)=>s+d.v,0)||1,R=size/2-6,r=R*0.68,cx=size/2,cy=size/2;
-  const A0=0.75*Math.PI,SPAN=1.5*Math.PI;let a=A0,out="";
-  out+=`<defs><pattern id="hp" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" fill="#f2f4ee"/><line x1="1" y1="0" x2="1" y2="6" stroke="#dde2d7" stroke-width="2"/></pattern></defs>`;
-  out+=`<path d="${arcPath(cx,cy,R,r,A0,A0+SPAN)}" fill="url(#hp)"/>`;
-  for(const s of segs){const a1=a+(s.v/total)*SPAN;
-    if(s.v>0)out+=`<path d="${arcPath(cx,cy,R,r,a+0.02,Math.max(a+0.02,a1-0.02))}" fill="${s.c}"/>`;a=a1}
-  out+=`<text x="${cx}" y="${cy+2}" text-anchor="middle" font-size="30" font-weight="750" fill="${INK}" font-family="Cascadia Mono,monospace">${center}</text>`;
-  out+=`<text x="${cx}" y="${cy+22}" text-anchor="middle" font-size="11" fill="#98a29a">${sub}</text>`;
-  return`<svg width="${size}" height="${size*0.92}" viewBox="0 0 ${size} ${size*0.92}">${out}</svg>`;
-}
 
 /* ---------- components ---------- */
 const arrowSvg='<svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>';
@@ -655,15 +1055,259 @@ function statCard(dark,label,num,unit,delta,deltaCls,go){
     <div class="num">${num}${unit?`<em> ${unit}</em>`:""}</div>
     <span class="deltapill ${deltaCls||""}">${delta}</span></div>`;
 }
-function sessRow(s,i){
-  const initials=s.id.slice(0,2).toUpperCase();
-  const stage=s.stage?`${s.stage} stage`:"no stage yet";
-  const agents=s.agents.length?` · ${Math.max(0,s.agents.length-s.exits)} agent(s) out`:"";
-  return`<div class="lrow"><div class="sq ${i%2?"alt":""}">${esc(initials)}</div>
-    <div class="bd"><div class="t" title="${esc(s.job||"")}">${esc((s.job||"idle conductor").slice(0,70))}</div>
-    <div class="s mono">${esc(s.id)} · ${esc(stage+agents)}</div></div>
-    <span class="pill ${s.live?"live":"idle"}">${s.live?"Live":"Idle"}</span></div>`;
+/* ---------- pulse widgets (topbar) ---------- */
+const PI={
+  spot:'<circle cx="12" cy="12" r="10"/><path d="M8 15c2.5-.8 5-.6 7.5.8M7.5 12c3-.9 6-.6 9 .9M7 9c3.5-1 7.5-.7 10.5 1"/>',
+  gh:'<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65S8.93 17.38 9 18v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
+  mail:'<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  timer:'<line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>'
+};
+// open-meteo WMO weather codes -> emoji + word
+function wxIcon(c){
+  if(c==null)return["","—"];
+  if(c===0)return["☀️","clear"];if(c<=2)return["🌤️","fair"];if(c===3)return["☁️","cloudy"];
+  if(c<=48)return["🌫️","fog"];if(c<=57)return["🌦️","drizzle"];if(c<=67)return["🌧️","rain"];
+  if(c<=77)return["🌨️","snow"];if(c<=82)return["🌧️","showers"];if(c<=86)return["🌨️","snow"];
+  return["⛈️","storm"];
 }
+function renderTopStatus(){
+  const waiting=S.orchs.filter(o=>o.live&&o.status==="waiting").length;
+  const el=$("topstatus"),w=S.pulse.weather||{};
+  if(waiting){el.className="topstat attn";
+    el.innerHTML=`<span class="dot"></span>${waiting} loop${waiting===1?"":"s"} awaiting your verdict`;}
+  else{const[ic,word]=wxIcon(w.code);
+    el.className="topstat";
+    el.innerHTML=w.temp!=null
+      ?`<span class="wxi">${ic}</span>${Math.round(w.temp)}${esc(w.unit||"°")} · ${word}${w.label?` · ${esc(w.label)}`:""}`
+      :`<span class="wxi">🌡️</span>weather —`;}
+  $("datechip").textContent=new Date().toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+}
+// gmail / github / spotify — same card size + design as the Claude card, own brand
+function serviceCards(){
+  const p=S.pulse||{},sp=p.spotify||{},gh=p.github||{},gm=p.gmail||{};
+  const err=(cls,logo,name,msg)=>`<div class="ccard ${cls} dim"><div class="ctop"><svg class="clogo" viewBox="0 0 24 24">${logo}</svg>
+    <div><div class="cname">${name}</div><div class="csub">${esc(msg||"not connected")}</div></div></div>
+    <div class="cline">connect in state/pulse.json</div></div>`;
+  const g0=(gm.latest||[])[0];
+  const gmail=gm.error?err("gmail",PI.mail,"Gmail",gm.error)
+    :`<div class="ccard gmail"><div class="ctop"><svg class="clogo" viewBox="0 0 24 24">${PI.mail}</svg>
+      <div><div class="cname">Gmail</div><div class="csub">${esc(gm.email||"inbox")}</div></div>
+      <span class="clive">${(gm.latest||[]).length} new</span></div>
+      <div class="cbig">${fmtTok(gm.unread||0)}<em>unread</em></div>
+      <div class="cline" title="${esc(g0?g0.from+": "+g0.subject:"")}">${g0?`<b>${esc(g0.from||"")}</b> · ${esc(g0.subject)}`:"inbox clear"}</div></div>`;
+  const c0=(gh.commits||[])[0];
+  const github=gh.error?err("github",PI.gh,"GitHub",gh.error)
+    :`<div class="ccard github"><div class="ctop"><svg class="clogo" viewBox="0 0 24 24">${PI.gh}</svg>
+      <div><div class="cname">GitHub</div><div class="csub">${esc(gh.user||"")}</div></div>
+      <span class="clive">${gh.today||0} today</span></div>
+      <div class="cbig">${gh.today||0}<em>commit${gh.today===1?"":"s"} today</em></div>
+      <div class="cline" title="${esc(c0?c0.repo+": "+c0.msg:"")}">${c0?`<b>${esc(c0.repo)}</b> · ${esc(c0.msg)}`:"no recent pushes"}</div></div>`;
+  const spotify=sp.error
+    // not connected -> a big, obvious Connect button
+    ? `<div class="ccard spotify"><div class="ctop"><svg class="clogo" viewBox="0 0 24 24">${PI.spot}</svg>
+        <div><div class="cname">Spotify</div><div class="csub">link to see now-playing</div></div></div>
+        <div class="spnow"><div class="spmeta"><div class="sptrack">Not connected</div>
+          <div class="spartist">${esc(sp.error==="not connected"?"one click to link your account":sp.error)}</div></div></div>
+        <div class="cfoot"><a class="cchip setup" href="/api/spotify/login"><svg viewBox="0 0 24 24">${PI.spot}</svg>connect spotify</a></div></div>`
+    // connected -> always show it's linked + a reconnect link so you're never stuck
+    : `<div class="ccard spotify"><div class="ctop"><svg class="clogo" viewBox="0 0 24 24">${PI.spot}</svg>
+        <div><div class="cname">Spotify</div><div class="csub">${sp.playing?"now playing":"connected"}</div></div>
+        <span class="clive">${sp.playing?"● live":"idle"}</span></div>
+      <div class="spnow">${sp.art?`<img class="cart" src="${esc(sp.art)}" alt="">`:""}
+        <div class="spmeta"><div class="sptrack">${esc(sp.track||"Nothing playing")}</div>
+          <div class="spartist">${esc(sp.artist||"start something in Spotify")}</div></div></div>
+      <div class="cfoot"><a class="cchip setup" href="/api/spotify/login" title="re-link a different account">${copySvg}reconnect</a></div></div>`;
+  return gmail+github+spotify;
+}
+// sidebar turntable — lofi backdrop, the record IS the album cover (smooth),
+// interactive seek bar + prev/play/next controls. Built once; only data swaps.
+let vinylBuilt=false, vArt="\0", vBase=0, vBaseAt=0;   // local progress ticker base
+const mmss=ms=>{const s=Math.max(0,Math.round(ms/1000));return (s/60|0)+":"+String(s%60).padStart(2,"0")};
+function vProgress(){
+  const sp=S.pulse.spotify||{};
+  if(!sp.duration_ms)return 0;
+  const p=sp.playing?Math.min(sp.duration_ms,vBase+(Date.now()-vBaseAt)):vBase;
+  return p;
+}
+async function vCtl(action,pos){
+  try{
+    const j=await post("/api/spotify/ctl",{action,pos_ms:pos});
+    if(j.spotify){S.pulse.spotify=j.spotify;vBase=j.spotify.progress_ms||0;vBaseAt=Date.now();renderVinyl();}
+  }catch(e){toast(e.message,true)}
+}
+function renderVinyl(){
+  const box=$("vinyl");if(!box)return;
+  const sp=S.pulse.spotify||{};
+  const connected=!sp.error, playing=connected&&sp.playing;
+  if(!vinylBuilt){
+    vinylBuilt=true;
+    // realistic tonearm: mount plate, pivot, chrome arm, headshell (one SVG group)
+    const arm=`<svg class="tonearm" viewBox="0 0 92 118" fill="none">
+      <circle cx="68" cy="26" r="18" fill="rgba(255,255,255,.13)"/>
+      <rect x="72" y="12" width="13" height="10" rx="3" fill="#2b2b30"/>
+      <rect x="58" y="17" width="23" height="16" rx="5" fill="#1c1c20"/>
+      <line x1="67" y1="30" x2="36" y2="92" stroke="#c9ccd2" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="67" y1="30" x2="36" y2="92" stroke="#f2f4f8" stroke-width="1.4" stroke-linecap="round"/>
+      <g transform="rotate(63 36 92)"><rect x="27" y="85" width="19" height="13" rx="3" fill="#18181c"/>
+        <rect x="24" y="95" width="6" height="8" rx="2" fill="#101014"/></g></svg>`;
+    box.innerHTML=`
+      <div class="vlab"><span class="eq"><i></i><i></i><i></i></span> <span id="vlabtxt">vinyl</span></div>
+      <div class="vdeck"><div class="record" id="vrec"><span class="hole"></span></div>${arm}</div>
+      <div class="vmeta" id="vmeta"></div>
+      <div id="vplayer" style="display:none">
+        <div class="vbar" id="vbar"><div class="trk"><i id="vbar-i"></i></div><div class="knob" id="vbar-k"></div></div>
+        <div class="vtime"><span id="vt-cur">0:00</span><span id="vt-dur">0:00</span></div>
+        <div class="vctl">
+          <button class="vbtn" data-vc="prev" title="previous"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg></button>
+          <button class="vbtn play" data-vc="toggle" title="play/pause" id="vplaybtn"></button>
+          <button class="vbtn" data-vc="next" title="next"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg></button>
+        </div>
+      </div>`;
+    box.addEventListener("click",e=>{
+      const b=e.target.closest("[data-vc]");if(b){vCtl(b.dataset.vc);return}
+      const bar=e.target.closest("#vbar");
+      if(bar){const sp2=S.pulse.spotify||{};if(!sp2.duration_ms)return;
+        const r=bar.getBoundingClientRect(),f=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+        const pos=Math.round(f*sp2.duration_ms);
+        vBase=pos;vBaseAt=Date.now();vTick();       // optimistic
+        vCtl("seek",pos);}
+    });
+  }
+  box.className="vinyl"+(playing?" playing":"");
+  $("vlabtxt").textContent=playing?"now playing":connected?"paused":"vinyl";
+  // album cover = the record face (smooth), swaps on song change
+  const art=(connected&&sp.art)?sp.art:"";
+  if(art!==vArt){vArt=art;$("vrec").style.backgroundImage=art?`url("${art}")`:"none";}
+  // resync the local ticker ONLY when the server snapshot actually changed —
+  // the 2.5s poll re-serves the same 7s-old value and would snap the bar back
+  const snap=(sp.track||"")+"|"+(sp.progress_ms||0)+"|"+playing;
+  if(snap!==renderVinyl._snap){renderVinyl._snap=snap;vBase=sp.progress_ms||0;vBaseAt=Date.now();}
+  const meta=$("vmeta");
+  if(!connected){
+    $("vplayer").style.display="none";
+    meta.innerHTML=`<div class="vt">Not connected</div><div class="va">link your Spotify account</div>
+      <a class="vcta" href="/api/spotify/login"><svg viewBox="0 0 24 24">${PI.spot}</svg>connect</a>`;
+    return;
+  }
+  meta.innerHTML=`<div class="vt" title="${esc(sp.track||"")}">${esc(sp.track||"Nothing playing")}</div>
+    <div class="va" title="${esc(sp.artist||"")}">${esc(sp.artist||"press play in Spotify")}</div>`;
+  $("vplayer").style.display="";
+  $("vplaybtn").innerHTML=playing
+    ?`<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`
+    :`<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+  $("vt-dur").textContent=sp.duration_ms?mmss(sp.duration_ms):"0:00";
+  vTick();
+}
+// 1s local ticker: the bar advances between polls without any re-render
+function vTick(){
+  const sp=S.pulse.spotify||{};
+  const bi=$("vbar-i"),k=$("vbar-k");
+  if(!bi||!sp.duration_ms)return;
+  const p=vProgress(),f=Math.min(100,p/sp.duration_ms*100);
+  bi.style.width=f+"%";if(k)k.style.left=f+"%";
+  const c=$("vt-cur");if(c)c.textContent=mmss(p);
+}
+// keep the launcher/orchestrator account pickers in sync with configured accounts
+function fillAccountSelects(){
+  const names=(((S.pulse.claude||{}).accounts)||[]).map(a=>a.name).filter(Boolean);
+  const sp=$("opt-account");
+  if(sp){const cur=sp.value;
+    sp.innerHTML=names.length?names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(""):`<option value="">this machine</option>`;
+    if(names.includes(cur))sp.value=cur;}
+  const or=$("opt-orch-account");
+  if(or){const cur=or.value||"auto";
+    or.innerHTML=`<option value="auto">Auto · least used</option>`+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+    or.value=[...or.options].some(o=>o.value===cur)?cur:"auto";}
+  const cm=$("cmd-account");
+  if(cm){const cur=cm.value||"auto";
+    cm.innerHTML=`<option value="auto">Auto · most headroom</option>`+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+    cm.value=[...cm.options].some(o=>o.value===cur)?cur:"auto";}
+}
+
+/* ---------- skill tree (dark tech-tree) ---------- */
+const BR_ICON={engineering:'<path d="m14.5 4-5 16"/><path d="m18 8 4 4-4 4"/><path d="m6 8-4 4 4 4"/>',
+  design:'<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
+  meta:'<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/>',
+  ops:'<path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 2v2"/><path d="M12 22v-2"/><path d="m17 20.66-1-1.73"/><path d="M11 10.27 7 3.34"/><path d="m20.66 17-1.73-1"/><path d="m3.34 7 1.73 1"/><path d="M14 12h8"/><path d="M2 12h2"/><path d="m20.66 7-1.73 1"/><path d="m3.34 17 1.73-1"/><path d="m17 3.34-1 1.73"/><path d="m11 13.73-4 6.93"/>'};
+const LOCK_SVG='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const LOCKED_GENRES=["integration","voice","vision"];
+let skSig="",treeGrown=false;
+const SK_ST={active:{cls:"earned",word:"earned"},learning:{cls:"learning",word:"learning"},
+  candidate:{cls:"candidate",word:"new"},archived:{cls:"archived",word:"archived"}};
+function growTree(){
+  if(treeGrown)return;
+  const w=$("sktree");if(!w||!w.querySelector(".stree"))return;
+  treeGrown=true;w.classList.add("grow");setTimeout(()=>w.classList.remove("grow"),1200);
+}
+// a skill = a leaf node (progress ring + name + status word)
+function treeSkill(n,v){
+  const st=SK_ST[v.status]||SK_ST.learning;
+  const uses=Math.min(v.uses||0,3),pct=Math.round(uses/3*100);
+  const glyph=st.cls==="earned"?"✓":String(uses);
+  return`<li><div class="tnode skill ${st.cls}" data-skill="${esc(n)}">
+    <div class="tring" style="--p:${pct}%"><span>${glyph}</span></div>
+    <div class="tmeta"><div class="tt">${esc(n)}</div><div class="ts">${st.word}</div></div></div></li>`;
+}
+const treeLock=()=>`<li><div class="tnode skill locked" data-locked="1">
+  <div class="tring"><span>🔒</span></div>
+  <div class="tmeta"><div class="tt">locked</div><div class="ts">future slot</div></div></div></li>`;
+function treeGenre(br,items,locked){
+  const gE=items.filter(([,v])=>v.status==="active").length;
+  const leaves=locked?treeLock():items.map(([n,v])=>treeSkill(n,v)).join("");
+  const count=locked?"soon":`${gE}/${items.length}`;
+  return`<li><div class="tnode genre ${locked?"locked":""}"><span>${esc(br)}</span><span class="c">${count}</span></div>
+    <ul>${leaves}</ul></li>`;
+}
+function renderSkills(){
+  const reg=S.skills||{goal:"–",skills:{}},sk=Object.entries(reg.skills||{});
+  const sig=JSON.stringify(reg);if(sig===skSig)return;skSig=sig;
+  const total=sk.length;
+  const earned=sk.filter(([,v])=>v.status==="active").length;
+  const inprog=sk.filter(([,v])=>v.status==="learning"||v.status==="candidate").length;
+  const xp=sk.reduce((a,[,v])=>a+(v.uses||0),0);
+  const pct=total?Math.round(earned/total*100):0;
+  $("skstats").innerHTML=`
+    <div class="skstat"><div class="k">Skills earned</div>
+      <div class="n">${earned}<em>/${total}</em><span class="up">▲ ${pct}%</span></div>
+      <div class="sub">of the roster earned</div></div>
+    <div class="skstat"><div class="k">In progress</div>
+      <div class="n">${inprog}</div><div class="sub">learning · climbing to 3 uses</div></div>
+    <div class="skstat"><div class="k">Conductor XP</div>
+      <div class="n">${xp}<span class="up">▲</span></div><div class="sub">total skill uses</div>
+      <div class="goalchip">goal: ${esc(reg.goal||"–")}</div></div>`;
+  const branches={};for(const[n,v]of sk)(branches[v.branch||"misc"]??=[]).push([n,v]);
+  const order=Object.entries(branches).sort((a,b)=>
+    (b[1].filter(([,v])=>v.status==="active").length-a[1].filter(([,v])=>v.status==="active").length)
+    || (b[1].length-a[1].length) || a[0].localeCompare(b[0]));
+  let genres=order.map(([br,items])=>treeGenre(br,items,false)).join("");
+  genres+=LOCKED_GENRES.filter(g=>!branches[g]).map(g=>treeGenre(g,[],true)).join("");
+  // root → genre branches → skill leaves, one connected dendrogram
+  $("sktree").innerHTML=`<ul class="stree"><li>
+    <div class="tnode root"><b>Maestro</b><small>${esc(reg.goal||"–")}</small></div>
+    <ul>${genres}</ul></li></ul>`;
+  if(!$("sdetail").dataset.sel)skDetailHint();
+  if($("p-skills").classList.contains("show"))requestAnimationFrame(growTree);
+}
+function skDetailHint(){
+  $("sdetail").innerHTML=`<div class="hint">Click a skill node to see what it does — earned nodes are filled, learning nodes show their progress, locked slots open when a mission earns them.</div>`;
+}
+// click a skill node -> show its concise description in the detail panel
+$("sktree").addEventListener("click",e=>{
+  const node=e.target.closest(".tnode.skill");if(!node)return;
+  $("sktree").querySelectorAll(".tnode.skill.sel").forEach(x=>x.classList.remove("sel"));
+  node.classList.add("sel");
+  const d=$("sdetail");
+  if(node.dataset.locked){d.dataset.sel="locked";
+    d.innerHTML=`<div class="h"><span class="dn">Locked slot</span><span class="skpill locked">locked</span></div>
+      <p>A future skill in this genre. It opens once a mission earns it here — or seed one with <code>skills/engine.py add</code> (or the admin panel below).</p>`;return;}
+  const n=node.dataset.skill,v=((S.skills||{}).skills||{})[n]||{},st=SK_ST[v.status]||SK_ST.learning;
+  const uses=Math.min(v.uses||0,3);
+  const desc=(v.desc&&v.desc.trim())||"Newly seeded skill — earns after 3 real uses. Open its SKILL.md to flesh out the process.";
+  d.dataset.sel=n;
+  d.innerHTML=`<div class="h"><span class="dn">${esc(n)}</span><span class="skpill ${st.cls}">${st.word}</span></div>
+    <p>${esc(desc)}</p>
+    <div class="facts"><span>${uses}/3 uses</span><span>${esc(v.trigger||"no trigger")}</span><span>${(v.goals&&v.goals.length)?"on goal":"off goal"}</span></div>`;
+});
 
 /* ---------- render ---------- */
 function render(){
@@ -671,13 +1315,10 @@ function render(){
   const liveAgents=ss.reduce((n,s)=>n+Math.max(0,s.agents.length-s.exits),0);
   const reg=S.skills||{goal:"–",skills:{}},sk=Object.entries(reg.skills||{});
   const earned=sk.filter(([,v])=>v.status==="active").length;
-  const learning=sk.filter(([,v])=>v.status==="learning").length;
-  const cand=sk.filter(([,v])=>v.status==="candidate").length;
   const tokens=(S.approvals.tokens||[]).filter(t=>t.expires*1000>Date.now());
   const staleN=S.solved.filter(r=>r.stale).length;
   const aliveInst=S.instances.filter(w=>w.alive);
   const done=doneIds();
-  const queued=S.inbox.filter(d=>!done.has(d.id));
 
   // sidebar
   $("f-wire").textContent=S.paused?"paused":(S.wire?"live":"down");
@@ -689,37 +1330,92 @@ function render(){
   $("n-int").textContent=S.integ?(S.integ.mcp.length+S.integ.agents.length):0;
   $("subline").textContent=`${live.length} live session${live.length===1?"":"s"} · ${liveAgents} agent${liveAgents===1?"":"s"} in the field · goal: ${reg.goal||"–"}`;
 
-  // KPIs — first card dark (reference pattern)
-  const spark=activitySeries(20).arr,half=spark.length>>1;
-  const a1=spark.slice(0,half).reduce((a,b)=>a+b,0),a2=spark.slice(half).reduce((a,b)=>a+b,0);
-  const dpct=a1?Math.round((a2-a1)/a1*100):(a2?100:0);
+  // KPIs — day-scoped stats, first card dark (reference pattern)
+  const tk=dayKey(new Date()),yd=new Date();yd.setDate(yd.getDate()-1);
+  const yk=dayKey(yd);
+  const evToday=S.events.filter(e=>(e.ts||"").slice(0,10)===tk);
+  const evYest=S.events.filter(e=>(e.ts||"").slice(0,10)===yk);
+  const chgToday=evToday.filter(e=>e.event==="tool"&&CHG.has(e.tool)).length;
+  const chgYest=evYest.filter(e=>e.event==="tool"&&CHG.has(e.tool)).length;
+  const sessToday=new Set(evToday.map(e=>e.session).filter(s=>s&&s!=="operator"));
+  const loopsLive=S.orchs.filter(o=>o.live).length;
+  const dpct=chgYest?Math.round((chgToday-chgYest)/chgYest*100):(chgToday?100:0);
   $("kpis").innerHTML=
-    statCard(true,"Actions logged",S.events.length,"",dpct>=0?`↑ ${dpct}% vs earlier`:`↓ ${Math.abs(dpct)}% vs earlier`,dpct>=0?"":"neg","#/audit")+
-    statCard(false,"Live instances",aliveInst.length,"/ "+S.instances.length,live.length+" reporting on wire","mut","#/instances")+
-    statCard(false,"Skills earned",earned,"/ "+sk.length,learning+" learning · "+cand+" candidate","","#/skills")+
-    statCard(false,"Brain size",S.solved.length,"",staleN?staleN+" stale":"all fresh",staleN?"neg":"","#/brain");
+    statCard(true,"Live instances",aliveInst.length+loopsLive,"",`${aliveInst.length} terminal${aliveInst.length===1?"":"s"} · ${loopsLive} loop${loopsLive===1?"":"s"}`,"","#/instances")+
+    statCard(false,"Changes today",chgToday,"",dpct>=0?`↑ ${dpct}% vs yesterday`:`↓ ${Math.abs(dpct)}% vs yesterday`,dpct>=0?"":"neg","#/audit")+
+    statCard(false,"Sessions today",sessToday.size,"",evToday.length+" actions logged","mut","#/audit")+
+    statCard(false,"Brain size",S.solved.length,"+ "+(S.vaultData?S.vaultData.notes.length:0)+" notes",staleN?staleN+" stale":"all fresh",staleN?"neg":"","#/brain");
 
-  // capsule chart
-  const act=activitySeries(7);
-  const mx=Math.max(1,...act.arr),peak=act.arr.indexOf(Math.max(...act.arr));
-  $("actlabel").textContent="last "+act.label;
-  $("caps").innerHTML=act.arr.map((v,i)=>{
+  // changes day-to-day (7 calendar days)
+  const days=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return d});
+  const perDay=days.map(d=>{const k=dayKey(d);
+    return S.events.filter(e=>(e.ts||"").slice(0,10)===k&&e.event==="tool"&&CHG.has(e.tool)).length});
+  const mx=Math.max(1,...perDay),peak=perDay.indexOf(Math.max(...perDay));
+  $("caps").innerHTML=perDay.map((v,i)=>{
     const hpct=Math.round(v/mx*100);
     return`<div class="capcol">${i===peak&&v>0?`<span class="peakpill">${v}</span>`:""}
       <div class="captrack"><div class="capfill" style="height:${hpct}%;background:${CAPFILL[i%3]}"></div></div>
-      <span class="capx">${act.labels[i]}</span></div>`;
+      <span class="capx">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][days[i].getDay()]}</span></div>`;
   }).join("");
 
-  // directives box (reminder-card style)
-  const d0=queued[queued.length-1];
-  $("dirbox").innerHTML=d0
-    ?`<div style="padding-top:10px"><div style="font-size:11.5px;color:var(--ink3)" class="mono">${esc(d0.id)} · queued</div>
-       <div style="font-weight:650;font-size:15px;line-height:1.4;margin:6px 0 14px">${esc(d0.text)}</div>
-       <button class="btn solid sm" data-go="#/instances">Send an instance</button>
-       ${queued.length>1?`<div style="font-size:12px;color:var(--ink3);margin-top:10px">+ ${queued.length-1} more queued</div>`:""}</div>`
-    :`<div style="padding-top:10px"><div style="font-weight:650;font-size:15px;margin:2px 0 12px">Inbox clear.</div>
-       <div style="font-size:12.5px;color:var(--ink2);margin-bottom:14px">Sessions read directives at boot and between missions.</div>
-       <button class="btn line sm" data-go="#/instances">Queue one</button></div>`;
+  // session stats — who did what today
+  const todaySess=ss.filter(s=>(s.last||"").slice(0,10)===tk).sort((a,b)=>b.n-a.n);
+  const namedMap=new Map(S.instances.map(w=>[w.sid,w.name]));
+  $("sessstats").innerHTML=todaySess.slice(0,6).map((s,i)=>
+    `<div class="lrow"><div class="sq ${i%2?"alt":""}">${esc((namedMap.get(s.id)||s.id).slice(0,2).toUpperCase())}</div>
+      <div class="bd"><div class="t">${esc(namedMap.get(s.id)||s.job||s.id)}</div>
+      <div class="s mono">${s.n} actions · ${s.chg} changes · ${s.stage?s.stage+" stage · ":""}${esc(rel(s.last))}</div></div>
+      <span class="pill ${s.live?"live":"idle"}">${s.live?"Live":"Idle"}</span></div>`
+  ).join("")||`<div class="none">no sessions yet today</div>`;
+
+  // pulse row — claude account card(s) first, then the service cards (same size/design)
+  const accts=((S.pulse.claude||{}).accounts)||[];
+  const claudeHtml=accts.length?accts.map(a=>{
+    if(a.error)return`<div class="ccard dim"><div class="ctop">${CLAUDE_LOGO}
+      <div><div class="cname">${esc(a.name||"account")}</div><div class="csub" title="${esc(a.email||"")}">${esc(a.email||"Claude")}</div></div></div>
+      <div class="cline">${esc(a.error)}</div>
+      <div class="cfoot"><button class="cchip setup" data-setup="${esc(a.dir||"")}" data-name="${esc(a.name||"")}" title="copy the command to launch this account in a terminal">${copySvg}setup</button></div></div>`;
+    const pct=a.pct!=null?a.pct:0;
+    return`<div class="ccard">
+      <div class="ctop">${CLAUDE_LOGO}
+        <div><div class="cname">${esc(a.name||"account")}</div><div class="csub" title="${esc(a.email||"")}">${esc(a.email||"Claude · 5h window")}</div></div>
+        <span class="clive" title="live server-side utilization of the 5h window">${pct}%</span></div>
+      <div class="cbig">${pct}<em>% of 5h used</em></div>
+      <div class="cfoot">
+        <span class="cchip">${a.reset_at?`<svg viewBox="0 0 24 24">${PI.timer}</svg>resets in <b data-reset="${a.reset_at}">${resetText(a.reset_at)}</b>`:"window clear"}</span>
+        ${a.pct7d!=null?`<span class="cchip" title="rolling 7-day window"><b>${a.pct7d}%</b> · 7d</span>`:""}
+        <button class="cchip setup" data-setup="${esc(a.dir||"")}" data-name="${esc(a.name||"")}" title="copy the command to launch this account in a terminal">${copySvg}setup</button>
+      </div>
+      <div class="ctrk" title="${pct}% of the 5h window used"><i style="width:${pct}%"></i></div></div>`;
+  }).join(""):`<div class="ccard dim"><div class="ctop">${CLAUDE_LOGO}<div><div class="cname">Claude</div>
+      <div class="csub">${esc((S.pulse.claude||{}).error||"no accounts configured")}</div></div></div>
+      <div class="cline">add claude_accounts to state/pulse.json</div></div>`;
+  const track=$("claudecards"),html=claudeHtml+serviceCards();
+  // only rebuild when the content actually changed — otherwise the 2.5s poll
+  // resets carousel scroll position and detaches mid-click (buttons, arrows).
+  if(html!==track.dataset.sig){track.dataset.sig=html;track.innerHTML=html;}
+  // ALWAYS re-check arrow visibility (not just on content change): the first
+  // render can happen while this tab is hidden (0-width cards → no overflow),
+  // and the arrows must reappear once the row actually has width.
+  $("cnav").style.display=track.scrollWidth>track.clientWidth+4?"flex":"none";
+  fillAccountSelects();
+
+  // live instances + latest changes
+  const liveRows=[
+    ...S.orchs.filter(o=>o.live).map(o=>`<div class="lrow"><div class="sq">∞</div>
+      <div class="bd"><div class="t">${esc(o.name)}</div><div class="s mono">loop · round ${o.round}/${o.rounds} · ${esc(o.status)}</div></div>
+      <span class="pill ${o.status==="waiting"?"warn":"live"}">${esc(o.status)}</span></div>`),
+    ...aliveInst.map((w,i)=>`<div class="lrow"><div class="sq alt">${esc((w.name||w.sid).slice(0,2).toUpperCase())}</div>
+      <div class="bd"><div class="t">${esc(w.name||w.mission.slice(0,40))}</div><div class="s mono">${w.mode==="ssh"?"ssh "+esc(w.host||""):w.mode}</div></div>
+      ${w.mode!=="background"?`<button class="btn line sm" data-focus="${esc(w.sid)}">Focus</button>`:""}</div>`)];
+  $("livelist").innerHTML=liveRows.join("")||`<div class="none">nothing running — Quick launch is one click.</div>`;
+  const changes=S.events.filter(e=>e.event==="tool"&&CHG.has(e.tool)).slice(-8).reverse();
+  $("recentchanges").innerHTML=changes.map(e=>
+    `<div class="lrow" style="padding:7px 2px"><span class="mono" style="font-size:11px;color:var(--ink3);width:52px;flex:none" title="${esc(e.ts||"")}">${esc(rel(e.ts))}</span>
+      <span class="pill idle mono" style="flex:none">${esc(e.tool)}</span>
+      <div class="bd"><div class="s mono" style="font-size:11.5px" title="${esc(e.detail||"")}">${esc(e.detail||"")}</div></div></div>`
+  ).join("")||`<div class="none">no changes on the wire yet</div>`;
+  renderTopStatus();renderPerf();renderVinyl();
 
   // latest solutions
   $("soltag").textContent=S.solved.length+" solved";
@@ -727,21 +1423,6 @@ function render(){
     `<div class="lrow"><div class="sq ${i%2?"alt":""}">${esc((r.tags&&r.tags[0]||"?").slice(0,2))}</div>
       <div class="bd"><div class="t">${esc(r.problem)}</div><div class="s mono">${esc(r.id)} · ${esc((r.ts||"").slice(0,10))}${r.stale?" · stale":""}</div></div></div>`
   ).join("")||`<div class="none">nothing solved yet</div>`;
-
-  // sessions list
-  $("sesslist").innerHTML=ss.slice(0,5).map(sessRow).join("")||`<div class="none">no sessions on the wire</div>`;
-
-  // gauge
-  const gp=sk.length?Math.round(earned/sk.length*100):0;
-  $("gauge").innerHTML=gauge([{v:earned,c:GREEN},{v:learning,c:MINT}],200,gp+"%","toward goal");
-  $("glegend").innerHTML=`<span><i style="background:${GREEN}"></i>Earned ${earned}</span>
-    <span><i style="background:${MINT}"></i>Learning ${learning}</span>
-    <span><i style="background:repeating-linear-gradient(45deg,#f2f4ee 0 3px,#dde2d7 3px 5px)"></i>Candidate ${cand}</span>`;
-
-  // wire card
-  const lastEv=S.events[S.events.length-1];
-  const age=lastEv&&lastEv.ts?Math.round((Date.now()-Date.parse(lastEv.ts))/1000):null;
-  $("wiresub").textContent=(S.paused?"polling paused":"polling live")+" · last action "+(age===null?"–":age<120?age+"s ago":Math.round(age/60)+"m ago");
 
   // instances page
   $("hint").textContent=$("hint").textContent||"";
@@ -780,23 +1461,7 @@ function render(){
   $("sshsaved").innerHTML=S.sshKeys.length?"Saved: "+S.sshKeys.map(k=>
     `<span class="mono">${esc(k)}</span> <a href="#" data-forget="${esc(k)}">forget</a>`).join(" · "):"";
 
-  // skill tree — conductor on top, branch columns below
-  const branches={};for(const[n,v]of sk)(branches[v.branch||"misc"]??=[]).push([n,v]);
-  $("branchrow").innerHTML=Object.entries(branches).map(([br,items])=>{
-    const earnedN=items.filter(([,v])=>v.status==="active").length;
-    return`<div class="bcol"><div class="bhead">${esc(br)}<small>${items.length} skill${items.length===1?"":"s"} · ${earnedN} earned</small></div>`+
-      items.map(([n,v])=>{
-        const pct=Math.min(100,(v.uses||0)/3*100);
-        return`<div class="snode ${v.status==="archived"?"dim":""}">
-          <div class="sn"><span>${esc(n)}</span><span class="pill ${v.status==="active"?"live":"idle"}">${esc(v.status)}</span></div>
-          <div class="tr">${esc(v.trigger||"")} · ${(v.goals&&v.goals.length)?"on goal":"off goal — decays"}</div>
-          <span class="captiny"><span class="trk"><i style="width:${pct}%"></i></span><span class="n">${Math.min(v.uses||0,3)}/3</span></span>
-        </div>`;
-      }).join("")+`</div>`;
-  }).join("")||`<div class="none">registry empty</div>`;
-  $("treelegend").innerHTML=`<span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${GREEN};margin-right:5px"></i>Earned (3+ uses)</span>
-    <span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${MINT};margin-right:5px"></i>Learning</span>
-    <span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:repeating-linear-gradient(45deg,#f2f4ee 0 3px,#dde2d7 3px 5px);margin-right:5px"></i>Candidate / archived</span>`;
+  renderSkills();
 
   // brain
   renderHermes();
@@ -887,7 +1552,18 @@ function renderOrchs(){
 }
 
 /* ---------- audit ---------- */
-const MUTED=new Set(["tool","session-stop","bootstrap"]);
+const MUTED=new Set(["session-stop","bootstrap","session-start","stage"]);
+let auditFilter="";
+const AFSETS={
+  changes:e=>e.event==="tool"&&CHG.has(e.tool),
+  loops:e=>e.event==="orchestrate"||e.event==="orch-action",
+  spawns:e=>["spawn","user-spawn","agent-exit","instance-close"].includes(e.event),
+  directives:e=>["directive","directive-done"].includes(e.event)};
+function evLabel(e){ // what actually happened, not the raw event name
+  if(e.event==="tool")return e.tool||"tool";
+  return{"user-spawn":"spawn","agent-exit":"agent done","directive-done":"directive ✓",
+    "session-start":"online","session-stop":"idle","orch-action":"verdict"}[e.event]||e.event||"?";
+}
 function renderAudit(){
   const selS=$("fl-sess"),selT=$("fl-type");
   const sessIds=[...new Set(S.events.map(e=>e.session||"?"))],types=[...new Set(S.events.map(e=>e.event||"?"))].sort();
@@ -896,14 +1572,28 @@ function renderAudit(){
     sel.dataset.n=String(vals.length);sel.value=cur}};
   keep(selS,sessIds,"all sessions");keep(selT,types,"all events");
   const ft=$("fl-text").value.toLowerCase();
-  const rows=S.events.filter(e=>(!selS.value||(e.session||"?")===selS.value)&&(!selT.value||(e.event||"?")===selT.value)&&(!ft||JSON.stringify(e).toLowerCase().includes(ft)));
-  $("audit").innerHTML=rows.slice(-500).reverse().map(e=>
-    `<tr><td class="tm">${esc((e.ts||"").slice(5,19).replace("T"," "))}</td><td class="ss">${esc(e.session||"?")}</td>
-     <td class="ty ${MUTED.has(e.event)?"mut":""}">${esc(e.event||"?")}</td>
-     <td class="dt" title="${esc(e.detail||"")}">${esc(e.detail||e.tool||(e.stage?"stage → "+e.stage:"")||e.agent||"")}</td></tr>`
-  ).join("")||`<tr><td class="none">no events match</td></tr>`;
+  const named=new Map(S.instances.map(w=>[w.sid,w.name]));
+  const rows=S.events.filter(e=>
+    (!auditFilter||AFSETS[auditFilter](e))&&
+    (!selS.value||(e.session||"?")===selS.value)&&
+    (!selT.value||(e.event||"?")===selT.value)&&
+    (!ft||JSON.stringify(e).toLowerCase().includes(ft)));
+  const tk=dayKey(new Date());
+  const chgToday=S.events.filter(e=>(e.ts||"").slice(0,10)===tk&&AFSETS.changes(e)).length;
+  $("auditsub").textContent=`${S.events.length} events · ${chgToday} changes today · showing ${Math.min(rows.length,500)}`;
+  $("audit").innerHTML=rows.slice(-500).reverse().map(e=>{
+    const chg=AFSETS.changes(e);
+    return`<tr><td class="tm" title="${esc(e.ts||"")}">${esc(rel(e.ts))}</td>
+     <td class="ss" title="${esc(e.session||"?")}">${esc(named.get(e.session)||e.session||"?")}</td>
+     <td class="ty ${!chg&&MUTED.has(e.event)?"mut":""}">${esc(evLabel(e))}</td>
+     <td class="dt" title="${esc(e.detail||"")}">${esc(e.detail||(e.stage?"stage → "+e.stage:"")||e.agent||"")}</td></tr>`;
+  }).join("")||`<tr><td class="none">no events match</td></tr>`;
 }
 ["fl-sess","fl-type","fl-text"].forEach(id=>$(id).addEventListener("input",renderAudit));
+$("auditchips").addEventListener("click",e=>{const b=e.target.closest(".mode");if(!b)return;
+  auditFilter=b.dataset.af;
+  $("auditchips").querySelectorAll(".mode").forEach(x=>x.classList.toggle("on",x===b));
+  renderAudit()});
 
 /* ---------- launcher ---------- */
 const MODES=[["tab","New window","opens a real Claude Code terminal on this repo — focus & close it from here"],
@@ -928,7 +1618,7 @@ function saveDefaults(){try{localStorage.setItem(DEFAULTS_KEY,JSON.stringify({
 (function restoreDefaults(){try{const d=JSON.parse(localStorage.getItem(DEFAULTS_KEY)||"{}");
   if(d.model)$("opt-model").value=d.model;if(d.budget)$("opt-budget").value=d.budget;
   if("skip" in d)$("opt-skip").checked=d.skip;if(d.rounds)$("opt-rounds").value=d.rounds;
-  if(d.critic)$("opt-critic").value=d.critic;if("auto" in d)$("opt-auto").checked=d.auto}catch(e){}})();
+  if(d.critic&&d.critic!=="haiku")$("opt-critic").value=d.critic;if("auto" in d)$("opt-auto").checked=d.auto}catch(e){}})();
 const DEFAULT_MISSION="Run the boot sequence (python bootstrap.py boot), then read the tail of state/inbox.jsonl and work every directive without a matching directive-done event. If the inbox is clear, run python bootstrap.py and fix any FAIL.";
 function toast(msg,err){const n=document.createElement("div");n.className="note"+(err?" err":"");
   n.textContent=msg;$("toast").appendChild(n);setTimeout(()=>n.remove(),5000)}
@@ -942,9 +1632,10 @@ async function launch(text,mode){
   if(mode==="managed"){
     const j=await post("/api/orchestrate",{mission:text,name:iname,model,turns:budget,
       rounds:+$("opt-rounds").value,critic:$("opt-critic").value,auto:$("opt-auto").checked,
-      skip,dir:$("orch-dir").value.trim()});
+      skip,dir:$("orch-dir").value.trim(),account:($("opt-orch-account")||{}).value||"auto"});
     return`Loop "${iname||j.id}" running — the core takes it from here.`}
-  const body={mission:text,mode:mode==="ssh"?"tab":mode,model,budget,name:iname,skip};
+  const body={mission:text,mode:mode==="ssh"?"tab":mode,model,budget,name:iname,skip,
+    account:($("opt-account")||{}).value||""};
   if(mode==="ssh"){body.ssh={host:$("ssh-host").value.trim(),user:$("ssh-user").value.trim(),
     port:$("ssh-port").value.trim(),dir:$("ssh-dir").value.trim(),
     password:$("ssh-pass").value,save:$("ssh-save").checked};
@@ -994,20 +1685,27 @@ document.addEventListener("click",async e=>{
   if(cp){const t=cp.parentElement.querySelector(".mi");
     try{await navigator.clipboard.writeText((t?t.textContent:"").replace(/^▸ r\d+ worker[^:]*: /,""));toast("Copied.")}
     catch(err){toast("Copy failed: "+err.message,true)}return}
+  const su=e.target.closest("[data-setup]");
+  if(su){const cmd=`$env:CLAUDE_CONFIG_DIR="${su.dataset.setup}"; claude`;
+    try{await navigator.clipboard.writeText(cmd);
+      toast(`Copied — paste into PowerShell to log in / launch ${su.dataset.name||"this account"}.`)}
+    catch(err){toast("Copy this into PowerShell: "+cmd,true)}return}
   const mx=e.target.closest(".mi.x");
   if(mx&&mx.dataset.k){mx.classList.toggle("open");
     mx.classList.contains("open")?OPEN.add(mx.dataset.k):OPEN.delete(mx.dataset.k)}
 });
 $("pausebtn").addEventListener("click",()=>{S.paused=!S.paused;
+  $("pausebtn").classList.toggle("paused",S.paused);
   toast(S.paused?"Polling paused.":"Polling resumed.");render()});
-$("refreshbtn").addEventListener("click",()=>{S.paused=false;poll();toast("Refreshed.")});
+$("refreshbtn").addEventListener("click",()=>{S.paused=false;
+  $("pausebtn").classList.remove("paused");poll();toast("Refreshed.")});
 
 /* ---------- force-directed brain graph (real Obsidian vault) ---------- */
 const Graph=(function(){
   const svg=$("graph"),NS="http://www.w3.org/2000/svg";
   const W=820,H=470;
   // deterministic per-folder color so clusters read as folders (max palette reused, Obsidian-like)
-  const FOLDCOL=["#135c38","#1e7c4c","#3f7c9a","#9a6a3f","#7d5c9a","#b6bfb6","#5d675f","#c48a3f"];
+  const FOLDCOL=["#5c1346","#7c1e60","#3f7c9a","#9a6a3f","#7d5c9a","#bfb6bc","#675d64","#c48a3f"];
   let nodes=[],links=[],adj=[],sig="",raf=0,hover=false,selected=null,drag=null,src="vault",folders={};
   function colorFor(folder){
     if(!(folder in folders)){const keys=Object.keys(folders);folders[folder]=FOLDCOL[keys.length%FOLDCOL.length]}
@@ -1037,13 +1735,13 @@ const Graph=(function(){
       seedNewest("note");
     }else{
       // hermes fallback
-      const core={type:"root",label:"hermes",r:12,c:"#3c463f",x:W/2,y:H/2,vx:0,vy:0};nodes.push(core);
+      const core={type:"root",label:"hermes",r:12,c:"#463c43",x:W/2,y:H/2,vx:0,vy:0};nodes.push(core);
       const tags=[...new Set(S.solved.flatMap(r=>r.tags||[]))],tagIx={};
       tags.forEach((t,i)=>{const a=i/Math.max(1,tags.length)*2*Math.PI;
-        nodes.push({type:"tag",label:t,r:6,c:"#5d675f",data:t,x:W/2+130*Math.cos(a)+rnd(30),y:H/2+110*Math.sin(a)+rnd(30),vx:0,vy:0});
+        nodes.push({type:"tag",label:t,r:6,c:"#675d64",data:t,x:W/2+130*Math.cos(a)+rnd(30),y:H/2+110*Math.sin(a)+rnd(30),vx:0,vy:0});
         tagIx[t]=nodes.length-1;links.push([0,tagIx[t],1])});
       S.solved.forEach(rw=>{const prim=(rw.tags||[])[0],anc=prim!=null?nodes[tagIx[prim]]:core;
-        nodes.push({type:"card",label:rw.problem,r:4,c:"#b6bfb6",data:rw,x:anc.x+rnd(80),y:anc.y+rnd(80),vx:0,vy:0});
+        nodes.push({type:"card",label:rw.problem,r:4,c:"#bfb6bc",data:rw,x:anc.x+rnd(80),y:anc.y+rnd(80),vx:0,vy:0});
         const ci=nodes.length-1;(rw.tags||[]).forEach(t=>{if(tagIx[t]!=null)links.push([tagIx[t],ci,1])});
         if(!(rw.tags||[]).length)links.push([0,ci,1])});
       seedNewest("card");
@@ -1063,7 +1761,7 @@ const Graph=(function(){
     svg.innerHTML="";
     const gl=document.createElementNS(NS,"g");svg.appendChild(gl);
     links.forEach(lk=>{const l=document.createElementNS(NS,"line");
-      l.setAttribute("stroke",lk[2]?"#d4d8cf":"#b9c6bd");l.setAttribute("stroke-width",lk[2]?"1":"1.3");gl.appendChild(l);lk._el=l});
+      l.setAttribute("stroke",lk[2]?"#d8cfd5":"#c6b9c2");l.setAttribute("stroke-width",lk[2]?"1":"1.3");gl.appendChild(l);lk._el=l});
     const gn=document.createElementNS(NS,"g");svg.appendChild(gn);
     nodes.forEach((nd,i)=>{
       const g=document.createElementNS(NS,"g");g.setAttribute("class","gnode");g.dataset.i=i;
@@ -1074,7 +1772,7 @@ const Graph=(function(){
       if(nd.type==="folder"||nd.type==="root"||nd.type==="tag"){const t=document.createElementNS(NS,"text");
         t.setAttribute("text-anchor","middle");t.setAttribute("dy",-nd.r-5);
         t.setAttribute("font-size",nd.type==="folder"?"11":"10.5");t.setAttribute("font-weight",nd.type==="folder"?"600":"400");
-        t.setAttribute("fill","#5c6a60");t.textContent=nd.label;g.appendChild(t)}
+        t.setAttribute("fill","#6a5c66");t.textContent=nd.label;g.appendChild(t)}
       nd._el=g;nd._c=c;gn.appendChild(g);
     });
     position();
@@ -1111,12 +1809,12 @@ const Graph=(function(){
   // keeps breathing while you aim (Daniel: "animate more, just slow it down")
   function loop(){if(!reduced){physics(drag?1:hover?0.22:1)}position();raf=requestAnimationFrame(loop)}
   function highlight(nd){nodes.forEach(n=>{if(n._c){const on=n===nd;n._c.setAttribute("stroke",on?GREEN:"none");n._c.setAttribute("stroke-width",on?"2.5":"0")}})}
-  const LKCOL=lk=>lk[2]?"#d4d8cf":"#b9c6bd";
+  const LKCOL=lk=>lk[2]?"#d8cfd5":"#c6b9c2";
   function hi(i){if(!adj[i])return;
     nodes.forEach((n,k)=>{if(n._el)n._el.setAttribute("opacity",k===i||adj[i].has(k)?"1":"0.16")});
     links.forEach(lk=>{const on=lk[0]===i||lk[1]===i;if(!lk._el)return;
       lk._el.setAttribute("opacity",on?"1":"0.08");
-      lk._el.setAttribute("stroke",on?"#7fa88f":LKCOL(lk));
+      lk._el.setAttribute("stroke",on?"#a87f9c":LKCOL(lk));
       lk._el.setAttribute("stroke-width",on?"1.6":(lk[2]?"1":"1.3"))});
     if(nodes[i]&&nodes[i]._c){nodes[i]._c.setAttribute("stroke",GREEN);nodes[i]._c.setAttribute("stroke-width","2.5")}}
   function unhi(){
@@ -1174,11 +1872,83 @@ const TITLES={overview:1,instances:1,skills:1,brain:1,graph:1,integrations:1,aud
 function route(){const h=location.hash.slice(2)||"overview";const s=TITLES[h]?h:"overview";
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("show",p.id==="p-"+s));
   document.querySelectorAll("#nav a,#nav2 a").forEach(a=>a.classList.toggle("on",a.dataset.s===s));
-  $("side").classList.remove("open")}
+  $("side").classList.remove("open");
+  if(s==="skills")requestAnimationFrame(growTree)}
 window.addEventListener("hashchange",route);
-$("burger").addEventListener("click",()=>$("side").classList.toggle("open"));
-setInterval(()=>{const t=new Date().toLocaleTimeString("en-GB");
-  $("clock").textContent=t;$("wireclock").textContent=t},1000);
+const shell=document.querySelector(".shell");
+const mobileNav=()=>matchMedia("(max-width:880px)").matches;
+let navPinned=false;   // true = user explicitly opened it; don't auto-collapse
+$("burger").addEventListener("click",()=>{
+  if(mobileNav()){$("side").classList.toggle("open");return;}
+  navPinned=shell.classList.contains("navhidden");   // was hidden -> we're opening -> pin
+  shell.classList.toggle("navhidden");});
+// hover the left edge to reveal; leaving the sidebar collapses it (unless pinned)
+const hz=document.createElement("div");hz.id="navhover";document.body.appendChild(hz);
+hz.addEventListener("pointerenter",()=>{if(!mobileNav())shell.classList.remove("navhidden")});
+$("side").addEventListener("pointerleave",()=>{if(!mobileNav()&&!navPinned)shell.classList.add("navhidden")});
+// pick a destination → the navbar closes and the content expands
+document.querySelectorAll("#nav a,#nav2 a").forEach(a=>a.addEventListener("click",()=>{
+  if(!mobileNav()){navPinned=false;shell.classList.add("navhidden")}}));
+// boot: reveal the navbar once on load
+if(!mobileNav()){shell.classList.add("navhidden");setTimeout(()=>shell.classList.remove("navhidden"),650)}
+// toast on return from the Spotify OAuth redirect
+{const sp=new URLSearchParams(location.search).get("spotify");
+ if(sp){toast(sp==="connected"?"Spotify connected ✓":"Spotify connect failed — add http://127.0.0.1:8817/api/spotify/callback to your app's redirect URIs",sp!=="connected");
+   history.replaceState(null,"","/dashboard/"+location.hash);}}
+// eased rAF tween — scroll-snap fights scrollTo(smooth), so animate scrollLeft
+// by hand with snap disabled, then restore snap so drag-snapping still works.
+function glide(t,target,dur){const start=t.scrollLeft,d=target-start,t0=performance.now();
+  if(Math.abs(d)<1)return;
+  t.style.scrollSnapType="none";
+  (function step(now){const p=Math.min(1,(now-t0)/dur),e=1-Math.pow(1-p,3);  // easeOutCubic
+    t.scrollLeft=start+d*e;
+    if(p<1)requestAnimationFrame(step);else t.style.scrollSnapType="";})(t0);}
+// arrows cycle through the pulse cards one at a time, wrapping at the ends
+document.querySelectorAll("[data-cscroll]").forEach(b=>b.addEventListener("click",()=>{
+  const t=$("claudecards"),card=t.querySelector(".ccard"),dir=+b.dataset.cscroll,
+    step=card?card.offsetWidth+14:314,max=t.scrollWidth-t.clientWidth;
+  let x=t.scrollLeft+dir*step;
+  if(dir>0&&t.scrollLeft>=max-4)x=0;else if(dir<0&&t.scrollLeft<=4)x=max;
+  glide(t,Math.max(0,Math.min(max,x)),420)}));
+// admin: add a skill
+$("sk-add").addEventListener("click",async()=>{
+  const name=$("sk-name").value.trim();
+  if(!name)return toast("Give the skill a name first.",true);
+  const btn=$("sk-add");btn.disabled=true;
+  try{await post("/api/skill",{name,branch:$("sk-branch").value,trigger:$("sk-trig").value.trim()});
+    $("sk-name").value="";$("sk-trig").value="";skSig="";   // force tree re-render
+    toast(`Skill "${name}" added.`);poll();
+  }catch(e){toast("Add failed: "+e.message,true)}btn.disabled=false});
+// command bar
+$("cmdspark").innerHTML=SPARK;
+$("cmdgo").addEventListener("click",cmdSend);
+$("cmdinput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();cmdSend()}});
+$("cmddrop").addEventListener("click",()=>{
+  $("cmdpop").classList.toggle("open");
+  $("cmdbarbox").classList.toggle("optsopen",$("cmdpop").classList.contains("open"));});
+document.addEventListener("click",e=>{           // click-away closes the options
+  if(!e.target.closest("#cmdbarbox")){$("cmdpop").classList.remove("open");$("cmdbarbox").classList.remove("optsopen");}});
+$("cmdpop").addEventListener("change",()=>$("cmddrop").classList.toggle("tuned",cmdTuned()));
+cmdType();
+// chat assistant
+$("chatspark").innerHTML=SPARK;
+$("chatfab").addEventListener("click",()=>chatToggle());
+$("chatclose").addEventListener("click",()=>chatToggle(false));
+$("chatsendbtn").addEventListener("click",chatSend);
+$("chatinput").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();chatSend()}});
+$("chatinput").addEventListener("input",e=>{e.target.style.height="auto";e.target.style.height=Math.min(92,e.target.scrollHeight)+"px"});
+// performance graph hover tooltip
+$("perfsvg").addEventListener("pointerover",e=>{const c=e.target.closest(".lgdot");if(!c)return;
+  const tip=$("perftip"),wrap=$("perfsvg").parentElement.getBoundingClientRect(),r=c.getBoundingClientRect();
+  tip.textContent=`${c.dataset.v} events · ${String(c.dataset.h).padStart(2,"0")}:00`;
+  tip.style.left=(r.left-wrap.left+r.width/2)+"px";tip.style.top=(r.top-wrap.top)+"px";tip.classList.add("show")});
+$("perfsvg").addEventListener("pointerout",()=>$("perftip").classList.remove("show"));
+setInterval(()=>{$("clock").textContent=new Date().toLocaleTimeString("en-GB");
+  vTick();                                          // vinyl progress advances locally
+  document.querySelectorAll("[data-reset]").forEach(el=>{
+    const txt=resetText(+el.dataset.reset);
+    if(el.textContent===txt)return;                 // no change -> no reflow, no flash
+    el.textContent=txt;el.classList.remove("roll");void el.offsetWidth;el.classList.add("roll");});},1000);
 route();poll();setInterval(poll,2500);
 </script>
 </body>

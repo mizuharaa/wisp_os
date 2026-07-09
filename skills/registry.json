@@ -1,6 +1,6 @@
 {
   "goal": "stand up Maestro v1",
-  "updated": "2026-07-08T11:21:19",
+  "updated": "2026-07-08T15:45:39",
   "skills": {
     "workflow-audit": {
       "status": "learning",
@@ -103,6 +103,17 @@
       "decay": 0,
       "created": "2026-07-08T11:21:05",
       "last_used": "2026-07-08T11:21:05"
+    },
+    "design-intelligence": {
+      "status": "candidate",
+      "uses": 0,
+      "desc": "",
+      "branch": "design",
+      "trigger": "/design-iq",
+      "goals": [],
+      "decay": 0,
+      "created": "2026-07-08T15:45:39",
+      "last_used": null
     }
   }
 }

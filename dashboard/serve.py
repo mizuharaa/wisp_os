@@ -41,12 +41,26 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pipeline import vault_path  # single source of truth for the vault location
 import askpass                   # DPAPI ssh credential store
 import orchestrator              # the conductor feedback loop
+import pulse                     # outside world: claude usage, github, gmail, spotify
+import chat                      # dashboard assistant (Haiku/Sonnet over the Anthropic API)
+import mission                   # command bar: goal -> refined mission -> orchestrator
 MIRROR = os.path.join(ROOT, ".claude", "hooks", "mirror.py")
 INBOX = os.path.join(ROOT, "state", "inbox.jsonl")
 WINDOWS = os.path.join(ROOT, "state", "windows.json")
 LOGS = os.path.join(ROOT, "state", "spawn-logs")
 CREATE_NEW_CONSOLE = 0x00000010
 IS_WIN = sys.platform == "win32"
+
+
+def short_path(p):
+    """Windows 8.3 short path (no spaces). Win32-OpenSSH runs SSH_ASKPASS without
+    quoting, so a space in the path (…\\Python Env\\…) breaks it — the short form
+    avoids that. Falls back to the original if 8.3 names are unavailable."""
+    if not IS_WIN:
+        return p
+    buf = ctypes.create_unicode_buffer(600)
+    n = ctypes.windll.kernel32.GetShortPathNameW(p, buf, 600)
+    return buf.value if n and " " not in buf.value else p
 
 
 def emit(**kv):
@@ -230,11 +244,34 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _redirect(self, location):
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.end_headers()
+
     def do_GET(self):
+        if self.path == "/api/spotify/login":
+            # FIXED redirect URI (not Host-derived): Spotify requires the exact
+            # string to be pre-registered, and loopback must be 127.0.0.1 (not
+            # localhost). Register pulse.spotify_redirect() in your Spotify app.
+            url = pulse.spotify_authorize_url(pulse.spotify_redirect())
+            return self._redirect(url or "/dashboard/?spotify=noclient")
+        if self.path.startswith("/api/spotify/callback"):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            code = (q.get("code") or [""])[0]
+            err = pulse.spotify_exchange(code, pulse.spotify_redirect()) if code \
+                else (q.get("error") or ["no code"])[0]
+            return self._redirect("/dashboard/?spotify=" + ("connected" if not err else "error"))
         if self.path == "/api/instances":
             doc = load_windows()
             for w in doc["windows"]:
                 w["alive"] = pid_alive(w.get("pid"))
+            # auto-prune dead windows (finished background runs, closed terminals)
+            # so the list self-cleans — no manual removal needed.
+            alive = [w for w in doc["windows"] if w["alive"]]
+            if len(alive) != len(doc["windows"]):
+                doc["windows"] = alive
+                save_windows(doc)
             return self._json(200, doc)
         if self.path == "/api/integrations":
             return self._json(200, integrations())
@@ -250,6 +287,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"orchestrations": orchestrator.list_all()})
         if self.path == "/api/ssh-creds":
             return self._json(200, {"keys": askpass.keys()})  # names only, never secrets
+        if self.path == "/api/pulse":
+            return self._json(200, pulse.get())
         return super().do_GET()
 
     def do_POST(self):
@@ -264,10 +303,84 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/orchestrate": self.api_orchestrate,
             "/api/orch-action": self.api_orch_action,
             "/api/ssh-forget": self.api_ssh_forget,
+            "/api/chat": self.api_chat,
+            "/api/skill": self.api_skill,
+            "/api/mission": self.api_mission,
+            "/api/spotify/ctl": self.api_spotify_ctl,
         }.get(self.path)
         if not route:
             return self._json(404, {"error": "unknown endpoint"})
         return route(data)
+
+    def api_skill(self, data):
+        name = re.sub(r"[^a-z0-9\-]", "", str(data.get("name") or "").lower().strip())
+        if not name:
+            return self._json(400, {"error": "skill name required (a-z, 0-9, -)"})
+        branch = re.sub(r"[^a-z0-9\-]", "", str(data.get("branch") or "misc").lower()) or "misc"
+        trig = re.sub(r"[^a-z0-9\-]", "", str(data.get("trigger") or name).lower().lstrip("/"))
+        eng = os.path.join(ROOT, "skills", "engine.py")
+        r = subprocess.run([sys.executable, eng, "add", name, "--branch", branch,
+                            "--trigger", "/" + trig], capture_output=True, text=True, cwd=ROOT)
+        if r.returncode != 0:
+            return self._json(500, {"error": ((r.stderr or r.stdout) or "engine error")[:200]})
+        emit(session="operator", event="skill", detail="added skill '%s' (%s, /%s)" % (name, branch, trig))
+        return self._json(200, {"ok": True, "name": name, "branch": branch})
+
+    def api_spotify_ctl(self, data):
+        out = pulse.spotify_ctl(str(data.get("action") or ""), data.get("pos_ms"))
+        return self._json(200 if out.get("ok") else 502, out)
+
+    def api_mission(self, data):
+        text = (data.get("text") or "").strip()
+        if not text:
+            return self._json(400, {"error": "empty goal"})
+        hist = data.get("history") if isinstance(data.get("history"), list) else []
+        out = mission.intake(text, hist)
+        if out.get("error"):
+            return self._json(502, out)
+        if out.get("action") == "launch":
+            brief = (out.get("mission") or text).strip()
+            wd = (out.get("dir") or "").strip()
+            if wd and not os.path.isdir(wd):
+                wd = ""  # never launch into a hallucinated path
+            # dropdown overrides: "auto"/missing = let the intake's choice stand
+            opts = data.get("opts") if isinstance(data.get("opts"), dict) else {}
+            try:
+                turns = max(10, min(80, int(out.get("turns") or 40)))
+                # >=2 rounds: the opus critic often demands proof on round 1 —
+                # one revise pass keeps correct work from ending "exhausted"
+                rounds = max(2, min(5, int(out.get("rounds") or 3)))
+            except (TypeError, ValueError):
+                turns, rounds = 40, 3
+            try:
+                if str(opts.get("turns") or "auto") != "auto":
+                    turns = max(5, min(100, int(opts["turns"])))
+                if str(opts.get("rounds") or "auto") != "auto":
+                    rounds = max(1, min(5, int(opts["rounds"])))  # explicit 1 respected
+            except (TypeError, ValueError):
+                pass
+            model = opts.get("model") if opts.get("model") in ("haiku", "sonnet", "opus", "default") \
+                else str(out.get("model") or "default")
+            critic = "sonnet" if opts.get("critic") == "sonnet" else "opus"
+            account = str(opts.get("account") or "auto")
+            auto = not bool(opts.get("gate"))  # gate=True -> verdicts wait on Daniel
+            oid, err = orchestrator.start(
+                brief, name=(out.get("name") or text[:40]).strip()[:40],
+                model=model, critic=critic,
+                turns=turns, rounds=rounds, auto=auto, skip=True,
+                workdir=wd, account=account)
+            if err:
+                return self._json(400, {"error": err})
+            out["oid"] = oid
+            emit(session="operator", event="mission",
+                 detail=("[%s] command bar: %s" % (oid, out.get("name") or brief))[:200])
+        return self._json(200, out)
+
+    def api_chat(self, data):
+        out = chat.ask(str(data.get("message") or ""),
+                       history=data.get("history") if isinstance(data.get("history"), list) else [],
+                       model=(str(data.get("model")) if data.get("model") else None))
+        return self._json(200 if "reply" in out else 502, out)
 
     def api_message(self, data):
         text = (data.get("text") or "").strip()
@@ -307,6 +420,13 @@ class Handler(SimpleHTTPRequestHandler):
         # MAESTRO_SID rides the env into claude, so the instance's hook events
         # land on the wire under the SAME id the dashboard tracks it by.
         env = dict(os.environ, MAESTRO_SID=sid)
+        # launch under a specific Claude account: CLAUDE_CONFIG_DIR points claude
+        # at that account's config/transcripts (local terminals only; a remote
+        # host has its own). Blank/unknown/"main-with-no-dir" = default account.
+        account = (data.get("account") or "").strip()
+        acct_dir = pulse.dir_for(account) if account else ""
+        if acct_dir and not ssh:
+            env["CLAUDE_CONFIG_DIR"] = acct_dir
         if ssh:
             # Remote terminal. Password: typed in the window by default; with a
             # saved/typed one, ssh fetches it from the DPAPI store via askpass.
@@ -326,7 +446,7 @@ class Handler(SimpleHTTPRequestHandler):
             if pw and ssh.get("save", True):
                 askpass.store(key, pw)
             if pw or askpass.fetch(key) is not None:
-                env.update(SSH_ASKPASS=os.path.join(ROOT, "dashboard", "askpass.cmd"),
+                env.update(SSH_ASKPASS=short_path(os.path.join(ROOT, "dashboard", "askpass.cmd")),
                            SSH_ASKPASS_REQUIRE="force", MAESTRO_SSH_KEY=key)
                 if pw and not ssh.get("save", True):
                     env["MAESTRO_SSH_PW"] = pw  # use once, never written to disk
@@ -369,13 +489,15 @@ class Handler(SimpleHTTPRequestHandler):
             "sid": sid, "name": name, "title": title, "mission": mission[:200], "mode": mode,
             "host": host_label, "skip": skip,
             "model": model or "default", "budget": budget if mode == "background" else None,
-            "pid": p.pid, "started": datetime.datetime.now().isoformat(timespec="seconds")})
+            "pid": p.pid, "account": account or "main",
+            "started": datetime.datetime.now().isoformat(timespec="seconds")})
         save_windows(doc)
         emit(session="operator", event="user-spawn", agent=mode,
-             detail=("[%s] %s%s model=%s skip=%s · %s"
+             detail=("[%s] %s%s model=%s acct=%s skip=%s · %s"
                      % (sid, name, (" @" + host_label) if host_label else "",
-                        model or "default", skip, mission))[:200])
-        return self._json(200, {"ok": True, "id": sid, "mode": mode, "model": model or "default"})
+                        model or "default", account or "main", skip, mission))[:200])
+        return self._json(200, {"ok": True, "id": sid, "mode": mode,
+                                "model": model or "default", "account": account or "main"})
 
     def api_orchestrate(self, data):
         mission = (data.get("mission") or "").strip()
@@ -389,9 +511,10 @@ class Handler(SimpleHTTPRequestHandler):
         oid, err = orchestrator.start(
             mission, name=(data.get("name") or "").strip(),
             model=str(data.get("model") or "default"),
-            critic=str(data.get("critic") or "haiku"),
+            critic=str(data.get("critic") or "opus"),
             turns=turns, rounds=rounds, auto=bool(data.get("auto", True)),
-            skip=bool(data.get("skip", True)), workdir=str(data.get("dir") or ""))
+            skip=bool(data.get("skip", True)), workdir=str(data.get("dir") or ""),
+            account=str(data.get("account") or ""))
         if err:
             return self._json(400, {"error": err})
         return self._json(200, {"ok": True, "id": oid})
