@@ -1,6 +1,6 @@
 {
   "goal": "stand up Maestro v1",
-  "updated": "2026-07-08T15:45:39",
+  "updated": "2026-07-09T16:22:00",
   "skills": {
     "workflow-audit": {
       "status": "learning",
@@ -67,7 +67,7 @@
     },
     "web-design": {
       "status": "active",
-      "uses": 3,
+      "uses": 4,
       "desc": "Design and iterate web UI with the playwright MCP: screenshot, critique against the slop checklist, fix, repeat",
       "branch": "design",
       "trigger": "/webdesign",
@@ -76,11 +76,11 @@
       ],
       "decay": 0,
       "created": "2026-07-08T00:21:24",
-      "last_used": "2026-07-08T01:08:30"
+      "last_used": "2026-07-09T16:22:00"
     },
     "3d-interaction": {
       "status": "learning",
-      "uses": 1,
+      "uses": 2,
       "desc": "3D reactive UI without dependencies: CSS perspective transforms, pointer-tracking tilt, depth shadows, reduced-motion fallbacks",
       "branch": "design",
       "trigger": "/3d",
@@ -89,7 +89,7 @@
       ],
       "decay": 0,
       "created": "2026-07-08T00:21:24",
-      "last_used": "2026-07-08T01:08:30"
+      "last_used": "2026-07-09T16:21:59"
     },
     "orchestration": {
       "status": "learning",

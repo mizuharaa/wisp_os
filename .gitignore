@@ -9,3 +9,5 @@ state/pulse.json
 state/claude-seen.json
 state/learn-seen.json
 state/serve.log
+state/serve-*.log
+state/serve-*.err

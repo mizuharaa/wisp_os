@@ -200,7 +200,9 @@ def integrations():
         mj = json.load(open(os.path.join(ROOT, ".mcp.json"), encoding="utf-8"))
         for name, cfg in mj.get("mcpServers", {}).items():
             cmd = (cfg.get("command", "") + " " + " ".join(cfg.get("args", []))).strip()
-            out["mcp"].append({"name": name, "command": cmd})
+            if not cmd and cfg.get("url"):
+                cmd = (cfg.get("type") or "http") + " " + cfg.get("url", "")
+            out["mcp"].append({"name": name, "command": cmd, "type": cfg.get("type") or "stdio"})
     except (OSError, json.JSONDecodeError):
         pass
     try:

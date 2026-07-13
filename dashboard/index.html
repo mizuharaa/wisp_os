@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23135c38'/%3E%3Ctext x='8' y='12' text-anchor='middle' font-family='Segoe UI,sans-serif' font-size='11' font-weight='800' fill='%23fff'%3EM%3C/text%3E%3C/svg%3E">
 <style>
   :root{
-    --canvas:#f0eaee; --card:#ffffff; --line:#e8dfe5; --line2:#dbcfd7;
+    --canvas:#f5f0ed; --card:#ffffff; --paper:#fffdf9; --line:#e8dfe5; --line2:#dbcfd7;
     --ink:#21151d; --ink2:#6a5c66; --ink3:#a2989f;
     --green:#5c1346; --green-deep:#2f0d25; --green-dark:#280e20;
     --mint:#dca9cd; --mint-soft:#efddea; --green-mid:#7c1e60;
@@ -16,27 +16,31 @@
     --mono:"Cascadia Mono",Consolas,monospace;
     --shadow:0 1px 2px rgba(33,21,29,.04), 0 6px 18px -8px rgba(33,21,29,.10);
     --lift:0 2px 4px rgba(33,21,29,.06), 0 16px 34px -12px rgba(33,21,29,.18);
-    --r:18px;
+    --r:18px; --route-x:24px;
   }
   *{box-sizing:border-box; margin:0; padding:0}
   html{scroll-behavior:smooth}
   body{background:var(--canvas); color:var(--ink); min-height:100vh;
+    background-image:
+      linear-gradient(rgba(92,19,70,.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(92,19,70,.018) 1px,transparent 1px);
+    background-size:28px 28px,28px 28px;
     font:14px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
   button{font:inherit; cursor:pointer; border:none; background:none; color:inherit}
   input,textarea,select{font:inherit; color:var(--ink)}
   .mono{font-family:var(--mono)}
   a{color:var(--green); text-decoration:none}
   /* ============ shell ============ */
-  .shell{display:grid; grid-template-columns:224px minmax(0,1fr); min-height:100vh;
-    transition:grid-template-columns .34s cubic-bezier(.4,0,.2,1)}
+  .shell{display:grid; grid-template-columns:248px minmax(0,1fr); min-height:100vh;
+    transition:grid-template-columns .44s cubic-bezier(.2,.8,.2,1)}
   .shell.navhidden{grid-template-columns:0 minmax(0,1fr)}
   .shell.navhidden aside{opacity:0; pointer-events:none; border-right-color:transparent}
   aside{z-index:16}
   #navhover{position:fixed; left:0; top:0; width:16px; height:100vh; z-index:15}
-  aside{background:var(--card); border-right:1px solid var(--line);
+  aside{background:rgba(255,255,255,.9); border-right:1px solid var(--line);
     padding:22px 14px 16px; display:flex; flex-direction:column; gap:2px;
     position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden; white-space:nowrap; min-width:0;
-    transition:opacity .28s ease}
+    backdrop-filter:blur(18px); transition:opacity .28s ease, transform .34s cubic-bezier(.2,.8,.2,1)}
   .logo{display:block; padding:2px 10px 20px}
   .wordmark{
     font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
@@ -59,7 +63,7 @@
   nav a .bub{margin-left:auto; font-size:10.5px; font-family:var(--mono); background:var(--canvas);
     border-radius:99px; padding:1px 7px; min-width:22px; text-align:center; color:var(--ink2)}
   nav a.on .bub{background:#fff}
-  .sidebottom{margin-top:auto; display:flex; flex-direction:column; gap:10px}
+  .sidebottom{margin-top:8px; display:flex; flex-direction:column; gap:10px; flex:none}
   /* ---- vinyl mini-player: lofi backdrop, album-cover record, controls ---- */
   .vinyl{background:linear-gradient(rgba(16,10,26,.45),rgba(13,8,22,.86)),url("lofi.jpg") center/cover;
     border:1px solid #362554; border-radius:16px; padding:13px 14px 13px; color:#f2ebfa;
@@ -152,6 +156,10 @@
   section.page{display:none; animation:fade .25s ease}
   section.page.show{display:block}
   @keyframes fade{from{opacity:0; transform:translateY(5px)} to{opacity:1; transform:none}}
+  @media (prefers-reduced-motion: no-preference){
+    section.page.show{animation:pagepan .42s cubic-bezier(.2,.8,.2,1)}
+    @keyframes pagepan{from{opacity:0; transform:translateX(var(--route-x)) scale(.992)} to{opacity:1; transform:none}}
+  }
   .grid{display:grid; gap:14px}
   .grid>*{min-width:0}
   .cols-4{grid-template-columns:repeat(4,1fr)}
@@ -199,34 +207,40 @@
   .ctrack{display:flex; gap:14px; overflow-x:auto; scroll-snap-type:x proximity; scrollbar-width:none; padding-bottom:2px}
   .ctrack::-webkit-scrollbar{display:none}
   .ccard{scroll-snap-align:start; flex:0 0 300px; min-width:300px; border-radius:var(--r);
-    padding:18px 20px 16px; color:#fff; position:relative; overflow:hidden; box-shadow:var(--lift);
-    background:linear-gradient(142deg,#e8916f 0%,#d97757 44%,#c05733 100%)}
-  .ccard::before{content:""; position:absolute; right:-40px; top:-46px; width:150px; height:150px;
-    border:18px solid rgba(255,255,255,.10); border-radius:50%}
-  .ccard::after{content:""; position:absolute; right:-6px; top:24px; width:74px; height:74px;
-    border:12px solid rgba(255,255,255,.09); border-radius:50%}
+    padding:18px 20px 16px; color:var(--ink); position:relative; overflow:hidden; box-shadow:var(--shadow);
+    background:linear-gradient(180deg,#fffaf2 0%,#fbf2e8 100%);
+    border:1.5px solid rgba(124,30,96,.24);
+    outline:1px solid rgba(255,255,255,.78);
+    outline-offset:-3px;
+    transition:border-color .18s, box-shadow .2s, transform .22s}
+  .ccard:hover{border-color:rgba(124,30,96,.56); box-shadow:0 0 0 3px rgba(220,169,205,.42), var(--lift)}
+  .ccard::before{content:""; position:absolute; right:-54px; top:-58px; width:150px; height:150px;
+    border:18px solid rgba(124,30,96,.06); border-radius:50%; transition:border-color .18s}
+  .ccard::after{content:""; position:absolute; right:-10px; top:27px; width:72px; height:72px;
+    border:12px solid rgba(220,169,205,.13); border-radius:50%; transition:border-color .18s}
+  .ccard:hover::before{border-color:rgba(124,30,96,.12)}
+  .ccard:hover::after{border-color:rgba(220,169,205,.28)}
   .ctop{display:flex; align-items:center; gap:11px; position:relative; z-index:1}
-  .clogo{width:30px; height:30px; flex:none; stroke:#fff; fill:none; stroke-width:1.7; stroke-linecap:round}
-  .ccard *{text-shadow:0 1px 2px rgba(0,0,0,.22)}
+  .clogo{width:30px; height:30px; flex:none; stroke:var(--green); fill:none; stroke-width:1.7; stroke-linecap:round}
   .cname{font-size:16px; font-weight:800; letter-spacing:-.01em}
-  .csub{font-size:11.5px; font-weight:600; color:rgba(255,255,255,.92); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px}
+  .csub{font-size:11.5px; font-weight:600; color:var(--ink2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px}
   .clive{margin-left:auto; font-size:11px; font-weight:750; font-family:var(--mono);
-    background:rgba(255,255,255,.26); border-radius:99px; padding:3px 10px; white-space:nowrap}
+    background:var(--mint-soft); color:var(--green); border-radius:99px; padding:3px 10px; white-space:nowrap}
   .cbig{font-family:var(--mono); font-size:40px; font-weight:800; letter-spacing:-.02em;
     line-height:1; margin:16px 0 4px; position:relative; z-index:1}
-  .cbig em{font-style:normal; font-size:14px; color:rgba(255,255,255,.95); font-weight:700; margin-left:6px}
+  .cbig em{font-style:normal; font-size:14px; color:var(--ink3); font-weight:700; margin-left:6px}
   .cfoot{display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; position:relative; z-index:1}
-  .ccard .cchip{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:#fff;
-    background:rgba(255,255,255,.24); border-radius:99px; padding:4px 11px}
-  .ccard .cchip svg{width:12px; height:12px; stroke:#fff; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round}
+  .ccard .cchip{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--green);
+    background:var(--mint-soft); border-radius:99px; padding:4px 11px}
+  .ccard .cchip svg{width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round}
   .ccard .cchip b{font-family:var(--mono); font-variant-numeric:tabular-nums; display:inline-block}
   /* iPhone-clock-style roll: the new countdown pans up into place, no layout jump */
   .roll{animation:rollup .32s cubic-bezier(.3,.8,.3,1)}
   @keyframes rollup{from{transform:translateY(55%);opacity:0}to{transform:translateY(0);opacity:1}}
-  .ccard .cchip.setup{cursor:pointer; border:1px solid rgba(255,255,255,.42); background:rgba(255,255,255,.16); transition:.13s}
-  .ccard .cchip.setup:hover{background:rgba(255,255,255,.38)}
-  .ctrk{height:5px; border-radius:99px; background:rgba(255,255,255,.22); overflow:hidden; margin-top:12px; position:relative; z-index:1}
-  .ctrk i{display:block; height:100%; border-radius:99px; background:#fff}
+  .ccard .cchip.setup{cursor:pointer; border:1px solid rgba(124,30,96,.22); background:#fff; transition:.13s}
+  .ccard .cchip.setup:hover{background:var(--mint-soft); border-color:rgba(124,30,96,.38)}
+  .ctrk{height:5px; border-radius:99px; background:var(--canvas); overflow:hidden; margin-top:12px; position:relative; z-index:1}
+  .ctrk i{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--green),var(--green-mid),#c46aa8)}
   .cnone{color:var(--ink3); font-size:13px; padding:14px 2px}
   /* ============ capsule bar chart ============ */
   .caps{display:flex; align-items:flex-end; gap:14px; height:190px; padding:18px 6px 4px}
@@ -310,12 +324,13 @@
   .tbtn:hover{color:var(--green); border-color:var(--green)}
   .tbtn svg{width:14px; height:14px}
   .tbtn.paused{background:var(--green); color:#fff; border-color:var(--green)}
-  /* per-service brand cards (share .ccard layout; only the gradient changes) */
-  .ccard.gmail{background:linear-gradient(142deg,#ea6a5f 0%,#d0392b 52%,#a41e12 100%)}
-  .ccard.github{background:linear-gradient(142deg,#3b424a 0%,#24292e 52%,#0d1117 100%)}
-  .ccard.spotify{background:linear-gradient(142deg,#22e365 0%,#1db954 48%,#12813b 100%)}
+  /* pulse cards stay white; brand color lives in the logo/status only */
+  .ccard.claude .clogo{stroke:var(--claude)}
+  .ccard.github .clogo{stroke:#24292e}
+  .ccard.tool .clogo{stroke:var(--green)}
+  .gmail-logo,.figma-logo{stroke:none; fill:none}
   .ccard.dim{opacity:.94}
-  .cline{font-size:12.5px; font-weight:600; color:rgba(255,255,255,.96); margin-top:11px; position:relative; z-index:1;
+  .cline{font-size:12.5px; font-weight:600; color:var(--ink2); margin-top:11px; position:relative; z-index:1;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .spnow{display:flex; align-items:center; gap:12px; margin-top:15px; position:relative; z-index:1}
   .cart{width:52px; height:52px; border-radius:11px; object-fit:cover; flex:none; box-shadow:0 4px 12px rgba(0,0,0,.25)}
@@ -562,6 +577,39 @@
   .chatsend:hover{background:var(--green-mid)}
   .chatsend:disabled{opacity:.45; cursor:default}
   .chatsend svg{width:17px; height:17px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  /* ============ revamp layer: task rail, ops visual, motion ============ */
+  .taskrail{margin:6px 2px 10px; border:1px solid var(--line); background:var(--paper);
+    border-radius:16px; padding:12px; box-shadow:var(--shadow); overflow:hidden; position:relative}
+  .taskrail,.vinyl,.side-dark{flex:none}
+  .taskrail::before{content:""; position:absolute; inset:0 0 auto; height:3px;
+    background:linear-gradient(90deg,var(--green-deep),var(--green-mid),#c46aa8)}
+  .tasktop{display:flex; align-items:center; justify-content:space-between; gap:8px; padding-top:4px}
+  .tasktop b{font-size:12.5px; letter-spacing:-.01em}
+  .tasktop span{font:700 10.5px/1 var(--mono); color:var(--green); background:var(--mint-soft);
+    border-radius:99px; padding:4px 8px}
+  .taskbar{height:6px; border-radius:99px; background:var(--canvas); overflow:hidden; margin:10px 0 8px}
+  .taskbar i{display:block; height:100%; border-radius:inherit;
+    background:linear-gradient(90deg,var(--green),var(--green-mid),#c46aa8); transition:width .45s cubic-bezier(.2,.8,.2,1)}
+  .navtask{display:grid; grid-template-columns:22px minmax(0,1fr); gap:8px; align-items:start;
+    padding:8px 0; border-top:1px solid var(--line); min-width:0}
+  .navtask:first-of-type{border-top:0}
+  .tmark{width:22px; height:22px; border-radius:8px; display:grid; place-items:center;
+    font:800 11px/1 var(--mono); color:var(--green); background:var(--mint-soft); border:1px solid transparent}
+  .navtask.live .tmark{background:var(--green); color:#fff}
+  .navtask.warn .tmark{background:#f7e4e2; color:var(--red)}
+  .navtask.queued .tmark{background:var(--card); border-color:var(--line2); color:var(--ink2)}
+  .navtask .tt{font-size:12px; font-weight:720; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .navtask .tm{font:600 10.5px/1.35 var(--mono); color:var(--ink3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .fxcard{transform-style:preserve-3d; will-change:transform;
+    transform:perspective(900px) translateY(var(--reveal-y,0)) translateY(var(--ty,0)) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+    transition:transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s ease, border-color .18s ease, opacity .28s ease}
+  .fxcard:hover{--ty:-4px; box-shadow:var(--lift); border-color:rgba(92,19,70,.24)}
+  .motion-ready .reveal{opacity:0; --reveal-y:18px}
+  .motion-ready .reveal.inview{opacity:1; --reveal-y:0px}
+  @media (prefers-reduced-motion: reduce){
+    .fxcard{transform:none!important}
+    .motion-ready .reveal{opacity:1}
+  }
 </style>
 </head>
 <body>
@@ -585,6 +633,8 @@
       <a href="#/audit" data-s="audit"><svg viewBox="0 0 24 24"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>Audit log<span class="bub" id="n-audit">0</span></a>
       <a href="#/guard" data-s="guard"><svg viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Guard</a>
     </nav>
+    <div class="navlab">Today</div>
+    <div class="taskrail" id="navtasks"></div>
     <div class="sidebottom">
       <div class="vinyl" id="vinyl"></div>
       <div class="side-dark">
@@ -645,7 +695,7 @@
       </div>
       <div class="grid cols-4" id="kpis" style="margin-bottom:14px"></div>
       <div class="ccarousel" style="margin-bottom:14px">
-        <div class="chead"><h3>Pulse <span class="tag">usage · mail · code · music</span></h3>
+        <div class="chead"><h3>Pulse <span class="tag">accounts · mail · code · MCP tools</span></h3>
           <div class="cnav" id="cnav" style="display:none">
             <button class="cnavb" data-cscroll="-1" title="previous"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
             <button class="cnavb" data-cscroll="1" title="next"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
@@ -899,6 +949,23 @@ const CLAUDE_LOGO=(()=>{let r="";for(let k=0;k<12;k++){const a=k*Math.PI/6,c=Mat
   return`<svg class="clogo" viewBox="0 0 24 24">${r}</svg>`})();
 const SPARK=(()=>{let r="";for(let k=0;k<12;k++){const a=k*Math.PI/6,c=Math.cos(a),s=Math.sin(a);
   r+=`<line x1="${(12+c*3).toFixed(1)}" y1="${(12+s*3).toFixed(1)}" x2="${(12+c*9.4).toFixed(1)}" y2="${(12+s*9.4).toFixed(1)}"/>`}return r})();
+const GMAIL_LOGO=`<svg class="clogo gmail-logo" viewBox="0 0 24 24" aria-hidden="true">
+  <path fill="#4285F4" d="M20.5 19.5h-3.2V9.7L12 13.7 6.7 9.7v9.8H3.5V6.1c0-.9 1-1.4 1.7-.9L12 10.3l6.8-5.1c.7-.5 1.7 0 1.7.9v13.4Z"/>
+  <path fill="#34A853" d="M3.5 19.5h3.2V9.7L3.5 7.3v12.2Z"/>
+  <path fill="#FBBC04" d="M17.3 19.5h3.2V7.3l-3.2 2.4v9.8Z"/>
+  <path fill="#EA4335" d="M3.5 7.3 12 13.7l8.5-6.4V6.1c0-.9-1-1.4-1.7-.9L12 10.3 5.2 5.2c-.7-.5-1.7 0-1.7.9v1.2Z"/>
+</svg>`;
+const FIGMA_LOGO=`<svg class="clogo figma-logo" viewBox="0 0 24 24" aria-hidden="true">
+  <circle cx="9" cy="5" r="3" fill="#F24E1E"/><circle cx="15" cy="5" r="3" fill="#FF7262"/>
+  <circle cx="9" cy="12" r="3" fill="#A259FF"/><circle cx="15" cy="12" r="3" fill="#1ABCFE"/>
+  <circle cx="9" cy="19" r="3" fill="#0ACF83"/>
+</svg>`;
+const TOOL_LOGOS={
+  figma:FIGMA_LOGO,
+  playwright:'<svg class="clogo" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="12" rx="3"/><path d="M8 19h8"/><path d="M12 17v2"/><path d="m8 10 2 2-2 2"/><path d="M13 14h3"/></svg>',
+  shadcn:'<svg class="clogo" viewBox="0 0 24 24"><path d="m16 4-8 8"/><path d="m20 8-8 8"/><path d="M4 20h16"/></svg>',
+  context7:'<svg class="clogo" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h16"/><circle cx="18" cy="12" r="2"/></svg>'
+};
 
 /* ---------- performance line graph (activity on the wire) ---------- */
 function renderPerf(){
@@ -1056,6 +1123,77 @@ function statCard(dark,label,num,unit,delta,deltaCls,go){
     <div class="num">${num}${unit?`<em> ${unit}</em>`:""}</div>
     <span class="deltapill ${deltaCls||""}">${delta}</span></div>`;
 }
+function taskData(done,aliveInst,loopsLive,earned,sk,evToday,staleN,live){
+  const queued=S.inbox.filter(d=>!done.has(d.id));
+  const waiting=S.orchs.filter(o=>o.live&&o.status==="waiting").length;
+  const total=Math.max(1,sk.length);
+  const out=[];
+  if(waiting)out.push({status:"warn",title:"Critic verdict",meta:waiting+" loop"+(waiting===1?"":"s")+" waiting",pill:"Review"});
+  else if(loopsLive)out.push({status:"live",title:"Conductor loop",meta:loopsLive+" active loop"+(loopsLive===1?"":"s"),pill:"Live"});
+  else if(aliveInst.length)out.push({status:"live",title:"Terminal field",meta:aliveInst.length+" active terminal"+(aliveInst.length===1?"":"s"),pill:"Live"});
+  else if(live.length)out.push({status:"live",title:"Wire session",meta:live.length+" live session"+(live.length===1?"":"s"),pill:"Live"});
+  else out.push({status:"done",title:"Field clear",meta:"ready for launch",pill:"Ready"});
+  out.push(queued.length
+    ?{status:"queued",title:"Directive inbox",meta:queued.length+" queued",pill:"Queued"}
+    :{status:"done",title:"Inbox clear",meta:"no queued directives",pill:"Clear"});
+  out.push(earned>=total
+    ?{status:"done",title:"Skills earned",meta:earned+"/"+total+" active",pill:"Done"}
+    :{status:"live",title:"Skills earned",meta:earned+"/"+total+" active",pill:"Track"});
+  out.push(staleN
+    ?{status:"warn",title:"Hermes freshness",meta:staleN+" stale card"+(staleN===1?"":"s"),pill:"Fix"}
+    :{status:"done",title:"Hermes fresh",meta:S.solved.length+" solved cards",pill:"Fresh"});
+  out.push(evToday.length
+    ?{status:"live",title:"Wire today",meta:evToday.length+" events logged",pill:"Flow"}
+    :{status:"queued",title:"Wire today",meta:"no events yet",pill:"Idle"});
+  return out.slice(0,5);
+}
+function taskMark(status){return status==="done"?"✓":status==="warn"?"!":status==="live"?">":"+"}
+function taskMarkup(tasks,compact){
+  return tasks.map(t=>`<div class="navtask ${esc(t.status)}">
+    <span class="tmark">${taskMark(t.status)}</span>
+    <div><div class="tt">${esc(t.title)}</div><div class="tm">${esc(t.meta)}</div></div>
+    ${compact?"":`<span class="pill ${t.status==="warn"?"warn":t.status==="live"?"live":"idle"}">${esc(t.pill)}</span>`}</div>`).join("");
+}
+function renderOpsSurface(ctx){
+  const tasks=taskData(ctx.done,ctx.aliveInst,ctx.loopsLive,ctx.earned,ctx.sk,ctx.evToday,ctx.staleN,ctx.live);
+  const doneN=tasks.filter(t=>t.status==="done").length;
+  const pct=Math.round(doneN/tasks.length*100);
+  $("navtasks").innerHTML=`<div class="tasktop"><b>Mission stack</b><span>${doneN}/${tasks.length}</span></div>
+    <div class="taskbar"><i style="width:${pct}%"></i></div>${taskMarkup(tasks.slice(0,4),true)}`;
+}
+
+let revealObserver=null, motionBound=false;
+function syncMotion(){
+  if(reduced)return;
+  document.body.classList.add("motion-ready");
+  if(!revealObserver){
+    revealObserver=new IntersectionObserver(entries=>entries.forEach(en=>{
+      if(en.isIntersecting)en.target.classList.add("inview");
+    }),{threshold:.12,rootMargin:"0px 0px -40px 0px"});
+  }
+  document.querySelectorAll(".card,.ccard,.inst,.intcard,.taskrail").forEach((el,i)=>{
+    if(!el.classList.contains("fxcard"))el.classList.add("fxcard");
+    if(!el.classList.contains("reveal")){
+      el.classList.add("reveal");
+      el.style.transitionDelay=Math.min(120,(i%8)*18)+"ms";
+      const r=el.getBoundingClientRect();
+      if(r.top<innerHeight&&r.bottom>0)el.classList.add("inview");
+      revealObserver.observe(el);
+    }
+  });
+  if(motionBound)return;
+  motionBound=true;
+  document.addEventListener("pointermove",e=>{
+    const el=e.target.closest(".fxcard");if(!el)return;
+    const r=el.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;
+    el.style.setProperty("--rx",(-y*5).toFixed(2)+"deg");
+    el.style.setProperty("--ry",(x*5).toFixed(2)+"deg");
+  });
+  document.addEventListener("pointerout",e=>{
+    const el=e.target.closest(".fxcard");if(!el||el.contains(e.relatedTarget))return;
+    el.style.setProperty("--rx","0deg");el.style.setProperty("--ry","0deg");
+  });
+}
 /* ---------- pulse widgets (topbar) ---------- */
 const PI={
   spot:'<circle cx="12" cy="12" r="10"/><path d="M8 15c2.5-.8 5-.6 7.5.8M7.5 12c3-.9 6-.6 9 .9M7 9c3.5-1 7.5-.7 10.5 1"/>',
@@ -1119,6 +1257,54 @@ function serviceCards(){
           <div class="spartist">${esc(sp.artist||"start something in Spotify")}</div></div></div>
       <div class="cfoot"><a class="cchip setup" href="/api/spotify/login" title="re-link a different account">${copySvg}reconnect</a></div></div>`;
   return gmail+github+spotify;
+}
+function toolUsesToday(keys){
+  const today=dayKey(new Date()),need=keys.map(k=>String(k).toLowerCase());
+  return S.events.filter(e=>{
+    if((e.ts||"").slice(0,10)!==today)return false;
+    const hay=[e.tool,e.event,e.stage,e.agent,e.detail].filter(Boolean).join(" ").toLowerCase();
+    return need.some(k=>hay.includes(k));
+  }).length;
+}
+function workflowCards(){
+  const mcp=new Map(((S.integ||{}).mcp||[]).map(m=>[m.name,m]));
+  const defs=[
+    {name:"figma",title:"Figma",sub:"design MCP",keys:["figma"],hint:"desktop MCP endpoint"},
+    {name:"playwright",title:"Playwright",sub:"browser QA",keys:["playwright","browser_take","screenshot"],hint:"screenshots and console"},
+    {name:"shadcn",title:"shadcn",sub:"component reference",keys:["shadcn"],hint:"UI component patterns"},
+    {name:"context7",title:"Context7",sub:"live docs",keys:["context7"],hint:"library documentation"}
+  ];
+  return defs.map(d=>{
+    const cfg=mcp.get(d.name),uses=toolUsesToday(d.keys);
+    return`<div class="ccard tool">
+      <div class="ctop">${TOOL_LOGOS[d.name]||TOOL_LOGOS.context7}
+        <div><div class="cname">${d.title}</div><div class="csub">${d.sub}</div></div>
+        <span class="clive">${cfg?"wired":"missing"}</span></div>
+      <div class="cbig">${uses}<em>calls today</em></div>
+      <div class="cline" title="${esc(cfg?cfg.command:"not configured")}">${cfg?esc(d.hint):"add to .mcp.json"}</div>
+      <div class="cfoot"><span class="cchip">${cfg?esc(cfg.type||"mcp"):"not wired"}</span></div></div>`;
+  }).join("");
+}
+function serviceCards2(){
+  const p=S.pulse||{},gh=p.github||{},gm=p.gmail||{};
+  const err=(cls,logo,name,msg)=>`<div class="ccard ${cls} dim"><div class="ctop">${logo}
+    <div><div class="cname">${name}</div><div class="csub">${esc(msg||"not connected")}</div></div></div>
+    <div class="cline">connect in state/pulse.json</div></div>`;
+  const g0=(gm.latest||[])[0];
+  const gmail=gm.error?err("gmail",GMAIL_LOGO,"Gmail",gm.error)
+    :`<div class="ccard gmail"><div class="ctop">${GMAIL_LOGO}
+      <div><div class="cname">Gmail</div><div class="csub">${esc(gm.email||"inbox")}</div></div>
+      <span class="clive">${(gm.latest||[]).length} new</span></div>
+      <div class="cbig">${fmtTok(gm.unread||0)}<em>unread</em></div>
+      <div class="cline" title="${esc(g0?g0.from+": "+g0.subject:"")}">${g0?`<b>${esc(g0.from||"")}</b> - ${esc(g0.subject)}`:"inbox clear"}</div></div>`;
+  const c0=(gh.commits||[])[0];
+  const github=gh.error?err("github",`<svg class="clogo" viewBox="0 0 24 24">${PI.gh}</svg>`,"GitHub",gh.error)
+    :`<div class="ccard github"><div class="ctop"><svg class="clogo" viewBox="0 0 24 24">${PI.gh}</svg>
+      <div><div class="cname">GitHub</div><div class="csub">${esc(gh.user||"")}</div></div>
+      <span class="clive">${gh.today||0} today</span></div>
+      <div class="cbig">${gh.today||0}<em>commit${gh.today===1?"":"s"} today</em></div>
+      <div class="cline" title="${esc(c0?c0.repo+": "+c0.msg:"")}">${c0?`<b>${esc(c0.repo)}</b> - ${esc(c0.msg)}`:"no recent pushes"}</div></div>`;
+  return gmail+github;
 }
 // sidebar turntable — lofi backdrop, the record IS the album cover (smooth),
 // interactive seek bar + prev/play/next controls. Built once; only data swaps.
@@ -1346,6 +1532,7 @@ function render(){
     statCard(false,"Changes today",chgToday,"",dpct>=0?`↑ ${dpct}% vs yesterday`:`↓ ${Math.abs(dpct)}% vs yesterday`,dpct>=0?"":"neg","#/audit")+
     statCard(false,"Sessions today",sessToday.size,"",evToday.length+" actions logged","mut","#/audit")+
     statCard(false,"Brain size",S.solved.length,"+ "+(S.vaultData?S.vaultData.notes.length:0)+" notes",staleN?staleN+" stale":"all fresh",staleN?"neg":"","#/brain");
+  renderOpsSurface({done,aliveInst,loopsLive,earned,sk,evToday,staleN,liveAgents,live});
 
   // changes day-to-day (7 calendar days)
   const days=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return d});
@@ -1372,12 +1559,12 @@ function render(){
   // pulse row — claude account card(s) first, then the service cards (same size/design)
   const accts=((S.pulse.claude||{}).accounts)||[];
   const claudeHtml=accts.length?accts.map(a=>{
-    if(a.error)return`<div class="ccard dim"><div class="ctop">${CLAUDE_LOGO}
+    if(a.error)return`<div class="ccard claude dim"><div class="ctop">${CLAUDE_LOGO}
       <div><div class="cname">${esc(a.name||"account")}</div><div class="csub" title="${esc(a.email||"")}">${esc(a.email||"Claude")}</div></div></div>
       <div class="cline">${esc(a.error)}</div>
       <div class="cfoot"><button class="cchip setup" data-setup="${esc(a.dir||"")}" data-name="${esc(a.name||"")}" title="copy the command to launch this account in a terminal">${copySvg}setup</button></div></div>`;
     const pct=a.pct!=null?a.pct:0;
-    return`<div class="ccard">
+    return`<div class="ccard claude">
       <div class="ctop">${CLAUDE_LOGO}
         <div><div class="cname">${esc(a.name||"account")}</div><div class="csub" title="${esc(a.email||"")}">${esc(a.email||"Claude · 5h window")}</div></div>
         <span class="clive" title="live server-side utilization of the 5h window">${pct}%</span></div>
@@ -1388,10 +1575,10 @@ function render(){
         <button class="cchip setup" data-setup="${esc(a.dir||"")}" data-name="${esc(a.name||"")}" title="copy the command to launch this account in a terminal">${copySvg}setup</button>
       </div>
       <div class="ctrk" title="${pct}% of the 5h window used"><i style="width:${pct}%"></i></div></div>`;
-  }).join(""):`<div class="ccard dim"><div class="ctop">${CLAUDE_LOGO}<div><div class="cname">Claude</div>
+  }).join(""):`<div class="ccard claude dim"><div class="ctop">${CLAUDE_LOGO}<div><div class="cname">Claude</div>
       <div class="csub">${esc((S.pulse.claude||{}).error||"no accounts configured")}</div></div></div>
       <div class="cline">add claude_accounts to state/pulse.json</div></div>`;
-  const track=$("claudecards"),html=claudeHtml+serviceCards();
+  const track=$("claudecards"),html=workflowCards()+claudeHtml+serviceCards2();
   // only rebuild when the content actually changed — otherwise the 2.5s poll
   // resets carousel scroll position and detaches mid-click (buttons, arrows).
   if(html!==track.dataset.sig){track.dataset.sig=html;track.innerHTML=html;}
@@ -1482,6 +1669,7 @@ function render(){
   ).join(""):`<div class="none">none — guard fully armed</div>`;
 
   Graph.sync();
+  syncMotion();
   document.title=`Maestro — ${live.length} live · ${S.events.length} ev`;
 }
 
@@ -1870,7 +2058,12 @@ const Graph=(function(){
 
 /* ---------- routing & clocks ---------- */
 const TITLES={overview:1,instances:1,skills:1,brain:1,graph:1,integrations:1,audit:1,guard:1};
+const ROUTE_ORDER=["overview","instances","skills","brain","graph","integrations","audit","guard"];
+let lastRoute=0;
 function route(){const h=location.hash.slice(2)||"overview";const s=TITLES[h]?h:"overview";
+  const idx=Math.max(0,ROUTE_ORDER.indexOf(s));
+  document.documentElement.style.setProperty("--route-x",(idx>=lastRoute?"24px":"-24px"));
+  lastRoute=idx;
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("show",p.id==="p-"+s));
   document.querySelectorAll("#nav a,#nav2 a").forEach(a=>a.classList.toggle("on",a.dataset.s===s));
   $("side").classList.remove("open");
@@ -1878,7 +2071,7 @@ function route(){const h=location.hash.slice(2)||"overview";const s=TITLES[h]?h:
 window.addEventListener("hashchange",route);
 const shell=document.querySelector(".shell");
 const mobileNav=()=>matchMedia("(max-width:880px)").matches;
-let navPinned=false;   // true = user explicitly opened it; don't auto-collapse
+let navPinned=true;   // desktop rail carries live tasks, so it stays visible by default
 $("burger").addEventListener("click",()=>{
   if(mobileNav()){$("side").classList.toggle("open");return;}
   navPinned=shell.classList.contains("navhidden");   // was hidden -> we're opening -> pin
@@ -1889,9 +2082,9 @@ hz.addEventListener("pointerenter",()=>{if(!mobileNav())shell.classList.remove("
 $("side").addEventListener("pointerleave",()=>{if(!mobileNav()&&!navPinned)shell.classList.add("navhidden")});
 // pick a destination → the navbar closes and the content expands
 document.querySelectorAll("#nav a,#nav2 a").forEach(a=>a.addEventListener("click",()=>{
-  if(!mobileNav()){navPinned=false;shell.classList.add("navhidden")}}));
+  if(mobileNav())$("side").classList.remove("open")}));
 // boot: reveal the navbar once on load
-if(!mobileNav()){shell.classList.add("navhidden");setTimeout(()=>shell.classList.remove("navhidden"),650)}
+if(!mobileNav())shell.classList.remove("navhidden");
 // toast on return from the Spotify OAuth redirect
 {const sp=new URLSearchParams(location.search).get("spotify");
  if(sp){toast(sp==="connected"?"Spotify connected ✓":"Spotify connect failed — add http://127.0.0.1:8817/api/spotify/callback to your app's redirect URIs",sp!=="connected");

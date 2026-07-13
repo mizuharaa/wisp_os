@@ -296,3 +296,29 @@
 {"session": "conductor", "event": "bootstrap", "detail": "verify wire", "ts": "2026-07-09T14:59:05"}
 {"session": "conductor", "event": "loop", "detail": "bootstrap-loop iter 1/2: doer exit=0, goal MET", "ts": "2026-07-09T14:59:06"}
 {"session": "conductor", "event": "loop", "detail": "bootstrap-loop PASS in 1 iteration(s)", "ts": "2026-07-09T14:59:06"}
+{"session": "conductor", "event": "learn", "detail": "brain: Brain learning not capturing solutions — read path exists but write path is manual", "ts": "2026-07-09T15:00:14"}
+{"session": "conductor", "event": "stage", "stage": "think", "detail": "dashboard revamp session online", "ts": "2026-07-09T16:05:46"}
+{"session": "conductor", "event": "bootstrap", "detail": "verify wire", "ts": "2026-07-09T16:21:16"}
+{"session": "conductor", "event": "loop", "detail": "bootstrap-loop iter 1/2: doer exit=0, goal MET", "ts": "2026-07-09T16:21:16"}
+{"session": "conductor", "event": "loop", "detail": "bootstrap-loop PASS in 1 iteration(s)", "ts": "2026-07-09T16:21:17"}
+{"session": "conductor", "event": "bootstrap", "detail": "verify wire", "ts": "2026-07-09T16:24:55"}
+{"session": "conductor", "event": "loop", "detail": "bootstrap-loop iter 1/2: doer exit=0, goal MET", "ts": "2026-07-09T16:24:55"}
+{"session": "conductor", "event": "loop", "detail": "bootstrap-loop PASS in 1 iteration(s)", "ts": "2026-07-09T16:24:55"}
+{"session": "conductor", "event": "bootstrap", "detail": "verify wire", "ts": "2026-07-09T16:42:45"}
+{"session": "conductor", "event": "loop", "detail": "bootstrap-loop iter 1/2: doer exit=0, goal MET", "ts": "2026-07-09T16:42:46"}
+{"session": "conductor", "event": "loop", "detail": "bootstrap-loop PASS in 1 iteration(s)", "ts": "2026-07-09T16:42:46"}
+{"session": "conductor", "event": "learn", "detail": "brain: Three.js plane animation jerky; mid-flight keyframe stall and broken quaternion interpolation freezing frames", "ts": "2026-07-09T17:45:27"}
+{"session": "operator", "event": "user-spawn", "agent": "tab", "detail": "[296b7eb9] Run the boot sequence (python bootstrap. model=sonnet acct=danieltran skip=True · Run the boot sequence (python bootstrap.py boot), then read the tail of state/inbox.jsonl and work every di", "ts": "2026-07-10T11:22:36"}
+{"session": "296b7eb9", "event": "session-start", "detail": "session online", "ts": "2026-07-10T11:22:39"}
+{"session": "296b7eb9", "event": "stage", "stage": "think", "detail": "session online", "ts": "2026-07-10T11:23:01"}
+{"session": "conductor", "event": "learn", "detail": "brain: Unitree G1 sim2real dance tracking: policy trained with ≤20ms latency randomization fell after 44s on hardware due to actual sensorimotor latency of 40–80ms (measured 4 inde", "ts": "2026-07-10T11:30:13"}
+{"session": "conductor", "event": "learn", "detail": "brain: Real-time robot control pipeline had undetected jitter in motion retargeting causing visible twitching during fast hand/body coordination moves in live shows", "ts": "2026-07-10T12:02:39"}
+{"session": "conductor", "event": "learn", "detail": "brain: Unitree G1 robot deployment safety on Windows: POSIX signal handling for damping on exit is unverified; bash runbooks incompatible", "ts": "2026-07-10T13:56:26"}
+{"session": "conductor", "event": "learn", "detail": "brain: Motion twitching caused by isolated single-frame jerk spikes (5-15× baseline) in all dance CSVs", "ts": "2026-07-10T14:02:35"}
+{"session": "conductor", "event": "learn", "detail": "brain: Preview videos missing from frontend; .gitignore excludes media files (*.mp4, *.npz, data/policies/*) so they exist only on source machine", "ts": "2026-07-10T14:40:00"}
+{"session": "conductor", "event": "learn", "detail": "brain: Playwright tests polluted production data by recording fake incidents against live records, silently corrupting their state (demoting show-ready to sim-verified, zeroing cle", "ts": "2026-07-10T15:03:50"}
+{"session": "conductor", "event": "learn", "detail": "brain: Double-counting mechanical lag in sim2real fidelity retrain kills station-keeping", "ts": "2026-07-10T15:24:44"}
+{"session": "conductor", "event": "learn", "detail": "brain: Exam signing key (32 raw bytes) failed validation after text round-trip extraction due to appended newline", "ts": "2026-07-10T15:31:01"}
+{"session": "conductor", "event": "learn", "detail": "brain: __webpack_modules__[moduleId] is not a function runtime error in Next.js dev server", "ts": "2026-07-10T22:06:07"}
+{"session": "conductor", "event": "learn", "detail": "brain: Next.js dev server returns 500 Internal Server Error on all routes after .next cache deleted", "ts": "2026-07-10T22:08:26"}
+{"session": "conductor", "event": "learn", "detail": "brain: OpenSky API calls fail silently after OAuth2 migration despite valid credentials in credentials.json", "ts": "2026-07-10T22:24:17"}
