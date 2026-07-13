@@ -47,6 +47,12 @@ ROLE_MODELS = ("haiku", "sonnet", "opus", "fable")
 LIVE = {}  # cid -> {"thread","proc","stop","gate":{role_id:(action,feedback)}}
 LOCK = threading.Lock()
 
+# a worker that dies on a usage/session/rate limit (not a real task failure) —
+# used to flag the role so the UI can say "hit a limit, Continue when ready"
+LIMIT_RE = re.compile(
+    r"rate.?limit|usage limit|session limit|quota|overloaded|"
+    r"\b429\b|too many requests|reset[s]? at|try again later", re.I)
+
 REFINE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -399,8 +405,12 @@ def _run(cid):
                     "(no final message — used all %d turns)" % role["turns"])
                 if w.get("is_error") and not ran_out:
                     role["status"] = "failed"
+                    # distinguish a usage/session-limit stop from a real failure:
+                    # limits are transient — the operator just Continues later.
+                    role["limit"] = bool(LIMIT_RE.search(role["result"]))
                     _save(o)
-                    emit(cid, "role %s FAILED: %s" % (role["id"], role["result"][:120]))
+                    emit(cid, "role %s %s: %s" % (role["id"],
+                         "hit a limit" if role["limit"] else "FAILED", role["result"][:120]))
                     break
                 if not role.get("review"):
                     role["status"] = "done"
@@ -449,8 +459,48 @@ def _run(cid):
             LIVE.pop(cid, None)
 
 
+def resume(cid):
+    """Pick a stopped / failed / stalled mission back up. Every non-terminal role
+    (failed, blocked, working, review) resets to pending and re-runs; done and
+    skipped work is kept, so a mission that got 3/6 through a session limit
+    continues from role 4 instead of restarting. Only when not already live."""
+    path = _path(cid)
+    if not os.path.exists(path):
+        return "no such mission"
+    with LOCK:
+        st = LIVE.get(cid)
+        if st and st["thread"].is_alive():
+            return "already running"
+    try:
+        o = json.load(open(path, encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "mission file unreadable"
+    reset = 0
+    for r in o["roles"]:
+        if r["status"] in ("failed", "blocked", "working", "review"):
+            r["status"] = "pending"
+            r["result"] = ""      # drop stale error text; the role re-runs fresh
+            r.pop("limit", None)
+            reset += 1
+    if not reset:
+        return "nothing to resume — every role is already done or skipped"
+    o["status"] = "running"
+    o["resumes"] = o.get("resumes", 0) + 1
+    _save(o)
+    t = threading.Thread(target=_run, args=(cid,), daemon=True)
+    with LOCK:
+        LIVE[cid] = {"thread": t, "proc": None, "stop": False, "gate": {}}
+    t.start()
+    kept = len([r for r in o["roles"] if r["status"] in ("done", "skipped")])
+    emit(cid, "resumed (#%d) — re-running %d role(s), keeping %d completed"
+         % (o["resumes"], reset, kept))
+    return None
+
+
 def action(cid, role_id, act, feedback=""):
-    """Operator verdicts: approve | redo | skip (per role), stop (whole run)."""
+    """Operator verdicts: approve | redo | skip (per role), stop, or resume."""
+    if act == "resume":
+        return resume(cid)  # valid precisely when the mission is NOT live
     with LOCK:
         st = LIVE.get(cid)
         if not st:

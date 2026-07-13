@@ -568,14 +568,76 @@
   .hit .t{color:var(--ink3); font-size:11px; margin-top:5px; font-family:var(--mono)}
   .hit.stale{opacity:.55}
   /* ============ graph ============ */
-  #graph{width:100%; height:470px; display:block; cursor:grab}
-  #graph g.gnode, #graph line{transition:opacity .18s ease}
-  .gnode{cursor:pointer}
-  .gdetail .gt{font-size:11.5px; color:var(--ink3); font-family:var(--mono)}
-  .gdetail .gp{font-weight:700; font-size:15px; margin:6px 0}
-  .gdetail .gs{font-size:13px; color:var(--ink2)}
-  .gdetail .gtag{display:inline-block; font-size:11px; font-family:var(--mono); color:var(--green);
-    background:var(--mint-soft); border-radius:99px; padding:2px 10px; margin:4px 5px 0 0}
+  .graph-workspace{position:relative; min-width:0; height:clamp(590px,calc(100dvh - 205px),860px);
+    min-height:560px; padding:0; overflow:hidden; isolation:isolate;
+    background:radial-gradient(circle at 50% 45%,var(--card) 0 34%,var(--paper) 100%)}
+  #graph{width:100%; height:100%; display:block; cursor:grab; touch-action:none; user-select:none;
+    overscroll-behavior:contain; outline:none}
+  #graph.panning,#graph.dragging{cursor:grabbing}
+  #graph:focus-visible{box-shadow:inset 0 0 0 3px var(--mint)}
+  #graph g.gnode,#graph line{transition:opacity .18s ease}
+  .gnode{cursor:pointer; outline:none}
+  .gnode .gdot{transition:stroke .15s ease,fill .15s ease}
+  .gnode.selected .gdot,.gnode:focus-visible .gdot{stroke:var(--green);stroke-width:2.5px}
+  .gnode.muted,.glink.muted{opacity:.12}
+  .glink{stroke:var(--line2)}
+  .glink.wiki{stroke:var(--ink3);stroke-opacity:.55}
+  .glink.near{stroke:var(--mint);stroke-opacity:1;stroke-width:1.7px}
+  .glab{fill:var(--ink2);pointer-events:none}
+  .graph-toolbar{position:absolute;z-index:4;top:14px;left:14px;display:flex;align-items:center;gap:5px;
+    padding:5px;background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--line);
+    border-radius:12px;box-shadow:var(--shadow);backdrop-filter:blur(12px)}
+  .graph-tool{width:36px;height:36px;display:grid;place-items:center;border-radius:8px;color:var(--ink2);
+    transition:background .15s,color .15s,transform .1s}
+  .graph-tool:hover{background:var(--mint-soft);color:var(--green)}
+  .graph-tool:active{transform:scale(.94)}
+  .graph-tool:focus-visible,.graph-close:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+  .graph-tool svg,.graph-close svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+  .graph-zoom{min-width:52px;padding:0 8px;text-align:center;font:11px/36px var(--mono);color:var(--ink2);
+    border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  .graph-count{position:absolute;z-index:3;top:18px;right:18px;padding:6px 11px;border:1px solid var(--line);
+    border-radius:99px;background:color-mix(in srgb,var(--card) 90%,transparent);box-shadow:var(--shadow);
+    color:var(--ink2);font:11px/1.2 var(--mono);backdrop-filter:blur(10px);transition:right .32s cubic-bezier(.2,.8,.2,1)}
+  .graph-help{position:absolute;z-index:3;left:16px;bottom:58px;padding:6px 10px;border-radius:9px;
+    color:var(--ink2);background:color-mix(in srgb,var(--card) 88%,transparent);font-size:11.5px;
+    border:1px solid var(--line);backdrop-filter:blur(10px);pointer-events:none}
+  .graph-legend{position:absolute;z-index:3;left:14px;right:14px;bottom:12px;display:flex;align-items:center;
+    gap:12px;min-width:0;min-height:34px;overflow:hidden;padding:7px 11px;border:1px solid var(--line);
+    border-radius:11px;background:color-mix(in srgb,var(--card) 92%,transparent);box-shadow:var(--shadow);
+    color:var(--ink2);font-size:11.5px;backdrop-filter:blur(12px);transition:right .32s cubic-bezier(.2,.8,.2,1)}
+  .graph-legend span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .graph-workspace.detail-open .graph-count{right:410px}
+  .graph-workspace.detail-open .graph-legend{right:404px}
+  .gdetail{position:absolute;z-index:6;top:12px;right:12px;bottom:12px;width:min(378px,calc(100% - 24px));
+    display:flex;flex-direction:column;padding:0;overflow:hidden;box-shadow:var(--lift);
+    opacity:0;visibility:hidden;pointer-events:none;transform:translateX(calc(100% + 28px));
+    transition:transform .34s cubic-bezier(.2,.8,.2,1),opacity .2s ease,visibility 0s linear .34s}
+  .gdetail.open{opacity:1;visibility:visible;pointer-events:auto;transform:none;
+    transition:transform .34s cubic-bezier(.2,.8,.2,1),opacity .2s ease}
+  .gdetail-head{display:flex;align-items:center;gap:10px;padding:15px 16px 13px;border-bottom:1px solid var(--line)}
+  .gdetail-head h3{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .graph-close{width:34px;height:34px;margin-left:auto;flex:none;display:grid;place-items:center;border:1px solid var(--line2);
+    border-radius:50%;color:var(--ink2);background:var(--card);transition:background .15s,color .15s,border-color .15s}
+  .graph-close:hover{background:var(--mint-soft);color:var(--green);border-color:var(--mint)}
+  #gpanel{min-height:0;overflow:auto;padding:15px 17px 20px;overscroll-behavior:contain}
+  .gdetail .gt{font-size:11.5px;color:var(--ink3);font-family:var(--mono);overflow-wrap:anywhere}
+  .gdetail .gp{font-weight:750;font-size:16px;line-height:1.35;margin:7px 0 10px;overflow-wrap:anywhere}
+  .gdetail .gs{font-size:13px;color:var(--ink2);line-height:1.58;overflow-wrap:anywhere}
+  .gdetail .gtag{display:inline-block;font-size:11px;font-family:var(--mono);color:var(--green);
+    background:var(--mint-soft);border-radius:99px;padding:2px 10px;margin:4px 5px 0 0}
+  @media (max-width:760px){
+    .graph-workspace{height:max(620px,calc(100dvh - 170px));min-height:620px}
+    .graph-help{display:none}
+    .graph-count{top:auto;right:14px;bottom:58px}
+    .graph-workspace.detail-open .graph-count{right:14px;opacity:0}
+    .graph-workspace.detail-open .graph-legend{right:14px}
+    .gdetail{top:auto;left:10px;right:10px;bottom:10px;width:auto;max-height:min(58dvh,520px);
+      transform:translateY(calc(100% + 24px))}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #graph g.gnode,#graph line,.gdetail,.graph-count,.graph-legend{transition:none}
+  }
   /* ============ integrations ============ */
   .intgrid{display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(235px,1fr)); padding-top:12px}
   .intgrid>*{min-width:0}
@@ -946,10 +1008,27 @@
           <label class="chk"><input type="radio" name="gsrc" value="vault" checked> Vault notes</label>
           <label class="chk"><input type="radio" name="gsrc" value="hermes"> Solved problems</label></div>
       </div>
-      <div class="grid cols-2">
-        <div class="card" style="padding:8px"><svg id="graph" viewBox="0 0 820 470"></svg>
-          <div id="glegendbar" style="display:flex;gap:12px;flex-wrap:wrap;padding:4px 8px 2px;font-size:11.5px;color:var(--ink2)"></div></div>
-        <div class="card gdetail"><h3 id="gtitle">Note</h3><div id="gpanel" style="padding-top:10px"></div></div>
+      <div class="card graph-workspace" id="graphspace">
+        <svg id="graph" viewBox="0 0 1800 1200" preserveAspectRatio="none" tabindex="0" role="application"
+          aria-label="Interactive brain graph" aria-describedby="graphhelp"></svg>
+        <div class="graph-toolbar" role="toolbar" aria-label="Graph navigation">
+          <button class="graph-tool" type="button" data-gact="out" aria-label="Zoom out" title="Zoom out">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          <span class="graph-zoom" id="gzoom" aria-live="polite">100%</span>
+          <button class="graph-tool" type="button" data-gact="in" aria-label="Zoom in" title="Zoom in">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="graph-tool" type="button" data-gact="fit" aria-label="Fit all nodes" title="Fit all nodes">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
+        </div>
+        <div class="graph-count" id="gcount">0 nodes</div>
+        <div class="graph-help" id="graphhelp">Drag the canvas to travel · Scroll to zoom · Drag a node to arrange · Click a node to inspect</div>
+        <div class="graph-legend" id="glegendbar"></div>
+        <section class="card gdetail" id="gdrawer" aria-hidden="true" aria-labelledby="gtitle">
+          <div class="gdetail-head"><h3 id="gtitle">Node details</h3>
+            <button class="graph-close" id="gclose" type="button" aria-label="Close node details" title="Close details">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+          <div id="gpanel" aria-live="polite"></div>
+        </section>
       </div>
     </section>
 
@@ -1119,23 +1198,32 @@ function ceoCard(o,full){
   const segs=o.roles.map(r=>`<i class="${r.status==="done"?"done":r.status==="working"?"working":r.status==="review"?"review":["failed","blocked"].includes(r.status)?"bad":""}" title="${esc(r.id)}: ${esc(r.status)}"></i>`).join("");
   const statPill=`<span class="pill ${o.status==="running"?"live":o.status==="review"?"warn":o.status==="done"?"idle":["failed","error","stalled"].includes(o.status)?"warn":"idle"}">${esc(o.status)}</span>`;
   const roles=o.roles.map(r=>{
+    const label=r.status==="failed"&&r.limit?"limit":r.status;
     const acts=(r.status==="review"&&o.live)?`<div class="racts">
         <button class="btn line sm" data-ceo-act="approve" data-cid="${o.cid}" data-role="${r.id}">Approve</button>
         <button class="btn line sm" data-ceo-act="redo" data-cid="${o.cid}" data-role="${r.id}">Redo</button>
         <button class="btn line sm danger" data-ceo-act="skip" data-cid="${o.cid}" data-role="${r.id}">Skip</button></div>`:"";
-    const out=(r.result&&(full||r.status==="review"))?`<div class="rout">${esc(r.result.slice(0,1800))}</div>`:"";
-    return`<div class="rrow"><span class="rstat ${esc(r.status)}">${esc(r.status)}</span>
-      <div class="rbd"><div class="rt">${esc(r.title)}<small>${esc(r.model)} · ${r.turns}t${r.secs?" · "+r.secs+"s":""}${r.cost?" · $"+r.cost:""}${r.review?" · gated":""}${r.depends_on.length?" · after "+r.depends_on.join(","):""}</small></div>
+    const out=(r.result&&(full||["review","failed"].includes(r.status)))?`<div class="rout">${esc(r.result.slice(0,1800))}</div>`:"";
+    return`<div class="rrow"><span class="rstat ${esc(r.status)}">${esc(label)}</span>
+      <div class="rbd"><div class="rt">${esc(r.title)}<small>${esc(r.model)} · ${r.turns}t${r.secs?" · "+r.secs+"s":""}${r.cost?" · $"+r.cost:""}${r.review?" · gated":""}${r.limit?" · session limit — Continue when ready":""}${r.depends_on.length?" · after "+r.depends_on.join(","):""}</small></div>
       ${full?`<div class="rm">${esc(r.mission.slice(0,300))}</div>`:""}${out}${acts}</div></div>`;
   }).join("");
-  const stop=o.live?`<button class="btn line sm danger" data-ceo-act="stop" data-cid="${o.cid}" data-role="" style="margin-top:8px">Stop mission</button>`:"";
+  const doneN=o.roles.filter(r=>["done","skipped"].includes(r.status)).length;
+  const resumable=!o.live&&(o.roles.some(r=>["failed","blocked"].includes(r.status))
+    ||["failed","error","stalled","stopped","exhausted"].includes(o.status));
+  const ctl=o.live
+    ?`<button class="btn line sm danger" data-ceo-act="stop" data-cid="${o.cid}" data-role="" style="margin-top:10px">Stop mission</button>`
+    :resumable?`<div style="display:flex;align-items:center;gap:11px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn solid sm" data-ceo-act="resume" data-cid="${o.cid}" data-role="">↻ Continue where it left off</button>
+        <span class="rm" style="margin:0;color:var(--ink3)">re-runs the ${o.roles.length-doneN} unfinished role${o.roles.length-doneN===1?"":"s"}, keeps the ${doneN} done</span></div>`
+    :"";
   return`<details class="mrun" data-cid="${o.cid}" ${MOPEN.has(o.cid)?"open":""}>
     <summary><span class="chev"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span>
       <span class="mname" title="${esc(o.goal)}">${esc(o.name)}</span>
       <span class="mbar">${segs}</span>
-      <span class="mmeta">${o.roles.filter(r=>["done","skipped"].includes(r.status)).length}/${o.roles.length} · $${(o.cost||0).toFixed(2)}${o.account?" · "+esc(o.account):""}</span>
+      <span class="mmeta">${doneN}/${o.roles.length} · $${(o.cost||0).toFixed(2)}${o.resumes?" · resumed "+o.resumes+"×":""}${o.account?" · "+esc(o.account):""}</span>
       ${statPill}</summary>
-    <div class="mbody">${full?`<div class="rm" style="padding:8px 0 4px;color:var(--ink2)">${esc(o.refined||o.goal)}</div>`:""}${roles}${stop}</div></details>`;
+    <div class="mbody">${full?`<div class="rm" style="padding:8px 0 4px;color:var(--ink2)">${esc(o.refined||o.goal)}</div>`:""}${roles}${ctl}</div></details>`;
 }
 function renderCeo(){
   const runs=S.ceo.slice(0,8);
@@ -1981,7 +2069,7 @@ document.addEventListener("click",async e=>{
     if(act==="redo"){feedback=prompt("What should this role fix?")||"";if(!feedback)return}
     if(act==="stop"&&!confirm("Stop this mission? The running role is killed."))return;
     try{await post("/api/ceo-action",{cid:ca.dataset.cid,role:ca.dataset.role,action:act,feedback});
-      toast(act==="stop"?"Mission stopped.":"Sent: "+act);poll()}
+      toast(act==="stop"?"Mission stopped.":act==="resume"?"Continuing where it left off…":"Sent: "+act);poll()}
     catch(err){toast("Action failed: "+err.message,true)}return}
   const cl=e.target.closest("[data-codex-login]");
   if(cl){try{await navigator.clipboard.writeText("codex login");

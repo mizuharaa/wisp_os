@@ -1,0 +1,72 @@
+{
+  "date": "2026-07-13",
+  "dry_run": true,
+  "generated": "2026-07-13T15:01:15",
+  "findings": [
+    {
+      "id": "92510c5f",
+      "goal": "Weekly skill-review directive 9d32e87a is unactioned",
+      "complexity": "light",
+      "status": "review",
+      "source": "daily-review",
+      "created": "2026-07-13T15:01:15",
+      "system": "inbox",
+      "severity": "medium"
+    },
+    {
+      "id": "a3fb2a1c",
+      "goal": "workflow-audit stuck at 2 uses — needs a third to earn",
+      "complexity": "trivial",
+      "status": "blocked",
+      "source": "daily-review",
+      "created": "2026-07-13T15:01:15",
+      "system": "skills",
+      "severity": "low"
+    },
+    {
+      "id": "8955c331",
+      "goal": "Reconcile duplicate ceo.py orchestration state on the wire",
+      "complexity": "hard",
+      "status": "review",
+      "source": "daily-review",
+      "created": "2026-07-13T15:01:15",
+      "system": "events",
+      "severity": "high"
+    }
+  ],
+  "plans": [
+    {
+      "task_id": "92510c5f",
+      "model": "sonnet",
+      "complexity": "light",
+      "steps": [
+        "A. Reproduce: Weekly skill-review directive 9d32e87a is unactioned",
+        "B. Locate the owning module on the wire and read its recent events.",
+        "C. Draft the minimal fix and its rollback.",
+        "D. Apply, run the module self-check, and confirm green.",
+        "E. Emit the audit entry and close the task."
+      ],
+      "stopped_reason": null
+    },
+    {
+      "task_id": "a3fb2a1c",
+      "model": "haiku",
+      "complexity": "trivial",
+      "steps": [],
+      "stopped_reason": "refusal"
+    },
+    {
+      "task_id": "8955c331",
+      "model": "opus",
+      "complexity": "hard",
+      "steps": [
+        "A. Reproduce: Reconcile duplicate ceo.py orchestration state on the wire",
+        "B. Locate the owning module on the wire and read its recent events.",
+        "C. Draft the minimal fix and its rollback.",
+        "D. Apply, run the module self-check, and confirm green.",
+        "E. Emit the audit entry and close the task."
+      ],
+      "stopped_reason": null
+    }
+  ]
+}
