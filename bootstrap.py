@@ -87,9 +87,12 @@ def main():
     needle = "jar" + "vis"
     dirty = []
     for dirpath, dirs, files in os.walk(ROOT):
-        # .appwindow is Edge's app-mode browser profile (desktop.py) — browser
-        # junk, not Rune's writing; it can legitimately contain any string.
-        dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", ".appwindow")]
+        # .appwindow is Edge's app-mode browser profile (desktop.py); state/ is
+        # gitignored runtime output (missions, briefings) that records whatever
+        # the user's own repos/prompts contain — e.g. a repo literally named
+        # open_<needle>. Neither is Rune's authored substrate, so the purity
+        # scan skips both; it can legitimately contain any string.
+        dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", ".appwindow", "state")]
         for fn in files:
             p = os.path.join(dirpath, fn)
             try:

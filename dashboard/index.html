@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/tokens.css">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("rune-theme")||"light"}catch(e){}</script>
 <style>
-  /* Hallmark · pre-emit critique: P5 H5 E4 S5 R4 V5 · genre: modern-minimal · macrostructure: Workbench · tone: technical-utilitarian · anchor: royal plum · contrast: pass (40–41) · nav: N3 · footer: none · honest/chrome/icons/mobile: pass · user-preserved brand override: gradient wordmark and playback/route motion */
+  /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · genre: modern-minimal · macrostructure: Workbench · tone: technical-utilitarian · anchor: royal plum · contrast: pass (40–41) · nav: N3 · footer: none · honest/chrome/icons/mobile: pass · user-preserved brand override: gradient wordmark and playback/route motion */
   :root{
     --canvas:var(--rune-paper); --card:var(--rune-paper-raised); --paper:var(--rune-paper-2);
     --line:var(--rune-rule); --line2:var(--rune-rule-strong);
@@ -319,7 +319,7 @@
     font-size:12px; font-weight:600; color:var(--ink2); font-family:var(--mono); transition:.15s}
   .cchip input:checked+span{background:var(--green); border-color:var(--green); color:#fff}
   /* ============ instances ============ */
-  .icards{display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); padding-top:12px}
+  .icards{display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr)); padding-top:12px}
   .icards>*{min-width:0}
   .inst{border:1px solid var(--line); border-radius:14px; padding:13px 14px; background:var(--card); transition:box-shadow .2s, transform .2s}
   .inst:hover{box-shadow:var(--lift); transform:translateY(-2px)}
@@ -446,6 +446,10 @@
   .cmdmsg .dots i:nth-child(2){animation-delay:.2s} .cmdmsg .dots i:nth-child(3){animation-delay:.4s}
   /* ============ CEO missions — running tasks, expandable per-role status ============ */
   .mrun{border:1px solid var(--line); border-radius:14px; background:var(--card); margin-bottom:10px; overflow:hidden}
+  .mrun.mission-focus{position:relative;border-color:var(--green);box-shadow:0 0 0 3px var(--mint-soft);scroll-margin-block:84px}
+  .mrun.mission-focus::after{content:"";position:absolute;inset:0;border:2px solid var(--green);border-radius:inherit;pointer-events:none;animation:missionReveal 1.25s var(--ease-out)}
+  @keyframes missionReveal{0%{opacity:0}28%{opacity:1}100%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){.mrun.mission-focus::after{animation:none;opacity:1}}
   .mrun summary{list-style:none; cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; min-width:0}
   .mrun summary::-webkit-details-marker{display:none}
   .mrun summary:hover{background:var(--canvas)}
@@ -477,7 +481,13 @@
   .rrow .rout{font-family:var(--mono); font-size:11px; color:var(--ink2); background:var(--canvas);
     border-radius:9px; padding:7px 10px; margin-top:6px; white-space:pre-wrap; overflow-wrap:anywhere;
     max-height:150px; overflow-y:auto}
-  .rrow .racts{display:flex; gap:6px; margin-top:7px}
+  .rrow .racts{display:flex; gap:6px; margin-top:7px; flex-wrap:wrap}
+  .permission-gate{margin-top:8px;padding:10px 12px;border:1px solid var(--warning);border-radius:var(--radius-md);background:var(--warning-soft);color:var(--ink2)}
+  .permission-gate-head{display:flex;align-items:center;gap:8px;min-width:0}.permission-gate-head b{font-size:11.5px;color:var(--ink)}
+  .permission-gate-mode{margin-inline-start:auto;border:1px solid color-mix(in srgb,var(--warning) 42%,transparent);border-radius:var(--radius-pill);padding:4px 7px;background:var(--card);color:var(--warning);font:800 9px/1 var(--mono);white-space:nowrap}
+  .permission-gate p{margin-top:5px;font-size:11px;line-height:1.45;overflow-wrap:anywhere}.permission-gate-scope{display:block;margin-top:5px;color:var(--ink3);font:650 9.5px/1.4 var(--mono);overflow-wrap:anywhere}
+  .permission-gate .racts{margin-top:9px}.permission-gate-note{display:block;margin-top:7px;color:var(--ink3);font-size:9.5px;line-height:1.4}
+  @media (max-width:520px){.permission-gate-head{align-items:flex-start;flex-direction:column}.permission-gate-mode{margin-inline-start:0}.permission-gate .racts .btn{width:100%;justify-content:center}}
   /* ============ skill tree — sleek, ink + one plum accent, progress rings ============ */
   .treecard{background:var(--card); border:1px solid var(--line); color:var(--ink); padding:0; overflow:hidden; position:relative}
   /* stat tiles */
@@ -564,6 +574,8 @@
   /* ============ brain ============ */
   .qbox{width:100%; background:var(--field); border:1.5px solid var(--line2); border-radius:12px; padding:10px 14px; outline:none; transition:.15s}
   .qbox:focus{border-color:var(--green); box-shadow:0 0 0 3.5px var(--mint-soft)}
+  .brain-query{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-width:0}.brain-query .qbox,.brain-query .btn{height:44px;min-height:44px}.brain-query .btn{justify-content:center}.brain-query .btn:active{transform:translateY(1px)}.brain-query .btn[aria-busy="true"]{cursor:progress;opacity:.72}
+  .brain-query-note{min-height:18px;margin:6px 2px 0;color:var(--ink3);font-size:10.5px;line-height:1.4}.brain-query-note.good{color:var(--success)}.brain-query-note.bad{color:var(--red)}.brain-query-note.wait{color:var(--info)}
   .hstats{color:var(--ink3); font-size:12px; margin:10px 2px 2px}
   .hit{border-top:1px solid var(--line); padding:11px 2px}
   .hit:first-of-type{border-top:none}
@@ -572,6 +584,53 @@
   .hit .s{color:var(--ink2); font-size:12.5px; margin-top:4px}
   .hit .t{color:var(--ink3); font-size:11px; margin-top:5px; font-family:var(--mono)}
   .hit.stale{opacity:.55}
+  /* ============ brain observability ============ */
+  .brain-proof{padding:0;overflow:hidden;margin-bottom:14px;font-variant-numeric:tabular-nums}
+  .brain-proof-head{display:flex;align-items:flex-start;gap:14px;padding:15px 18px;border-bottom:1px solid var(--line);background:var(--paper);min-width:0}
+  .brain-proof-copy{min-width:0;flex:1}.brain-proof-copy h2{font:800 16px/1.25 var(--rune-font-display);letter-spacing:-.01em}
+  .brain-proof-copy p{max-width:72ch;margin-top:3px;color:var(--ink2);font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}
+  .brain-proof-state{flex:none;border-radius:var(--radius-pill);padding:6px 9px;background:var(--info-soft);color:var(--info);font:800 10px/1 var(--mono);white-space:nowrap}
+  .brain-proof-state.good{background:var(--success-soft);color:var(--success)}.brain-proof-state.warn{background:var(--warning-soft);color:var(--warning)}.brain-proof-state.bad{background:var(--rune-danger-soft);color:var(--red)}
+  .brain-proof-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(268px,.72fr);min-width:0}
+  .recall-ledger,.memory-health{min-width:0}.recall-ledger{border-right:1px solid var(--line)}
+  .brain-panel-head{display:flex;align-items:flex-start;gap:10px;min-height:54px;padding:11px 14px;border-bottom:1px solid var(--line);min-width:0}
+  .brain-panel-head-copy{min-width:0;flex:1}.brain-panel-head h3{font-size:13px;font-weight:800}.brain-panel-head p{margin-top:2px;color:var(--ink3);font-size:10.5px;line-height:1.4;overflow-wrap:anywhere}
+  .brain-panel-count{flex:none;border-radius:var(--radius-pill);padding:5px 8px;background:var(--card);border:1px solid var(--line);color:var(--ink2);font:750 10px/1 var(--mono);white-space:nowrap}
+  .recall-list{min-height:86px}.recall-row{border-top:1px solid var(--line)}.recall-row:first-child{border-top:0}
+  .recall-row>summary{list-style:none;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:8px;min-height:58px;padding:8px 12px;cursor:pointer;min-width:0;transition:background-color var(--speed-fast) var(--ease-out)}
+  .recall-row>summary::-webkit-details-marker{display:none}.recall-row>summary:active{background:var(--mint-soft)}
+  @media (hover:hover) and (pointer:fine){.recall-row>summary:hover{background:var(--paper)}}
+  .recall-outcome{min-width:42px;border-radius:var(--radius-pill);padding:5px 7px;text-align:center;background:var(--paper);color:var(--ink2);font:800 10px/1 var(--mono);white-space:nowrap}
+  .recall-outcome.hit{background:var(--success-soft);color:var(--success)}.recall-outcome.miss{background:var(--warning-soft);color:var(--warning)}.recall-outcome.error{background:var(--rune-danger-soft);color:var(--red)}
+  .recall-main{display:block;min-width:0}.recall-route{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;font-weight:760;color:var(--ink)}
+  .recall-meta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px;color:var(--ink3);font:650 10px/1.3 var(--mono)}
+  .recall-context{color:var(--ink2);font:750 10px/1 var(--mono);white-space:nowrap}.recall-when{color:var(--ink3);font:650 10px/1 var(--mono);white-space:nowrap}
+  .recall-row>summary::after{content:"+";display:none;color:var(--green);font:800 12px/1 var(--mono)}.recall-row[open]>summary::after{content:"−"}
+  .recall-detail{padding:10px 12px 12px;border-top:1px dashed var(--line);background:var(--canvas);min-width:0}
+  .recall-reason{margin-bottom:9px;color:var(--ink2);font-size:11px;line-height:1.5;overflow-wrap:anywhere}.recall-reason b{color:var(--ink)}
+  .recall-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);background:var(--card);min-width:0}
+  .recall-fact{min-width:0;padding:7px 8px;border-left:1px solid var(--line)}.recall-fact:first-child{border-left:0}
+  .recall-fact span{display:block;color:var(--ink3);font-size:10px}.recall-fact b{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font:750 10px/1.3 var(--mono)}.recall-fact b.wrap{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+  .recall-cards{margin-top:9px}.recall-cards h4{font-size:10.5px;font-weight:800;color:var(--ink)}
+  .recall-card-list{display:grid;gap:5px;margin-top:5px}.recall-card-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:5px 7px;min-width:0;padding:6px 8px;border:1px solid var(--line);background:var(--card);font:650 10px/1.3 var(--mono)}
+  .recall-card-id{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink2)}.recall-card-score{color:var(--green);white-space:nowrap}.recall-card-state{grid-column:1/-1;color:var(--ink3);white-space:normal;overflow-wrap:anywhere}.recall-card-state.stale{color:var(--warning)}
+  .recall-audit{margin-top:8px}.recall-audit>summary{list-style:none;display:inline-flex;align-items:center;min-height:40px;cursor:pointer;color:var(--green);font:750 10px/1 var(--mono);white-space:nowrap}.recall-audit>summary::-webkit-details-marker{display:none}.recall-audit>summary::after{content:"Show candidate record"}.recall-audit[open]>summary::after{content:"Hide candidate record"}
+  .recall-candidates{display:grid;gap:4px;margin-top:4px}.recall-candidate{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 7px;min-width:0;padding:5px 7px;border-left:2px solid var(--line);color:var(--ink3);font:650 10px/1.3 var(--mono)}.recall-candidate span:last-child{grid-column:1/-1;white-space:normal;overflow-wrap:anywhere}.recall-candidate.selected{border-left-color:var(--success);color:var(--ink2)}
+  .recall-policy,.recall-exposure{margin-top:8px;padding:7px 8px;border-left:2px solid var(--info);background:var(--info-soft);color:var(--ink2);font-size:10px;line-height:1.45;overflow-wrap:anywhere}.recall-exposure{border-left-color:var(--warning);background:var(--warning-soft)}.recall-policy b,.recall-exposure b{color:var(--ink)}
+  .brain-empty{padding:18px 14px;color:var(--ink2);font-size:11.5px;line-height:1.5}.brain-empty b{display:block;color:var(--ink);font-size:12px;margin-bottom:2px}.brain-empty.bad{color:var(--red)}
+  .memory-health-body{min-height:86px;padding:12px 14px}.memory-health-state{display:flex;align-items:center;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--ink2)}
+  .memory-health-state b{color:var(--ink);font-size:12px}.memory-state-dot{width:8px;height:8px;flex:none;border-radius:50%;background:var(--info)}.memory-state-dot.good{background:var(--success)}.memory-state-dot.warn{background:var(--warning)}.memory-state-dot.bad{background:var(--red)}
+  .memory-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px;border:1px solid var(--line)}.memory-metric{min-width:0;padding:8px;border-left:1px solid var(--line);border-top:1px solid var(--line)}.memory-metric:nth-child(odd){border-left:0}.memory-metric:nth-child(-n+2){border-top:0}.memory-metric span{display:block;color:var(--ink3);font-size:10px}.memory-metric b{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:800 11px/1.3 var(--mono);color:var(--ink)}
+  .memory-budget{margin-top:10px}.memory-budget-head{display:flex;justify-content:space-between;gap:8px;min-width:0;color:var(--ink2);font-size:10.5px}.memory-budget-head b{min-width:0;max-width:72%;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono);white-space:nowrap}.memory-budget-track{height:5px;margin-top:5px;overflow:hidden;border-radius:var(--radius-pill);background:var(--paper)}.memory-budget-track i{display:block;height:100%;width:var(--memory-budget-use,0%);max-width:100%;border-radius:inherit;background:var(--green)}.memory-budget.warn .memory-budget-track i{background:var(--warning)}.memory-budget.bad .memory-budget-track i{background:var(--red)}
+  .memory-reasons{margin-top:9px;color:var(--ink3);font-size:10px;line-height:1.45;overflow-wrap:anywhere}.memory-mirror{display:block;margin-top:2px}.memory-mirror b{color:inherit}.memory-mirror.warn{color:var(--warning)}
+  .learning-ledger{margin-top:10px;border-top:1px solid var(--line)}.learning-ledger>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;color:var(--ink);font-size:10.5px;font-weight:800;white-space:nowrap}.learning-ledger>summary::-webkit-details-marker{display:none}.learning-ledger>summary::after{content:"Open";margin-inline-start:auto;color:var(--green);font:750 10px/1 var(--mono)}.learning-ledger[open]>summary::after{content:"Close"}
+  .learning-list{border-top:1px solid var(--line)}.learning-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:7px;padding:8px 0;border-top:1px dashed var(--line);min-width:0}.learning-row:first-child{border-top:0}
+  .learning-outcome{min-width:58px;border-radius:var(--radius-pill);padding:4px 6px;text-align:center;background:var(--paper);color:var(--ink2);font:800 10px/1 var(--mono);white-space:nowrap}.learning-outcome.accepted,.learning-outcome.merged{background:var(--success-soft);color:var(--success)}.learning-outcome.quarantined,.learning-outcome.skipped{background:var(--warning-soft);color:var(--warning)}.learning-outcome.rejected,.learning-outcome.error{background:var(--rune-danger-soft);color:var(--red)}
+  .learning-main{min-width:0}.learning-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;font-weight:760}.learning-meta,.learning-reasons{display:block;margin-top:2px;color:var(--ink3);font:650 10px/1.35 var(--mono);overflow-wrap:anywhere}.learning-reasons{color:var(--ink2)}.learning-when{color:var(--ink3);font:650 10px/1 var(--mono);white-space:nowrap}
+  .proof-boundary{display:flex;align-items:flex-start;gap:8px;padding:9px 14px;border-top:1px solid var(--line);background:var(--info-soft);color:var(--ink2);font-size:10.5px;line-height:1.45}.proof-boundary b{color:var(--info);white-space:nowrap}.proof-boundary span{overflow-wrap:anywhere}
+  @media (max-width:980px){.brain-proof-grid{grid-template-columns:1fr}.recall-ledger{border-right:0;border-bottom:1px solid var(--line)}}
+  @media (max-width:640px){.brain-proof-head{align-items:flex-start;flex-direction:column}.brain-proof-state{align-self:flex-start}.recall-row>summary{grid-template-columns:auto minmax(0,1fr) auto}.recall-when{display:none}.recall-context{grid-column:2}.recall-row>summary::after{display:block}.recall-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.recall-fact:nth-child(3){border-left:0;border-top:1px solid var(--line)}.recall-fact:nth-child(4){border-top:1px solid var(--line)}.proof-boundary{display:block}.proof-boundary b{display:block;margin-bottom:2px}.brain-query{grid-template-columns:1fr}.brain-query .qbox,.brain-query .btn{min-height:44px}.brain-query .btn{width:100%}.learning-row{grid-template-columns:auto minmax(0,1fr)}.learning-when{display:none}}
+  @media (max-width:360px){.recall-card-state,.recall-candidate span:last-child{display:none}}
   /* ============ graph ============ */
   .graph-workspace{position:relative; min-width:0; height:clamp(590px,calc(100dvh - 205px),860px);
     min-height:560px; padding:0; overflow:hidden; isolation:isolate; background:var(--card)}
@@ -702,6 +761,7 @@
     box-shadow:0 10px 26px -6px rgba(92,19,70,.55); z-index:40; transition:transform .15s}
   #chatfab:hover{transform:scale(1.07)}
   #chatfab svg{width:24px; height:24px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  .instance-chat{display:none}
   #chatpanel{position:fixed; right:22px; bottom:88px; width:382px; max-width:calc(100vw - 32px); height:524px;
     max-height:calc(100vh - 120px); background:var(--card); border:1px solid var(--line); border-radius:18px;
     box-shadow:var(--lift); z-index:41; display:none; flex-direction:column; overflow:hidden}
@@ -967,7 +1027,8 @@
   .cmdmission[data-state="failed"],.cmdmission[data-state="error"]{border-color:var(--red);background:var(--rune-danger-soft)}
   .cmdmission[data-state="waiting_permission"]{border-color:var(--warning);background:var(--warning-soft)}
   .cmdmission[data-state="retrying"],.cmdmission[data-state="repairing"]{border-color:var(--recovery);background:var(--recovery-soft)}
-  .cmdmission-copy{min-width:0}.cmdmission-prompt{font-size:13px;font-weight:760;line-height:1.4;overflow-wrap:anywhere}
+  .cmdmission-copy{min-width:0}.cmdmission-prompt{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;font-weight:760;line-height:1.4;overflow-wrap:anywhere}
+  .cmdmission-raw{margin-top:5px}.cmdmission-raw>summary{list-style:none;display:inline-flex;align-items:center;min-height:28px;cursor:pointer;font:750 9.5px/1 var(--mono);color:var(--green)}.cmdmission-raw>summary::-webkit-details-marker{display:none}.cmdmission-raw>summary::after{content:"Show full request"}.cmdmission-raw[open]>summary::after{content:"Hide full request"}.cmdmission-raw-body{max-height:180px;overflow:auto;margin-top:4px;padding:8px;border-top:1px dashed var(--line);font-size:10.5px;line-height:1.5;color:var(--ink2);white-space:pre-wrap;overflow-wrap:anywhere}
   .cmdmission-reply{font-size:12px;color:var(--ink2);line-height:1.48;margin-top:4px;overflow-wrap:anywhere}
   .cmdmission-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:7px;font:650 10px/1.35 var(--mono);color:var(--ink3)}
   .cmdmission-state{display:inline-flex;align-items:center;gap:5px;border-radius:var(--radius-pill);padding:4px 7px;background:var(--paper);color:var(--ink2);text-transform:lowercase}
@@ -992,6 +1053,10 @@
   .recovery-log h4{padding:8px 10px;border-bottom:1px solid var(--line);font:800 10px/1.3 var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--recovery)}
   .recovery-entry{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;padding:8px 10px;border-top:1px dashed var(--line);font-size:11px;color:var(--ink2)}
   .recovery-entry:first-of-type{border-top:0}.recovery-entry time{font-family:var(--mono);color:var(--ink3);white-space:nowrap}.recovery-entry span{overflow-wrap:anywhere}
+  .provider-fallback{margin-top:8px;padding:8px 12px;border:1px solid var(--info);border-radius:var(--radius-md);background:var(--info-soft);color:var(--ink2)}
+  .provider-fallback[data-tone="good"]{border-color:var(--success);background:var(--success-soft)}.provider-fallback[data-tone="warn"]{border-color:var(--warning);background:var(--warning-soft)}.provider-fallback[data-tone="bad"]{border-color:var(--red);background:var(--rune-danger-soft)}
+  .provider-fallback-top{display:flex;align-items:center;gap:8px;min-width:0}.provider-fallback-top b{font-size:11.5px;color:var(--ink)}.provider-fallback-state{margin-inline-start:auto;border-radius:var(--radius-pill);padding:4px 8px;background:var(--card);font:750 9px/1 var(--mono);white-space:nowrap}
+  .provider-fallback-route{margin-top:4px;font:750 10px/1.35 var(--mono);color:var(--ink)}.provider-fallback-copy{margin-top:3px;font-size:10.5px;line-height:1.45;overflow-wrap:anywhere}
   .mission-history{margin-top:13px;border:1px solid var(--line2);border-radius:var(--radius-md);background:var(--paper);overflow:hidden}
   .mission-history>summary{list-style:none;display:flex;align-items:center;gap:9px;min-height:48px;padding:8px 12px;cursor:pointer}
   .mission-history>summary::-webkit-details-marker{display:none}.mission-history>summary:hover{background:var(--canvas)}
@@ -999,13 +1064,22 @@
   .mission-history-count{font:750 9.5px/1 var(--mono);color:var(--success);background:var(--success-soft);border-radius:var(--radius-pill);padding:5px 8px;white-space:nowrap}
   .mission-history-chev{width:14px;height:14px;color:var(--ink3);flex:none;transition:transform var(--speed-fast) var(--ease-out)}.mission-history-chev svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}.mission-history[open] .mission-history-chev{transform:rotate(90deg)}
   .mission-history-list{border-top:1px solid var(--line);padding:9px;background:var(--canvas)}.mission-history-list .mrun:last-child{margin-bottom:0}
+  /* Hallmark · component: completed-mission delivery · genre: modern-minimal · theme: Rune plum
+   * states: default · hover · focus · active · disabled · loading · error · success · contrast: pass */
   .delivery-pipeline{margin:10px 0 3px;border:1px solid var(--line2);border-radius:var(--radius-md);background:var(--paper);overflow:hidden}
   .delivery-head{display:flex;align-items:flex-start;gap:10px;padding:10px 11px;border-bottom:1px solid var(--line);min-width:0}.delivery-head-copy{min-width:0;flex:1}.delivery-head-copy b{display:block;font-size:12px}.delivery-head-copy span{display:block;margin-top:2px;font-size:10.5px;line-height:1.4;color:var(--ink2);overflow-wrap:anywhere}
   .delivery-state{font:750 9px/1 var(--mono);color:var(--green);background:var(--mint-soft);border-radius:var(--radius-pill);padding:5px 7px;white-space:nowrap}.delivery-state.good{color:var(--success);background:var(--success-soft)}.delivery-state.warn{color:var(--warning);background:var(--warning-soft)}.delivery-state.bad{color:var(--red);background:var(--rune-danger-soft)}
   .delivery-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));min-width:0}.delivery-step{position:relative;display:flex;flex-direction:column;gap:7px;min-width:0;padding:10px;border-left:1px solid var(--line)}.delivery-step:first-child{border-left:0}
   .delivery-step-top{display:flex;align-items:center;gap:7px;min-width:0}.delivery-dot{width:17px;height:17px;display:grid;place-items:center;flex:none;border:1px solid var(--line2);border-radius:50%;font:800 8px/1 var(--mono);color:var(--ink3);background:var(--card)}.delivery-step-name{font-size:11px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.delivery-step-detail{min-height:28px;font-size:9.5px;line-height:1.4;color:var(--ink3);overflow-wrap:anywhere}
   .delivery-step[data-tone="good"] .delivery-dot{border-color:var(--success);color:var(--rune-on-accent);background:var(--success)}.delivery-step[data-tone="live"] .delivery-dot{border-color:var(--green);color:var(--green);background:var(--mint-soft)}.delivery-step[data-tone="warn"] .delivery-dot{border-color:var(--warning);color:var(--warning);background:var(--warning-soft)}.delivery-step[data-tone="bad"] .delivery-dot{border-color:var(--red);color:var(--red);background:var(--rune-danger-soft)}
-  .delivery-step .btn{width:100%;justify-content:center;margin-top:auto;padding-inline:8px}.delivery-blocked{padding:8px 11px;border-top:1px solid var(--line);font-size:10.5px;line-height:1.45;color:var(--warning);background:var(--warning-soft);overflow-wrap:anywhere}.delivery-blocked.bad{color:var(--red);background:var(--rune-danger-soft)}
+  .delivery-step[data-tone="warn"] .delivery-step-detail{color:var(--warning)}.delivery-step[data-tone="bad"] .delivery-step-detail{color:var(--red)}
+  .delivery-step .btn{width:100%;justify-content:center;margin-top:auto;padding-inline:8px}.delivery-step .btn:active{transform:translateY(1px)}.delivery-step .btn[aria-busy="true"]{cursor:progress;opacity:.72}.delivery-blocked{display:grid;gap:2px;padding:8px 11px;border-top:1px solid var(--line);font-size:10.5px;line-height:1.45;color:var(--warning);background:var(--warning-soft);overflow-wrap:anywhere}.delivery-blocked b{font-size:10.5px;color:currentColor}.delivery-blocked span{color:var(--ink2)}.delivery-blocked.bad{color:var(--red);background:var(--rune-danger-soft)}.delivery-blocked.bad span{color:var(--red)}
+  .delivery-evidence{display:grid;border-top:1px solid var(--line)}.delivery-evidence details{border-top:1px dashed var(--line)}.delivery-evidence details:first-child{border-top:0}.delivery-evidence summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:38px;padding:7px 11px;cursor:pointer;font-size:10.5px;font-weight:760;color:var(--ink2)}.delivery-evidence summary::-webkit-details-marker{display:none}.delivery-evidence summary::after{content:"View";font:750 9px/1 var(--mono);color:var(--green)}.delivery-evidence details[open] summary::after{content:"Hide"}.delivery-evidence pre{max-height:320px;overflow:auto;margin:0;padding:11px;background:var(--canvas);border-top:1px solid var(--line);font:500 10px/1.5 var(--mono);color:var(--ink2);white-space:pre-wrap;overflow-wrap:anywhere}
+  .mission-brief{margin:8px 0 3px;border-block:1px solid var(--line);background:var(--paper)}
+  .mrun details.mission-brief>summary{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;min-height:42px;padding:7px 10px;cursor:pointer}
+  .mission-brief>summary::-webkit-details-marker{display:none}.mission-brief-label{font-size:10.5px;font-weight:800;color:var(--ink);white-space:nowrap}.mission-brief-preview{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;color:var(--ink3)}
+  .mission-brief-action{font:750 9px/1 var(--mono);color:var(--green);white-space:nowrap}.mission-brief-action::before{content:"Open"}.mission-brief[open] .mission-brief-action::before{content:"Close"}
+  .mission-brief-body{max-height:280px;overflow:auto;border-top:1px solid var(--line);padding:10px;background:var(--canvas);font-size:11.5px;line-height:1.55;color:var(--ink2);white-space:pre-wrap;overflow-wrap:anywhere}
 
   /* ============ automation radar: suggestions backed by live evidence ============ */
   .automation-radar{padding:0;overflow:hidden;margin-bottom:14px}
@@ -1069,6 +1143,9 @@
   @media (max-width:40rem){
     :where(button,input,textarea,select,summary,a.btn,[role="tab"]){min-height:44px}
     :where(.tbtn,.cbtn,.cmdtray-icon,.calendar-nav .cal-arrow){min-width:44px;min-height:44px}
+    .card h3{align-items:flex-start;flex-direction:column}.card h3 .tag{margin-left:0}
+    .instance-chat{display:inline-flex;white-space:nowrap}
+    body:has(#p-instances.show) #chatfab{display:none}
     .cmdtray{left:8px;right:8px;bottom:8px;max-height:62vh}.cmdflow{max-height:calc(62vh - 58px)}.cmdtray-head{align-items:flex-start;flex-wrap:wrap}.cmdtray-title{min-height:40px}.cmdtray-actions{width:100%;justify-content:flex-end}.cmdtray-actions .btn{flex:1}
     .cmdmission{grid-template-columns:1fr}.cmdmission-controls{justify-content:flex-start;max-width:none}.cmdmission-controls .btn{flex:1}
     .brief-completed-row{grid-template-columns:1fr}.brief-completed-actions{display:grid;grid-template-columns:1fr 1fr;justify-content:stretch}.brief-completed-actions .btn{width:100%;justify-content:center}
@@ -1077,7 +1154,7 @@
     #calendarbody{padding:8px}.cal-side{padding:12px}.cal-agenda-row{grid-template-columns:58px minmax(0,1fr)}.cal-source{grid-column:2}
     .chathead .clear{min-height:36px}
   }
-  @media (max-width:420px){.delivery-steps{grid-template-columns:1fr}.delivery-step,.delivery-step:nth-child(3),.delivery-step:nth-child(4){border-left:0;border-top:1px solid var(--line)}.delivery-step:first-child{border-top:0}.delivery-step{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.delivery-step-detail{grid-column:1/-1;min-height:0}.delivery-step .btn{width:auto;min-width:94px}.delivery-head{align-items:center}}
+  @media (max-width:420px){.delivery-steps{grid-template-columns:1fr}.delivery-step,.delivery-step:nth-child(3),.delivery-step:nth-child(4){border-left:0;border-top:1px solid var(--line)}.delivery-step:first-child{border-top:0}.delivery-step{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.delivery-step-detail{grid-column:1/-1;min-height:0}.delivery-step .btn{width:auto;min-width:94px}.delivery-head{align-items:center}.mrun details.mission-brief>summary{grid-template-columns:minmax(0,1fr) auto}.mission-brief-preview{display:none}}
   @media (max-width:360px){.calendar-views button{padding-inline:5px;font-size:11px}.cmdtray-actions .btn{font-size:11px;padding-inline:7px}.brief-completed-actions{grid-template-columns:1fr}}
 </style>
 </head>
@@ -1187,8 +1264,8 @@
               <div class="brief-health-item"><span>Last attempt</span><b id="briefattempt">Checking…</b><small id="briefattemptsub"></small></div>
               <div class="brief-health-item"><span>Next refresh</span><b id="briefnext">Checking…</b><small id="briefcountdown" data-brief-due="" data-brief-state=""></small></div>
             </div>
-            <button class="btn line sm brief-check" id="brief-check" type="button" title="Check the saved briefing status without starting a model run">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 1-2-5"/></svg><span>Check now</span></button>
+            <button class="btn line sm brief-check" id="brief-check" type="button" title="Ensure current: check today’s saved briefing and queue a background model run only when due">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 1-2-5"/></svg><span>Ensure current</span></button>
           </div>
           <div class="brief-controls" aria-label="Briefing generation controls">
             <label class="brief-field"><span>Brainstorm with</span>
@@ -1283,9 +1360,9 @@
 
     <!-- ============ AGENT CONSOLE ============ -->
     <section class="page" id="p-instances">
-      <div class="titlerow"><div><h1>Agent console</h1><div class="sub">Every agent — CEO missions, loops, terminals — launched and monitored from one place.</div></div></div>
+      <div class="titlerow"><div><h1>Agent console</h1><div class="sub">Every agent — CEO missions, loops, terminals — launched and monitored from one place.</div></div><div class="spacer"></div><button type="button" class="btn line sm instance-chat" id="instancechat" aria-expanded="false" aria-controls="chatpanel">Ask Rune</button></div>
       <div class="card" style="margin-bottom:14px">
-        <h3>CEO missions <span class="tag">expand a task to see each role · approve, redo or skip gated output</span></h3>
+        <h3>CEO missions <span class="tag">active work stays above · completed work moves into review and delivery</span></h3>
         <div id="ceoruns2" style="padding-top:12px"></div>
       </div>
       <div class="grid cols-2" style="margin-bottom:14px">
@@ -1383,12 +1460,30 @@
 
     <!-- ============ BRAIN ============ -->
     <section class="page" id="p-brain">
-      <div class="titlerow"><div><h1>Brain</h1><div class="sub">Hermes flywheel — solve once, never re-solve.</div></div></div>
+      <div class="titlerow"><div><h1>Brain</h1><div class="sub">Reusable knowledge, with receipts for what was recalled and what entered context.</div></div></div>
+      <section class="card brain-proof" aria-labelledby="brain-proof-title">
+        <header class="brain-proof-head">
+          <div class="brain-proof-copy"><h2 id="brain-proof-title">Recall evidence</h2><p>Inspect the deterministic retrieval trail before trusting a memory claim: ranked cards, selected IDs, scores, and estimated context inserted into each mission.</p></div>
+          <span class="brain-proof-state" id="brain-proof-state">Checking receipts</span>
+        </header>
+        <div class="brain-proof-grid">
+          <section class="recall-ledger" aria-labelledby="recall-ledger-title">
+            <header class="brain-panel-head"><div class="brain-panel-head-copy"><h3 id="recall-ledger-title">Recent recall attempts</h3><p id="recall-ledger-summary">Waiting for mission receipts.</p></div><span class="brain-panel-count" id="recall-ledger-count">0 receipts</span></header>
+            <div class="recall-list" id="recall-receipts" aria-live="polite"></div>
+          </section>
+          <aside class="memory-health" aria-labelledby="memory-health-title">
+            <header class="brain-panel-head"><div class="brain-panel-head-copy"><h3 id="memory-health-title">Storage health</h3><p>Admission decisions, footprint, and retention budget.</p></div><span class="brain-panel-count" id="memory-card-count">— cards</span></header>
+            <div class="memory-health-body" id="memory-health-body"><div class="brain-empty"><b>Checking storage report</b>Rune is measuring what was accepted, rejected, merged, and retained.</div></div>
+          </aside>
+        </div>
+        <div class="proof-boundary" role="note"><b>Proof boundary</b><span>Receipts prove retrieval and context insertion. They do not prove that the model used a card, that the corpus is unbiased, or how many counterfactual model tokens were saved.</span></div>
+      </section>
       <div class="grid cols-2">
         <div class="card">
-          <h3>Search</h3>
+          <h3><label for="q">Search</label></h3>
           <div style="padding-top:12px">
-            <input class="qbox" id="q" type="search" placeholder="e.g. 'hook block tool call'…" autocomplete="off">
+            <div class="brain-query"><input class="qbox" id="q" type="search" placeholder="e.g. 'hook block tool call'…" autocomplete="off" maxlength="2000"><button type="button" class="btn line sm" id="verify-recall" disabled>Verify retrieval</button></div>
+            <div class="brain-query-note" id="verify-recall-status" role="status">Instant results browse saved cards locally. Verify retrieval runs the mission ranker and records a receipt.</div>
             <div class="hstats" id="hstats"></div><div id="hits"></div>
           </div>
         </div>
@@ -1496,7 +1591,7 @@
 </section>
 <div id="toast"></div>
 
-<button id="chatfab" title="Ask Rune"><svg viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M8 12h8M8 9h5"/></svg></button>
+<button id="chatfab" title="Ask Rune" aria-label="Ask Rune" aria-expanded="false" aria-controls="chatpanel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M8 12h8M8 9h5"/></svg></button>
 <div id="chatpanel">
   <div class="chathead">
     <div class="av"><svg viewBox="0 0 24 24" id="chatspark"></svg></div>
@@ -1517,10 +1612,11 @@ const CAPFILL=[GREEN, MINT, MID];              // rotating capsule fills (Donezo
 const PIE=[GREEN, MID, MINT, "#b879a5", "#cec5cb", "#958a92"]; // pie chart exempt from 3-color cap
 const STAGES=["think","plan","build","review","test","ship"];
 const LIVE_MS=15*60*1000;
-const S={events:[],skills:null,solved:[],approvals:{tokens:[]},inbox:[],instances:[],integ:null,wire:true,vault:"",vaultData:null,paused:false,orchs:[],ceo:[],ceoHistory:[],sshKeys:[],pulse:{},briefing:null,briefingLoaded:false,workflows:null};
-const BRIEF={open:new Set(),overrides:new Map(),saving:new Set(),runs:new Map(),busy:false,error:"",feedback:"",
+const S={events:[],skills:null,solved:[],approvals:{tokens:[]},inbox:[],instances:[],integ:null,wire:true,vault:"",vaultData:null,paused:false,orchs:[],ceo:[],ceoHistory:[],sshKeys:[],pulse:{},briefing:null,briefingLoaded:false,workflows:null,brain:null,brainLoaded:false,brainError:""};
+const VERIFY_RECALL={busy:false,message:"",tone:""};
+const BRIEF={open:new Set(),overrides:new Map(),saving:new Set(),runs:new Map(),busy:false,checking:false,error:"",feedback:"",
   fetching:false,fetchPromise:null,fetchError:"",lastCheckedAt:0,lastGoodCheckAt:0,nextFetchAt:0,requestSeq:0,lastJobId:"",lastJobState:"",completedOpen:false};
-const DELIVERY={busy:new Set(),historyOpen:true};
+const DELIVERY={busy:new Set(),actions:new Map(),stepErrors:new Map(),historyOpen:true};
 const BRIEF_REFRESH_IDLE_MS=30000,BRIEF_REFRESH_LIVE_MS=2500,BRIEF_REFRESH_RETRY_MS=10000;
 const CHG=new Set(["Edit","Write","MultiEdit","NotebookEdit","Bash"]);
 const dayKey=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -1614,14 +1710,17 @@ function cmdType(){
   else if(cmdDel&&cmdPos<=0){cmdDel=false;cmdI=(cmdI+1)%CMD_EX.length;wait=600}
   setTimeout(cmdType,wait);
 }
-const CMD_LIVE=new Set(["planning","running","working","pending","review","retrying","repairing","recovering","waiting_permission","waiting-permission"]);
+const PERMISSION_WAIT=new Set(["waiting_permission","waiting-permission"]);
+const CMD_LIVE=new Set(["planning","running","working","pending","review","retrying","repairing","recovering"]);
 const CMD_RECOVERABLE=new Set(["failed","error","stalled","stopped","exhausted","blocked"]);
 const CMD_SUCCESS=new Set(["done","completed","success","succeeded","skipped"]);
+const MISSION_SUCCESS=new Set(["done","completed","success","succeeded"]);
 function cmdMissionInfo(item){
   const run=item.cid?[...S.ceo,...S.ceoHistory].find(entry=>String(entry.cid)===String(item.cid)):null;
   if(run&&run.status)item.status=String(run.status).toLowerCase();
   const status=String((run&&run.status)||item.status||"planning").toLowerCase();
-  return{run,status,live:!!(run&&run.live)||CMD_LIVE.has(status),recoverable:CMD_RECOVERABLE.has(status)};
+  const waitingPermission=PERMISSION_WAIT.has(status),live=waitingPermission?false:!!(run&&run.live)||(run?false:CMD_LIVE.has(status));
+  return{run,status,live,recoverable:CMD_RECOVERABLE.has(status),waitingPermission};
 }
 function cmdTone(status){
   if(CMD_SUCCESS.has(status))return"good";
@@ -1631,7 +1730,7 @@ function cmdTone(status){
 }
 function renderCmdTray(){
   const tray=$("cmdtray"),flow=$("cmdflow");if(!tray||!flow)return;
-  const durableSuccess=new Set(S.ceoHistory.filter(run=>CMD_SUCCESS.has(String(run.status||"").toLowerCase())).map(run=>String(run.cid||"")));
+  const durableSuccess=new Set(S.ceoHistory.filter(run=>MISSION_SUCCESS.has(String(run.status||"").toLowerCase())).map(run=>String(run.cid||"")));
   CMD.items=CMD.items.filter(item=>!(item.cid&&durableSuccess.has(String(item.cid))&&CMD_SUCCESS.has(cmdMissionInfo(item).status)));
   const completed=CMD.items.filter(item=>!item.cid&&CMD_SUCCESS.has(cmdMissionInfo(item).status)),remove=new Set(completed.slice(0,Math.max(0,completed.length-CMD_MAX)).map(item=>item.id));
   if(remove.size)CMD.items=CMD.items.filter(item=>!remove.has(item.id));
@@ -1643,16 +1742,18 @@ function renderCmdTray(){
   if($("cmdtraycount").textContent!==countText)$("cmdtraycount").textContent=countText;
   $("cmdstopactive").disabled=!active.some(entry=>entry.item.cid);
   $("cmdclear").disabled=!info.some(entry=>!entry.item.cid&&CMD_SUCCESS.has(entry.status));
-  const html=info.map(({item,run,status,live,recoverable})=>{
+  const html=info.map(({item,run,status,live,recoverable,waitingPermission})=>{
     const route=run&&run.route?run.route:item.route,meta=[item.meta,item.cid?`id ${item.cid}`:""].filter(Boolean).join(" · ");
+    const prompt=String(item.text||""),promptPreview=clipText(prompt,220),rawPrompt=prompt.length>220?`<details class="cmdmission-raw"><summary aria-label="Show the full mission request"></summary><div class="cmdmission-raw-body">${esc(prompt)}</div></details>`:"";
     const stop=live&&item.cid?`<button type="button" class="btn line sm danger" data-ceo-act="stop" data-cid="${esc(item.cid)}" data-role="">Stop</button>`:"";
     const resume=!live&&recoverable&&item.cid?`<button type="button" class="btn solid sm" data-ceo-act="resume" data-cid="${esc(item.cid)}" data-role="">Continue</button>`:"";
-    const open=item.cid?`<button type="button" class="btn line sm" data-go="#/instances">Open</button>`:"";
+    const resolve=waitingPermission&&item.cid?`<button type="button" class="btn solid sm" data-open-mission="${esc(item.cid)}">Resolve permission</button>`:"";
+    const open=item.cid?`<button type="button" class="btn line sm" data-open-mission="${esc(item.cid)}">Open</button>`:"";
     const dismiss=!live?`<button type="button" class="btn line sm" data-cmd-dismiss="${esc(item.id)}">Dismiss</button>`:"";
     return`<article class="cmdmission" data-state="${esc(status)}" data-cmd-id="${esc(item.id)}">
-      <div class="cmdmission-copy"><div class="cmdmission-prompt">${esc(item.text)}</div><div class="cmdmission-reply">${esc(item.reply||"Preparing the mission…")}</div>
+      <div class="cmdmission-copy"><div class="cmdmission-prompt">${esc(promptPreview)}</div>${rawPrompt}<div class="cmdmission-reply">${esc(item.reply||"Preparing the mission…")}</div>
       <div class="cmdmission-meta"><span class="cmdmission-state ${cmdTone(status)}">${esc(status.replaceAll("_"," ").replaceAll("-"," "))}</span>${meta?`<span>${esc(meta)}</span>`:""}${route?`<span>${esc(route)}</span>`:""}</div></div>
-      <div class="cmdmission-controls">${stop}${resume}${open}${dismiss}</div>
+      <div class="cmdmission-controls">${stop}${resume}${resolve}${open}${dismiss}</div>
     </article>`;
   }).join("");
   const sig=JSON.stringify([html,CMD.collapsed]);if(flow.dataset.sig!==sig){flow.innerHTML=html;flow.dataset.sig=sig;if(!CMD.collapsed)flow.scrollTop=flow.scrollHeight}
@@ -1705,8 +1806,143 @@ function recoveryLog(source,title="Recovery history"){
   }).join("");
   return`<section class="recovery-log"><h4>${esc(title)}</h4>${rows}</section>`;
 }
-function ceoCard(o,full){
-  o=o&&typeof o==="object"?o:{};const roleList=Array.isArray(o.roles)?o.roles:[],status=String(o.status||"pending").toLowerCase();
+const DELIVERY_GOOD=new Set(["passed","reviewed","committed","pushed","not_needed","done","success","clean"]),DELIVERY_LIVE=new Set(["running","working","reviewing","testing","committing","pushing"]),DELIVERY_BAD=new Set(["failed","error","blocked","timed_out","timeout","confirmation_invalid","confirmation_expired"]);
+const deliveryErrorKey=(cid,name)=>`${String(cid||"")}:${String(name||"")}`;
+const deliveryActionStep=action=>action==="test"?"tests":action==="prepare_push"||action==="confirm_push"?"push":action;
+function clearDeliveryErrors(cid,action){
+  const names=action==="review"?["review","tests","commit","push"]:[deliveryActionStep(action)];
+  names.forEach(name=>DELIVERY.stepErrors.delete(deliveryErrorKey(cid,name)));
+}
+function rememberDeliveryError(cid,action,message){
+  const name=deliveryActionStep(action),text=String(message||"Delivery action failed.");
+  const unavailable=name==="tests"&&/could not detect a safe project test command|no safe test command|test command[^.]*unavailable/i.test(text);
+  DELIVERY.stepErrors.set(deliveryErrorKey(cid,name),{status:unavailable?"unavailable":"failed",error:text,client_observed:true});
+}
+function deliveryTestSummary(value){
+  const lines=String(value||"").split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+  const signal=[...lines].reverse().find(line=>/\b(failed|failure|error|traceback|timed out)\b/i.test(line))||lines[lines.length-1]||"";
+  return clipText(signal,130);
+}
+function deliveryStep(delivery,name,cid=""){
+  delivery=delivery&&typeof delivery==="object"?delivery:{};
+  let raw=(delivery.steps&&delivery.steps[name])||delivery[name]||{};
+  if(typeof raw==="string")raw={status:raw};if(!raw||typeof raw!=="object")raw={};
+  const serverStatus=String(pick(raw.status,delivery[`${name}_status`],"pending")).toLowerCase(),errorKey=deliveryErrorKey(cid,name),local=cid?DELIVERY.stepErrors.get(errorKey):null;
+  if(local&&["","idle","pending"].includes(serverStatus))raw={...raw,...local};
+  else if(local&&!["","idle","pending"].includes(serverStatus))DELIVERY.stepErrors.delete(errorKey);
+  const status=String(pick(raw.status,serverStatus,"pending")).toLowerCase(),good=DELIVERY_GOOD.has(status),live=DELIVERY_LIVE.has(status),bad=DELIVERY_BAD.has(status),unavailable=["unavailable","unsupported"].includes(status);
+  const blockedReason=String(pick(raw.blocked_reason,raw.blockedReason,"")),blocked=unavailable||status==="blocked"||!!blockedReason,blockedHint=name==="commit"&&blockedReason?"Mission attribution unavailable.":blockedReason;
+  const fallback=status==="not_needed"?"No action needed.":good?(name==="review"?"Code review passed.":name==="tests"?"Checks passed.":name==="commit"?"Commit created.":"Pushed successfully."):
+    live?(name==="review"?"Reviewing changes…":name==="tests"?"Running project checks…":name==="commit"?"Creating commit…":"Pushing commit…"):
+    unavailable?"No safe project test command is available.":status==="awaiting_confirmation"?"Ready to push; confirmation is required.":bad?`${name==="tests"?"Tests":name[0].toUpperCase()+name.slice(1)} did not complete.`:"Not run yet.";
+  const outputHint=name==="tests"&&!good?deliveryTestSummary(raw.output):"";
+  const detail=clipText(pick(raw.detail,raw.error,raw.message,blockedHint,
+    name==="commit"&&raw.sha?`${String(raw.sha).slice(0,10)}${raw.message?` · ${raw.message}`:""}`:"",
+    name==="push"&&raw.remote?`${raw.remote}${raw.branch?`/${raw.branch}`:""}${raw.head?` · ${String(raw.head).slice(0,10)}`:""}`:"",outputHint,fallback),130);
+  return{raw,status,good,live,bad,blocked,unavailable,detail,tone:good?"good":live?"live":bad?"bad":blocked?"warn":""};
+}
+function deliveryPanel(o){
+  const delivery=o&&o.delivery&&typeof o.delivery==="object"?o.delivery:{};
+  const cid=String(o&&o.cid||""),locallyBusy=DELIVERY.busy.has(cid),busyAction=DELIVERY.actions.get(cid)||"";
+  const review=deliveryStep(delivery,"review",cid),tests=deliveryStep(delivery,"tests",cid),commit=deliveryStep(delivery,"commit",cid),push=deliveryStep(delivery,"push",cid);
+  const anyBusy=locallyBusy||[review,tests,commit,push].some(step=>step.live),changed=delivery.changed!==false,available=delivery.available!==false;
+  const commitBlocked=clipText(pick(commit.raw.blocked_reason,commit.raw.blockedReason),200);
+  const currentProblem=clipText(pick(review.bad||review.unavailable?review.detail:"",tests.bad||tests.unavailable?tests.detail:"",commit.bad||commit.unavailable?commit.detail:"",push.bad||push.unavailable?push.detail:"",delivery.error),240);
+  const attributionProblem=clipText(pick(commitBlocked,delivery.blocked_reason),240);
+  const hasFailure=[review,tests,commit,push].some(step=>step.bad),hasUnavailable=[review,tests,commit,push].some(step=>step.unavailable);
+  const interrupted=[["review",review],["tests",tests],["commit",commit],["push",push]].find(([,step])=>step.bad||step.unavailable);
+  const busyLabel=busyAction==="test"?"tests running":busyAction==="prepare_push"||busyAction==="confirm_push"?"push running":busyAction?`${busyAction} running`:"";
+  const topStatus=!available?"unavailable":busyLabel||(interrupted?`${interrupted[0]} ${interrupted[1].unavailable?"unavailable":"failed"}`:String(delivery.status||"review_pending").replaceAll("_"," "));
+  const topTone=push.good||String(delivery.status)==="clean"?"good":hasFailure?"bad":hasUnavailable?"warn":anyBusy?"":"warn";
+  const steps=[
+    {key:"review",name:"Review",step:review,enabled:!anyBusy&&available&&review.status!=="not_needed",label:review.status==="not_needed"?"Not needed":review.good?"Review again":review.bad?"Retry review":"Review changes"},
+    {key:"test",name:"Tests",step:tests,enabled:!anyBusy&&available&&review.good&&tests.status!=="not_needed",label:tests.status==="not_needed"?"Not needed":tests.good?"Run again":tests.bad||tests.status==="unavailable"?"Retry tests":"Run tests"},
+    {key:"commit",name:"Commit",step:commit,enabled:!anyBusy&&available&&changed&&review.good&&tests.good&&!commit.good&&!commitBlocked,label:commit.status==="not_needed"?"Not needed":commit.good?"Committed":"Commit"},
+    {key:"prepare_push",name:"Push",step:push,enabled:!anyBusy&&available&&commit.good&&!push.good,label:push.status==="not_needed"?"Not needed":push.good?"Pushed":push.bad?"Retry push":"Push"},
+  ];
+  const rows=steps.map((item,index)=>{const busy=item.key===busyAction,marker=item.step.good?"✓":item.step.bad||item.step.blocked?"!":item.step.live?"•":index+1,busyText=item.key==="review"?"Reviewing…":item.key==="test"?"Testing…":item.key==="commit"?"Committing…":"Preparing…";return`<div class="delivery-step" data-tone="${item.step.tone}">
+    <div class="delivery-step-top"><span class="delivery-dot">${marker}</span><span class="delivery-step-name">${item.name}</span></div>
+    <div class="delivery-step-detail">${esc(item.step.detail)}</div>
+    <button type="button" class="btn line sm" data-ceo-delivery="${item.key}" data-cid="${esc(cid)}"${item.enabled?"":" disabled"}${busy?' aria-busy="true"':""}>${esc(busy?busyText:item.label)}</button></div>`}).join("");
+  const testEvidence=pick(tests.raw.output,tests.raw.error,tests.raw.detail);
+  const evidence=[
+    review.raw.report?`<details><summary>Change review report</summary><pre>${esc(review.raw.report)}</pre></details>`:"",
+    testEvidence?`<details><summary>Test output · ${esc(tests.status)}</summary><pre>${esc(testEvidence)}</pre></details>`:"",
+  ].filter(Boolean).join("");
+  const next=String(delivery.next_action||"").trim();
+  const noticeLabel=interrupted?`${interrupted[0][0].toUpperCase()+interrupted[0].slice(1)} ${interrupted[1].unavailable?"unavailable":"stopped"}`:"Delivery needs attention";
+  const notices=[currentProblem?`<div class="delivery-blocked${hasFailure?" bad":""}" role="status"><b>${esc(noticeLabel)}</b><span>${esc(currentProblem)}</span></div>`:"",attributionProblem&&attributionProblem!==currentProblem?`<div class="delivery-blocked" role="note"><b>Commit boundary</b><span>${esc(attributionProblem)}</span></div>`:""].filter(Boolean).join("");
+  return`<section class="delivery-pipeline" aria-label="Review and delivery pipeline"${anyBusy?' aria-busy="true"':""}><div class="delivery-head"><div class="delivery-head-copy"><b>Review and delivery</b><span>${esc(next||(!available?"Delivery controls are unavailable for this saved mission.":!changed?"No repository changes need delivery.":"Review the completed work, verify it, then commit and push explicitly."))}</span></div><span class="delivery-state ${topTone}">${esc(topStatus)}</span></div><div class="delivery-steps">${rows}</div>${notices}${evidence?`<div class="delivery-evidence">${evidence}</div>`:""}</section>`;
+}
+function deliveryCommitDefault(o){
+  const name=String(pick(o&&o.name,o&&o.summary,o&&o.goal,"completed mission")).replace(/\s+/g," ").trim();
+  return`chore: ${name}`.slice(0,72);
+}
+function missionByCid(cid){return[...S.ceo,...S.ceoHistory].find(run=>String(run.cid||"")===String(cid))||null}
+const nextPaint=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+function missionActivityNode(cid){
+  return[...document.querySelectorAll("#ceoruns2 .mrun[data-cid]")].find(node=>String(node.dataset.cid||"")===String(cid))||null;
+}
+async function openMissionActivity(cid){
+  cid=String(cid||"").trim();if(!cid)return false;
+  MOPEN.delete(cid);MOPEN.add(cid);DELIVERY.historyOpen=true;CMD.collapsed=true;renderCmdTray();
+  location.hash="#/instances";route();renderCeo();await nextPaint();
+  let target=missionActivityNode(cid);
+  if(!target){await poll();MOPEN.add(cid);DELIVERY.historyOpen=true;renderCeo();await nextPaint();target=missionActivityNode(cid)}
+  const destination=target||$("ceoruns2");if(!destination)return false;
+  if(target){target.open=true;target.classList.remove("mission-focus");void target.offsetWidth;target.classList.add("mission-focus");
+    setTimeout(()=>target.classList.remove("mission-focus"),1800);target.querySelector("summary")?.focus({preventScroll:true})}
+  destination.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
+  if(!target)toast("Opened Agent console — this mission is still syncing.");
+  return!!target;
+}
+function mergeDeliveryResult(cid,result){
+  const current=missionByCid(cid);if(!current||!result||typeof result!=="object")return;
+  const mission=result.mission&&typeof result.mission==="object"?result.mission:null;
+  if(mission)Object.assign(current,mission);else if(result.delivery&&typeof result.delivery==="object")current.delivery=result.delivery;
+}
+function providerFallbackPanel(role){
+  const fallback=role&&role.provider_fallback&&typeof role.provider_fallback==="object"?role.provider_fallback:null;
+  if(fallback){
+    const status=String(fallback.status||"running").toLowerCase(),tone=status==="succeeded"?"good":status==="failed"?"bad":"live";
+    const state=status==="succeeded"?"completed":status==="failed"?"needs attention":"running";
+    const label=String(fallback.label||"Claude → Codex"),from=String(fallback.from_model||fallback.from_provider||"Claude"),to=String(fallback.to_model||fallback.to_provider||"Codex");
+    const summary=String(fallback.summary||"Codex is continuing the unfinished role after Claude reached a capacity limit.");
+    return`<section class="provider-fallback" data-tone="${tone}" role="status" aria-label="Provider fallback ${esc(state)}"><div class="provider-fallback-top"><b>Capacity fallback</b><span class="provider-fallback-state">${esc(state)}</span></div><div class="provider-fallback-route">${esc(label)} · ${esc(from)} → ${esc(to)}</div><div class="provider-fallback-copy">${esc(summary)}</div></section>`;
+  }
+  const unavailable=role&&role.fallback_unavailable&&typeof role.fallback_unavailable==="object"?role.fallback_unavailable:null;
+  if(!unavailable)return"";
+  const reason=String(unavailable.reason||"Codex was not ready when Claude reached its capacity limit.");
+  return`<section class="provider-fallback" data-tone="warn" role="status" aria-label="Codex fallback unavailable"><div class="provider-fallback-top"><b>Codex fallback unavailable</b><span class="provider-fallback-state">not switched</span></div><div class="provider-fallback-copy">${esc(reason)}</div></section>`;
+}
+function missionBriefPanel(o){
+  const brief=String(pick(o&&o.refined,o&&o.goal,"")).trim();if(!brief)return"";
+  const preview=clipText(brief.replace(/\s+/g," "),150);
+  return`<details class="mission-brief"><summary><span class="mission-brief-label">Mission brief</span><span class="mission-brief-preview">${esc(preview)}</span><span class="mission-brief-action" aria-hidden="true"></span></summary><div class="mission-brief-body">${esc(brief)}</div></details>`;
+}
+function permissionGatePanel(o,role){
+  role=role&&typeof role==="object"?role:{};
+  const request=role.permission_request&&typeof role.permission_request==="object"?role.permission_request:o&&o.permission_request&&typeof o.permission_request==="object"?o.permission_request:{};
+  const requestId=String(request.request_id||""),hasRequestId=!!requestId;
+  const isPlanner=!String(role.id||"").trim(),settling=!!o.live,canDecide=hasRequestId&&!settling;
+  const canAuthorize=request.can_authorize===true&&canDecide&&!isPlanner;
+  const reason=String(request.summary||request.reason||role.detail||"The worker stopped at a permission boundary.");
+  const rawScope=request.scope_label||request.scope||request.permission_class||"";
+  const scope=Array.isArray(rawScope)?rawScope.map(String).join(", "):String(rawScope||"");
+  const mode=String(role.permission_mode||o.permission_mode||((role.safe_permissions===false||o.safe_permissions===false)?"skip":"safe")).toLowerCase()==="skip"?"skip":"safe";
+  const modeLabel=mode==="skip"?"bypass was active":"safe mode";
+  const cid=esc(o.cid||""),roleId=esc(role.id||""),scopeAttr=esc(scope||reason.slice(0,180)),requestIdAttr=esc(requestId);
+  const allowTitle=settling?"Wait for the worker to settle; these controls unlock automatically.":isPlanner?"CEO planning permissions cannot be authorized here; retry after fixing the prerequisite or deny and stop.":canAuthorize?"Authorize this recorded boundary and resume the unfinished role.":String(request.operator_action||"This request cannot be authorized in Rune; fix the credential or prerequisite, then retry.");
+  const decisionNote=settling?"The worker is still settling. Decisions unlock automatically when the process has fully stopped.":!hasRequestId?"This legacy permission record has no decision nonce. Refresh after the server migrates it; Rune will not submit an unbound decision.":isPlanner?"Allow is unavailable for CEO planning. Retry adds no permission. Deny stops this planner mission.":"Allow applies only to this recorded mission boundary. Retry adds no permission. Deny skips only this role and continues eligible dependents.";
+  return`<section class="permission-gate" role="group" aria-label="Operator permission decision">
+    <div class="permission-gate-head"><b>Operator decision required</b><span class="permission-gate-mode">${esc(modeLabel)}</span></div>
+    <p>${esc(reason)}</p>${scope?`<span class="permission-gate-scope">Requested scope · ${esc(scope)}</span>`:""}
+    <div class="racts"><button type="button" class="btn solid sm" data-ceo-act="allow" data-cid="${cid}" data-role="${roleId}" data-permission-label="${scopeAttr}" data-permission-request-id="${requestIdAttr}" data-permission-planner="${isPlanner}" data-permission-settling="${settling}" title="${esc(allowTitle)}"${canAuthorize?"":" disabled"}>Allow &amp; resume</button><button type="button" class="btn line sm" data-ceo-act="retry" data-cid="${cid}" data-role="${roleId}" data-permission-request-id="${requestIdAttr}" data-permission-planner="${isPlanner}" data-permission-settling="${settling}"${canDecide?"":" disabled"}>Retry after fixing</button><button type="button" class="btn line sm danger" data-ceo-act="deny" data-cid="${cid}" data-role="${roleId}" data-permission-request-id="${requestIdAttr}" data-permission-planner="${isPlanner}" data-permission-settling="${settling}"${canDecide?"":" disabled"}>${isPlanner?"Deny &amp; stop":"Deny &amp; skip"}</button></div>
+    <small class="permission-gate-note">${esc(decisionNote)}</small>
+  </section>`;
+}
+function ceoCard(o,full,history=false){
+  o=o&&typeof o==="object"?o:{};const roleList=Array.isArray(o.roles)?o.roles:[],status=String(o.status||"pending").toLowerCase(),cardName=String(o.name||o.goal||"Mission"),cardTitle=clipText(cardName.replace(/\s+/g," "),180);
   const planning=status==="planning",recovering=["retrying","repairing","recovering"].includes(status),waiting=["review","waiting_permission","waiting-permission"].includes(status);
   const segs=planning||(!roleList.length&&recovering)?`<i class="${recovering?"recovery":"working"}" title="${recovering?"Recovery is in progress":"The CEO is staffing the roles"}"></i>`
     :roleList.map(role=>{const rs=String(role.status||"pending").toLowerCase(),cls=rs==="done"?"done":["working","running"].includes(rs)?"working":["review","waiting_permission","waiting-permission"].includes(rs)?"review":["retrying","repairing","recovering"].includes(rs)?"recovery":["failed","blocked","error","exhausted"].includes(rs)?"bad":"";return`<i class="${cls}" title="${esc(role.id||role.title||"role")}: ${esc(rs)}${role.detail?" — "+esc(role.detail):""}"></i>`}).join("");
@@ -1716,42 +1952,56 @@ function ceoCard(o,full){
   const roles=roleList.map(role=>{
     role=role&&typeof role==="object"?role:{};const rs=String(role.status||"pending").toLowerCase();
     const label=rs==="failed"&&role.limit?"limit":rs==="exhausted"?"out of turns":rs.replaceAll("_"," ").replaceAll("-"," ");
-    const gated=["review","waiting_permission","waiting-permission"].includes(rs)&&o.live;
-    const acts=gated?`<div class="racts"><button class="btn line sm" data-ceo-act="approve" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Approve</button><button class="btn line sm" data-ceo-act="redo" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Redo</button><button class="btn line sm danger" data-ceo-act="skip" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Skip</button></div>`:"";
+    const reviewGated=rs==="review"&&o.live;
+    const acts=PERMISSION_WAIT.has(rs)?permissionGatePanel(o,role):reviewGated?`<div class="racts"><button class="btn line sm" data-ceo-act="approve" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Approve</button><button class="btn line sm" data-ceo-act="redo" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Redo</button><button class="btn line sm danger" data-ceo-act="skip" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Skip</button></div>`:"";
     const showResult=full||["review","waiting_permission","waiting-permission","failed","error","exhausted"].includes(rs),result=String(role.result||"");
     const output=result&&showResult?`<div class="rout">${esc(result.slice(0,1800))}</div>`:"";
     const dependencies=Array.isArray(role.depends_on)?role.depends_on:[],modelMeta=[role.model,role.turns!=null?`${role.turns}t`:"",role.secs?`${role.secs}s`:"",role.cost?`$${role.cost}`:"",role.review?"gated":"",role.continues?`continued ${role.continues}×`:"",dependencies.length?`after ${dependencies.join(",")}`:""].filter(Boolean).join(" · ");
-    return`<div class="rrow"><span class="rstat ${esc(rs)}">${esc(label)}</span><div class="rbd"><div class="rt">${esc(role.title||role.id||"Role")}${modelMeta?`<small>${esc(modelMeta)}</small>`:""}</div>${role.detail?`<div class="rm">${esc(role.detail)}</div>`:""}${full&&role.mission?`<div class="rm">${esc(String(role.mission).slice(0,300))}</div>`:""}${output}${recoveryLog(role,"Role recovery")}${acts}</div></div>`;
+    const fallbackPanel=providerFallbackPanel(role);
+    return`<div class="rrow"><span class="rstat ${esc(rs)}">${esc(label)}</span><div class="rbd"><div class="rt">${esc(role.title||role.id||"Role")}${modelMeta?`<small>${esc(modelMeta)}</small>`:""}</div>${role.detail?`<div class="rm">${esc(role.detail)}</div>`:""}${fallbackPanel}${full&&!history&&role.mission?`<div class="rm">${esc(String(role.mission).slice(0,300))}</div>`:""}${output}${recoveryLog(role,"Role recovery")}${acts}</div></div>`;
   }).join("");
   const roleRows=planning?`<div class="rrow"><span class="rstat working">planning</span><div class="rbd"><div class="rt">The CEO is staffing the roles…</div><div class="rm">Reading the brain and selecting the roster, models, and effort.</div></div></div>`
     :recovering&&!roles?`<div class="rrow"><span class="rstat ${esc(status)}">${esc(status)}</span><div class="rbd"><div class="rt">The recovery harness is working</div><div class="rm">The retry or safe repair is recorded here as it progresses.</div></div></div>`:roles;
+  const hasPermissionWait=PERMISSION_WAIT.has(status)||roleList.some(role=>PERMISSION_WAIT.has(String(role.status||"").toLowerCase()));
+  const missionPermission=PERMISSION_WAIT.has(status)&&!roleList.some(role=>PERMISSION_WAIT.has(String(role.status||"").toLowerCase()))?permissionGatePanel(o,{}):"";
   const doneN=roleList.filter(role=>["done","skipped"].includes(String(role.status||"").toLowerCase())).length;
-  const resumable=!o.live&&(roleList.some(role=>CMD_RECOVERABLE.has(String(role.status||"").toLowerCase()))||CMD_RECOVERABLE.has(status));
+  const resumable=!o.live&&!hasPermissionWait&&(roleList.some(role=>CMD_RECOVERABLE.has(String(role.status||"").toLowerCase()))||CMD_RECOVERABLE.has(status));
   const archive=`<button class="btn line sm" data-ceo-act="archive" data-cid="${esc(o.cid||"")}" data-role="" title="Archive this mission without deleting its files">Archive</button>`;
-  const controls=o.live?"":`<div style="display:flex;align-items:center;gap:11px;margin-top:10px;flex-wrap:wrap">${resumable?`<button class="btn solid sm" data-ceo-act="resume" data-cid="${esc(o.cid||"")}" data-role="">Continue</button>`:""}${archive}<span class="rm" style="margin:0;color:var(--ink3)">${resumable?`Retries only the ${Math.max(0,roleList.length-doneN)} unfinished role${roleList.length-doneN===1?"":"s"}.`:"Finished — archive when the record is no longer needed."}</span></div>`;
+  const deliveryStuck=history&&[["review",deliveryStep(o&&o.delivery,"review",o.cid)],["tests",deliveryStep(o&&o.delivery,"tests",o.cid)],["commit",deliveryStep(o&&o.delivery,"commit",o.cid)],["push",deliveryStep(o&&o.delivery,"push",o.cid)]].some(([,s])=>s.bad||s.unavailable||s.blocked);
+  const controlHint=PERMISSION_WAIT.has(status)?"Resolve the named permission above, or archive to abandon the mission.":resumable?`Retries only the ${Math.max(0,roleList.length-doneN)} unfinished role${roleList.length-doneN===1?"":"s"}.`:deliveryStuck?"Delivery is blocked — commit or push it manually in Git, or archive to set it aside. Archiving keeps every file.":"Finished — archive when the record is no longer needed.";
+  const controls=o.live?"":`<div style="display:flex;align-items:center;gap:11px;margin-top:10px;flex-wrap:wrap">${resumable?`<button class="btn solid sm" data-ceo-act="resume" data-cid="${esc(o.cid||"")}" data-role="">Continue</button>`:""}${archive}<span class="rm" style="margin:0;color:var(--ink3)">${controlHint}</span></div>`;
   const quick=o.live?`<button type="button" class="mquickstop" data-ceo-act="stop" data-cid="${esc(o.cid||"")}" data-role="">Stop</button>`:"";
-  return`<details class="mrun" data-cid="${esc(o.cid||"")}" ${MOPEN.has(o.cid)?"open":""}><summary><span class="chev"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span class="mname" title="${esc(o.goal||o.name||"Mission")}">${esc(o.name||o.goal||"Mission")}</span><span class="mbar">${segs}</span><span class="mmeta">${planning?"staffing…":`${doneN}/${roleList.length}`} · $${Number(o.cost||0).toFixed(2)}${o.resumes?` · resumed ${o.resumes}×`:""}${o.account?` · ${esc(o.account)}`:""}</span>${quick}${statPill}</summary><div class="mbody">${full&&pick(o.refined,o.goal)?`<div class="rm" style="padding:8px 0 4px;color:var(--ink2)">${esc(pick(o.refined,o.goal))}</div>`:""}${why}${roleRows||`<div class="none">Waiting for role details.</div>`}${recoveryLog(o)}${controls}</div></details>`;
+  return`<details class="mrun" data-cid="${esc(o.cid||"")}" ${MOPEN.has(o.cid)?"open":""}><summary><span class="chev"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span class="mname" title="${esc(cardTitle)}">${esc(cardTitle)}</span><span class="mbar">${segs}</span><span class="mmeta">${planning?"staffing…":`${doneN}/${roleList.length}`} · $${Number(o.cost||0).toFixed(2)}${o.resumes?` · resumed ${o.resumes}×`:""}${o.account?` · ${esc(o.account)}`:""}</span>${quick}${statPill}</summary><div class="mbody">${history?deliveryPanel(o):""}${full?missionBriefPanel(o):""}${why}${roleRows||missionPermission||`<div class="none">Waiting for role details.</div>`}${recoveryLog(o)}${controls}</div></details>`;
 }
 function renderCeo(){
-  const runs=S.ceo.slice(0,8);
-  const active=runs.filter(o=>["running","review"].includes(o.status)||o.live);
+  const focusCid=[...MOPEN].reverse()[0]||"",activeAll=S.ceo.filter(o=>!MISSION_SUCCESS.has(String(o.status||"").toLowerCase()));
+  const runs=activeAll.slice(0,8),focusedActive=activeAll.find(o=>String(o.cid||"")===focusCid);
+  if(focusedActive&&!runs.includes(focusedActive))runs.push(focusedActive);
+  const seen=new Set(),historyAll=[...S.ceoHistory.filter(o=>MISSION_SUCCESS.has(String(o.status||"").toLowerCase())),...S.ceo.filter(o=>MISSION_SUCCESS.has(String(o.status||"").toLowerCase()))].filter(o=>{const id=String(o.cid||"");if(!id||seen.has(id))return false;seen.add(id);return true}),history=historyAll.slice(0,12),focusedHistory=historyAll.find(o=>String(o.cid||"")===focusCid);
+  if(focusedHistory&&!history.includes(focusedHistory))history.push(focusedHistory);
+  const active=runs.filter(o=>["running","review","waiting_permission","waiting-permission"].includes(String(o.status||"").toLowerCase())||o.live);
   const html1=(active.length?active:runs.slice(0,3)).map(o=>ceoCard(o,false)).join("")
     ||`<div class="none">no missions yet — type a goal above and the CEO staffs it.</div>`;
   const el1=$("ceoruns");if(el1&&html1!==el1.dataset.sig){el1.dataset.sig=html1;el1.innerHTML=html1}
-  const html2=runs.map(o=>ceoCard(o,true)).join("")
-    ||`<div class="none">no missions yet — use the command bar on the dashboard.</div>`;
+  const activeHtml=runs.map(o=>ceoCard(o,true)).join("")||`<div class="none">no active missions — completed work stays available below for review and delivery.</div>`;
+  const historyHtml=history.length?`<details class="mission-history"${DELIVERY.historyOpen?" open":""}><summary><span class="mission-history-chev"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span class="mission-history-title"><b>Completed &amp; delivery</b><span>Review changes, run checks, commit, and push when you are ready.</span></span><span class="mission-history-count">${history.length} completed</span></summary><div class="mission-history-list">${history.map(o=>ceoCard(o,true,true)).join("")}</div></details>`:"";
+  const html2=activeHtml+historyHtml;
   const el2=$("ceoruns2");if(el2&&html2!==el2.dataset.sig){el2.dataset.sig=html2;el2.innerHTML=html2}
 }
-document.addEventListener("toggle",e=>{const d=e.target.closest?.(".mrun");if(!d)return;
-  d.open?MOPEN.add(d.dataset.cid):MOPEN.delete(d.dataset.cid)},true);
+document.addEventListener("toggle",e=>{
+  if(e.target.matches?.(".cmdmission-raw")){e.target.querySelector("summary")?.setAttribute("aria-label",e.target.open?"Hide the full mission request":"Show the full mission request");return}
+  if(e.target.matches?.(".mission-history")){DELIVERY.historyOpen=e.target.open;return}
+  if(e.target.matches?.(".brief-completed")){BRIEF.completedOpen=e.target.open;return}
+  const d=e.target.closest?.(".mrun");if(!d)return;d.open?MOPEN.add(d.dataset.cid):MOPEN.delete(d.dataset.cid)},true);
 
 /* ---------- chat assistant ---------- */
 const CHAT={open:false,busy:false,history:[]};
 function chatToggle(v){const wasOpen=CHAT.open;CHAT.open=(v===undefined)?!CHAT.open:v;
   $("chatpanel").classList.toggle("open",CHAT.open);
+  $("chatfab").setAttribute("aria-expanded",String(CHAT.open));$("instancechat").setAttribute("aria-expanded",String(CHAT.open));
   if(CHAT.open){$("chatinput").focus();
     if(!CHAT.history.length&&!$("chatlog").children.length)chatAdd("a","Hi — I'm your Rune assistant. Ask me about the software, the brain, or anything else.");}
-  else if(wasOpen)$("chatfab").focus({preventScroll:true});}
+  else if(wasOpen){const inline=$("instancechat"),target=inline.getClientRects().length?inline:$("chatfab");target.focus({preventScroll:true})}}
 function chatClear(){
   if(CHAT.busy){toast("Wait for the current reply before clearing chat.",true);return}
   CHAT.history=[];$("chatlog").replaceChildren();
@@ -1820,12 +2070,12 @@ function refreshBriefingData(options={}){
 async function poll(options={}){
   if(S.paused){render();return}
   try{
-    const [ev,reg,sol,app,inb,obs,inst,integ,vlt,orc,shk,pls,ceo,ver,wfl]=await Promise.all([
+    const [ev,reg,sol,app,inb,obs,inst,integ,vlt,orc,shk,pls,ceo,ver,brn,wfl]=await Promise.all([
       jget("/state/events.jsonl"),jget("/skills/registry.json"),jget("/hermes/solved.jsonl"),
       jget("/state/approvals.json"),jget("/state/inbox.jsonl",1),jget("/memory/OBSIDIAN.md",1),
       jget("/api/instances",1),jget("/api/integrations",1),jget("/api/vault",1),
       jget("/api/orchestrations",1),jget("/api/ssh-creds",1),jget("/api/pulse",1),
-      jget("/api/ceo",1),jget("/api/version",1),jget("/api/workflows",1),
+      jget("/api/ceo",1),jget("/api/version",1),jget("/api/brain",1),jget("/api/workflows",1),
       refreshBriefingData({force:!!options.forceBriefing})]);
     checkVersion(ver);            // self-modifying app: offer reload when the shell changes
     S.pulse=pls?JSON.parse(pls):{};
@@ -1837,6 +2087,9 @@ async function poll(options={}){
     const ceoEnvelope=ceo?JSON.parse(ceo):{};
     S.ceo=Array.isArray(ceoEnvelope.runs)?ceoEnvelope.runs:[];
     S.ceoHistory=Array.isArray(ceoEnvelope.history)?ceoEnvelope.history:[];
+    S.brainLoaded=true;
+    if(brn){try{const brainPayload=JSON.parse(brn);if(!brainPayload||typeof brainPayload!=="object"||Array.isArray(brainPayload))throw new Error("invalid brain proof response");S.brain=brainPayload;S.brainError=""}catch(error){S.brain=null;S.brainError=error&&error.message?error.message:"Invalid brain proof response."}}
+    else{S.brain=null;S.brainError="Brain proof endpoint unavailable on this server."}
     S.sshKeys=shk?(JSON.parse(shk).keys||[]):[];
     if(vlt){try{S.vaultData=JSON.parse(vlt)}catch(e){}}
     S.vault=(S.vaultData&&S.vaultData.vault)||(obs.split("\n").find(l=>l.toLowerCase().startsWith("vault:"))||"vault: ?").split(":").slice(1).join(":").trim();
@@ -2431,6 +2684,8 @@ function render(){
 
   // brain
   renderHermes();
+  renderBrainEvidence();
+  syncVerifyRecall();
   const vslug=(S.vault.split("\\").pop()||"");
   $("vaultinfo").innerHTML=`<div>Brain section: <code class="k">Rune/Hermes/</code></div>
     <div>Vault: <span class="mono" style="font-size:11px">${esc(S.vault)}</span></div>
@@ -2459,7 +2714,7 @@ function renderHermes(){
     rows=S.solved.map(r=>{const doc=tok(r.problem+" "+r.solution+" "+(r.tags||[]).join(" "));
       let sc=qs.size?[...qs].filter(w=>doc.has(w)).length/qs.size:0;if(r.stale)sc*=.5;return[sc,r]})
       .filter(([s])=>s>0).sort((a,b)=>b[0]-a[0]).slice(0,6);
-    $("hstats").textContent=rows.length?rows.filter(([s])=>s>=.34).length+" hit(s) · threshold 0.34":"Miss — solve it, then feed the flywheel";
+    $("hstats").textContent=rows.length?rows.filter(([s])=>s>=.34).length+" local match(es) · browse threshold 0.34":"Local browse miss — use Verify retrieval for the mission ranker";
   }else{rows=S.solved.slice().reverse().slice(0,6).map(r=>[null,r]);
     $("hstats").textContent=S.solved.length+" solved · "+S.solved.filter(r=>r.stale).length+" stale · type to search"}
   $("hits").innerHTML=rows.map(([sc,r])=>
@@ -2467,9 +2722,104 @@ function renderHermes(){
      <div class="s">${esc(r.solution)}</div>
      <div class="t">[${esc(r.id)}] ${(r.tags||[]).map(t=>"#"+esc(t)).join(" ")} · ${esc((r.ts||"").slice(0,10))}${r.stale?" · stale":""}</div></div>`).join("");
 }
-$("q").addEventListener("input",renderHermes);
+const proofNumber=value=>value===null||value===undefined||value===""?null:(Number.isFinite(Number(value))?Number(value):null);
+const proofValue=value=>value===null||value===undefined||value===""?"not recorded":String(value);
+const proofScore=value=>{const number=proofNumber(value);return number===null?"not recorded":String(number)};
+function proofBytes(value){
+  const number=proofNumber(value);if(number===null)return"not recorded";const bytes=Math.max(0,Math.round(number));
+  if(bytes<1024)return`${bytes.toLocaleString()} B`;
+  const units=["KiB","MiB","GiB"],power=Math.min(units.length,Math.floor(Math.log(bytes)/Math.log(1024))),scaled=bytes/Math.pow(1024,power);
+  return`${scaled.toFixed(scaled>=10?1:2)} ${units[power-1]} (${bytes.toLocaleString()} B)`;
+}
+function proofBytesShort(value){const full=proofBytes(value),marker=full.indexOf(" (");return marker<0?full:full.slice(0,marker)}
+function recallReceiptEntries(){
+  const runs=[...S.ceo,...S.ceoHistory],missionById=new Map(runs.map(run=>[String(run&&run.cid||""),run]));
+  let raw=[];
+  if(S.brain&&Array.isArray(S.brain.receipts))raw=S.brain.receipts;
+  else for(const run of runs){
+    const history=Array.isArray(run&&run.recall_receipts)?run.recall_receipts:[];raw.push(...history);
+    if(run&&run.recall_receipt&&typeof run.recall_receipt==="object")raw.push(run.recall_receipt);
+  }
+  const found=new Map();
+  raw.forEach((receipt,index)=>{if(!receipt||typeof receipt!=="object"||Array.isArray(receipt))return;
+    const cid=String(receipt.cid||""),key=String(receipt.receipt_id||`${cid}:${receipt.attempt??index}:${receipt.ts||""}`);
+    if(!found.has(key))found.set(key,{receipt,run:missionById.get(cid)||null,key});
+  });
+  return[...found.values()].sort((a,b)=>{const bt=Date.parse(b.receipt.ts||"")||0,at=Date.parse(a.receipt.ts||"")||0;return bt-at||(proofNumber(b.receipt.attempt)||0)-(proofNumber(a.receipt.attempt)||0)});
+}
+function recallFact(label,value,wrap=false){return`<div class="recall-fact"><span>${esc(label)}</span><b${wrap?' class="wrap"':""}>${esc(proofValue(value))}</b></div>`}
+function recallCardRows(rows,kind="injected"){
+  return rows.map(card=>{card=card&&typeof card==="object"?card:{};const components=card.components&&typeof card.components==="object"?card.components:{},parts=[["lex",components.lexical],["quality",components.quality],["fresh",components.freshness]].filter(([,value])=>proofNumber(value)!==null).map(([name,value])=>`${name} ${proofScore(value)}`),state=card.stale?"stale":kind==="candidate"?(card.selected?"selected":"not selected"):"current",detail=[state,...parts].join(" · ");
+    return`<div class="${kind==="candidate"?`recall-candidate${card.selected?" selected":""}`:"recall-card-item"}"><span class="recall-card-id" title="${esc(proofValue(card.id))}">${esc(proofValue(card.id))}</span><span class="recall-card-score">score ${esc(proofScore(card.score))}</span><span class="${kind==="candidate"?"":"recall-card-state "}${card.stale?"stale":""}">${esc(detail)}</span></div>`}).join("");
+}
+function renderRecallLedger(entries){
+  const state=$("brain-proof-state"),summary=$("recall-ledger-summary"),count=$("recall-ledger-count"),host=$("recall-receipts");if(!state||!summary||!count||!host)return;
+  if(!S.brainLoaded){state.className="brain-proof-state";state.textContent="Checking receipts";summary.textContent="Waiting for the receipt endpoint.";count.textContent="0 receipts";host.innerHTML=`<div class="brain-empty"><b>Checking recall proof</b>Rune has not finished loading the retrieval ledger.</div>`;return}
+  if(S.brainError){state.className="brain-proof-state warn";state.textContent="Proof unavailable";summary.textContent="The current server did not return the Brain proof envelope.";count.textContent="0 receipts";host.innerHTML=`<div class="brain-empty bad"><b>Recall proof is unavailable</b>${esc(S.brainError)} Legacy recall flags cannot show which cards entered context.</div>`;return}
+  if(!entries.length){state.className="brain-proof-state";state.textContent="Ready · no attempts";summary.textContent="The receipt endpoint is ready. Run or verify a retrieval to create proof.";count.textContent="0 receipts";host.innerHTML=`<div class="brain-empty"><b>No recall attempts recorded</b>Use Verify retrieval below or launch a mission. A hit, miss, or error receipt will appear here.</div>`;return}
+  const localOutcomes={hit:0,miss:0,error:0};entries.forEach(({receipt})=>{const key=String(receipt.outcome||"").toLowerCase();if(["hit","miss","error"].includes(key))localOutcomes[key]++});
+  const aggregate=S.brain&&S.brain.summary&&typeof S.brain.summary==="object"?S.brain.summary:{},attempts=proofNumber(aggregate.attempts)??entries.length,outcomes={hit:proofNumber(aggregate.hits)??localOutcomes.hit,miss:proofNumber(aggregate.misses)??localOutcomes.miss,error:proofNumber(aggregate.errors)??localOutcomes.error},totalContext=proofNumber(aggregate.injected_tokens_estimate);
+  state.className="brain-proof-state good";state.textContent=entries[0].receipt.corpus&&entries[0].receipt.corpus.fresh_read?"Fresh read recorded":"Receipts available";summary.textContent=`${outcomes.hit} hit · ${outcomes.miss} miss · ${outcomes.error} error${totalContext!==null?` · ≈${fmtTok(totalContext)} context tokens inserted`:""} · latest ${rel(entries[0].receipt.ts)}`;count.textContent=`${attempts} total`;
+  host.innerHTML=entries.slice(0,6).map(({receipt:r,run,key},index)=>{
+    const outcome=["hit","miss","error"].includes(String(r.outcome||"").toLowerCase())?String(r.outcome).toLowerCase():"unknown",engine=r.engine&&typeof r.engine==="object"?r.engine:{},query=r.query&&typeof r.query==="object"?r.query:{},corpus=r.corpus&&typeof r.corpus==="object"?r.corpus:{};
+    const hits=Array.isArray(r.hits)?r.hits:[],candidates=Array.isArray(r.candidates)?r.candidates:[],promptCount=proofNumber(r.injected_prompt_count),tokens=proofNumber(r.injected_tokens_estimate),inserted=(promptCount||0)>0||(tokens||0)>0;
+    const runLabel=run&&String(run.name||run.summary||"").trim(),mission=runLabel||String(r.cid?`Mission ${r.cid}`:"Verification query"),route=String(r.route||run&&run.route||"route not recorded"),when=r.ts?rel(r.ts):"time not recorded",context=inserted?`≈${fmtTok(tokens||0)} ctx tok`:"verification only";
+    const engineValue=[engine.name,engine.schema_version!==undefined?`schema ${engine.schema_version}`:"",engine.threshold!==undefined?`threshold ${engine.threshold}`:"",engine.top_k!==undefined?`top ${engine.top_k}`:""].filter(Boolean).join(" · "),queryValue=[query.chars!==undefined?`${query.chars} chars`:"",query.terms!==undefined?`${query.terms} terms`:"",query.fingerprint].filter(Boolean).join(" · ");
+    const corpusValue=[corpus.fresh_read===true?"fresh read":corpus.fresh_read===false?"fresh read not recorded":"",corpus.items!==undefined?`${corpus.items} items`:"",corpus.fingerprint].filter(Boolean).join(" · "),injectionValue=inserted?[proofValue(r.injected_into),`${promptCount??"?"} prompt${promptCount===1?"":"s"}`,`${proofNumber(r.injected_chars)??"?"} chars`,`≈${tokens??"?"} context tokens`].join(" · "):"verification only · 0 prompts inserted";
+    const hitTitle=inserted?"Cards inserted into context":"Cards selected by verification · not inserted",hitRows=hits.length?recallCardRows(hits):`<div class="brain-empty"><b>No card IDs recorded</b>${outcome==="miss"?"The ranker returned a miss.":"This receipt did not record an inserted card."}</div>`;
+    const audit=candidates.length?`<details class="recall-audit"><summary></summary><div class="recall-candidates">${recallCardRows(candidates,"candidate")}</div></details>`:"",guards=r.guards&&typeof r.guards==="object"?Object.entries(r.guards).map(([name,value])=>`${name.replaceAll("_"," ")} ${value}`).join(" · "):"",policy=[engine.ranking_policy,guards].filter(Boolean).join(" · "),hasOutcome=r.mission_outcome_after_recall!==null&&r.mission_outcome_after_recall!==undefined,exposure=hasOutcome?`<div class="recall-exposure"><b>Later mission status:</b> ${esc(proofValue(r.mission_outcome_after_recall))} · successful context exposure ${esc(proofValue(r.successful_context_exposure))}. This is correlation after recall, not evidence that memory caused the outcome.</div>`:"";
+    return`<details class="recall-row" ${index===0?"open":""}><summary><span class="recall-outcome ${esc(outcome)}">${esc(outcome)}</span><span class="recall-main"><span class="recall-route">${esc(mission)}</span><span class="recall-meta">${esc(route)} · ${esc(proofValue(r.cid))} · attempt ${esc(proofValue(r.attempt))}</span></span><span class="recall-context">${esc(context)}</span><time class="recall-when" datetime="${esc(r.ts||"")}">${esc(when)}</time></summary>
+      <div class="recall-detail"><div class="recall-reason"><b>Receipt ${esc(proofValue(r.receipt_id||key))}</b> · ${esc(proofValue(r.reason))} · telemetry ${r.telemetry_persisted?"persisted":"not confirmed"} · ${esc(proofValue(r.duration_ms))} ms</div><div class="recall-facts">${recallFact("Ranker",engineValue,true)}${recallFact("Query fingerprint",queryValue,true)}${recallFact("Corpus fingerprint",corpusValue,true)}${recallFact("Context insertion",injectionValue,true)}</div>${policy?`<div class="recall-policy"><b>Ranking policy and guards:</b> ${esc(policy)}</div>`:""}<section class="recall-cards"><h4>${esc(hitTitle)}</h4><div class="recall-card-list">${hitRows}</div></section>${audit}${exposure}</div></details>`;
+  }).join("");
+}
+function budgetTone(utilization){const value=proofNumber(utilization);return value===null?"":value>=1?"bad":value>=.85?"warn":""}
+function budgetPercent(utilization){const value=proofNumber(utilization);return value===null?0:Math.max(0,Math.min(100,value*100))}
+function learningReceiptEntries(){
+  return[...S.ceo,...S.ceoHistory].map(run=>({run,receipt:run&&run.learning_receipt})).filter(item=>item.receipt&&typeof item.receipt==="object"&&!Array.isArray(item.receipt)).sort((a,b)=>(Date.parse(b.receipt.ts||"")||0)-(Date.parse(a.receipt.ts||"")||0));
+}
+function learningLedger(){
+  const entries=learningReceiptEntries(),rows=entries.slice(0,4).map(({run,receipt:r})=>{
+    const outcome=String(r.outcome||"error").toLowerCase(),title=String(run.name||run.summary||run.cid||"Completed mission"),policy=Array.isArray(r.policy_reasons)?r.policy_reasons.filter(Boolean):[],signals=Array.isArray(r.quality_signals)?r.quality_signals.filter(Boolean):[],identity=r.memory_id?`memory ${r.memory_id}`:r.duplicate_id?`duplicate ${r.duplicate_id}`:"no memory ID",similarity=r.duplicate_id?` · similarity ${proofScore(r.duplicate_similarity)}`:"",compaction=(proofNumber(r.archived_during_compaction)||0)>0?` · archived ${r.archived_during_compaction} during compaction`:"",reasons=[r.reason_code,policy.length?`policy ${policy.join(", ")}`:"",signals.length?`signals ${signals.join(", ")}`:""].filter(Boolean).join(" · ");
+    return`<div class="learning-row"><span class="learning-outcome ${esc(outcome)}">${esc(outcome)}</span><span class="learning-main"><span class="learning-title" title="${esc(title)}">${esc(title)}</span><span class="learning-meta">quality ${esc(proofScore(r.quality_score))} · ${esc(identity+similarity+compaction)}</span><span class="learning-reasons">${esc(reasons||"No policy reason recorded")}</span></span><time class="learning-when" datetime="${esc(r.ts||"")}">${esc(r.ts?rel(r.ts):"—")}</time></div>`;
+  }).join("");
+  return`<details class="learning-ledger"><summary>Latest admission decisions · ${entries.length}</summary><div class="learning-list">${rows||`<div class="brain-empty"><b>No admission decisions yet</b>Future terminal missions will show whether reusable work was accepted, merged, quarantined, rejected, or skipped.</div>`}</div></details>`;
+}
+function renderMemoryHealth(){
+  const count=$("memory-card-count"),host=$("memory-health-body");if(!count||!host)return;
+  if(!S.brainLoaded){count.textContent="— cards";host.innerHTML=`<div class="brain-empty"><b>Checking storage report</b>Rune is loading admission and retention health.</div>`;return}
+  const storage=S.brain&&S.brain.storage&&typeof S.brain.storage==="object"&&!Array.isArray(S.brain.storage)?S.brain.storage:null;
+  if(!storage){count.textContent="— cards";host.innerHTML=`<div class="brain-empty${S.brainError?" bad":""}"><b>Storage report unavailable</b>${esc(S.brainError||"This Brain response did not include storage health.")}</div>${learningLedger()}`;return}
+  if(String(storage.status||"").toLowerCase()==="unavailable"){count.textContent="— cards";host.innerHTML=`<div class="brain-empty bad"><b>Storage health is unavailable</b>Rune could not read Hermes storage. Existing card files were not modified.</div>${learningLedger()}`;return}
+  const cards=storage.cards&&typeof storage.cards==="object"?storage.cards:{},outcomes=storage.outcomes&&typeof storage.outcomes==="object"?storage.outcomes:{},budget=storage.budget&&typeof storage.budget==="object"?storage.budget:{},quality=storage.quality&&typeof storage.quality==="object"?storage.quality:{},quarantine=storage.quarantine&&typeof storage.quarantine==="object"?storage.quarantine:{},archive=storage.archive&&typeof storage.archive==="object"?storage.archive:{},usage=storage.usage&&typeof storage.usage==="object"?storage.usage:{},vaultMirrors=storage.vault_mirrors&&typeof storage.vault_mirrors==="object"?storage.vault_mirrors:null;
+  const active=proofNumber(cards.active_count),countUtil=proofNumber(budget.count_utilization),byteUtil=proofNumber(budget.byte_utilization),belowQuality=proofNumber(quality.below_threshold_count),stale=proofNumber(cards.stale_count),mirrorMissing=proofNumber(vaultMirrors&&vaultMirrors.missing_active_count),mirrorOrphaned=proofNumber(vaultMirrors&&vaultMirrors.orphaned_count),mirrorUnavailable=!!vaultMirrors&&vaultMirrors.available===false,mirrorWarn=mirrorUnavailable||(mirrorMissing??0)>0||(mirrorOrphaned??0)>0,peak=Math.max(countUtil??0,byteUtil??0),degraded=String(storage.status||"").toLowerCase()==="degraded",archiveFull=archive.capacity_exhausted===true,qualityWarn=(belowQuality??0)>0||(stale??0)>0,tone=degraded||archiveFull||peak>=1?"bad":peak>=.85||qualityWarn||mirrorWarn?"warn":"good",status=degraded?"Storage report is degraded":archiveFull?"Archive budget reached":peak>=1?"Retention budget reached":peak>=.85?"Retention budget is close":mirrorUnavailable?"Vault mirror report is unavailable":mirrorWarn?"Vault mirror cleanup is pending":qualityWarn?"Quality cleanup is pending":"Within retention budget";
+  count.textContent=`${active??"—"} cards`;
+  const metric=(label,value)=>`<div class="memory-metric"><span>${esc(label)}</span><b>${esc(proofValue(value))}</b></div>`;
+  const countUse=budgetPercent(countUtil),byteUse=budgetPercent(byteUtil),countText=`${active??"—"} / ${proofValue(budget.max_cards)}`,byteText=`${proofBytesShort(cards.active_bytes)} / ${proofBytesShort(budget.max_bytes)}`,mirrorLine=vaultMirrors?mirrorUnavailable?`<span class="memory-mirror warn"><b>Vault mirrors:</b> report unavailable.</span>`:`<span class="memory-mirror${mirrorWarn?" warn":""}"><b>${mirrorWarn?"Vault mirror warning":"Vault mirrors"}:</b> ${esc(proofValue(vaultMirrors.active_count))} / ${esc(proofValue(vaultMirrors.expected_active_count))} active (${esc(proofBytes(vaultMirrors.active_bytes))}) · ${esc(proofValue(vaultMirrors.missing_active_count))} missing · ${esc(proofValue(vaultMirrors.orphaned_count))} orphaned (${esc(proofBytes(vaultMirrors.orphaned_bytes))}) · ${esc(proofValue(vaultMirrors.total_count))} total (${esc(proofBytes(vaultMirrors.total_bytes))}) · index ${esc(proofBytes(vaultMirrors.index_bytes))}.</span>`:"";
+  host.innerHTML=`<div class="memory-health-state"><span class="memory-state-dot ${tone}"></span><div><b>${esc(status)}</b><div>${esc(proofValue(storage.kind))} · schema ${esc(proofValue(storage.schema_version))}${storage.storage_error?` · ${esc(storage.storage_error)}`:""}</div></div></div>
+    <div class="memory-metrics">${metric("Accepted writes",outcomes.accepted_writes)}${metric("Rejected writes",outcomes.rejected_writes)}${metric("Merged writes",outcomes.merged_writes)}${metric("Active cards",active)}</div>
+    <div class="memory-budget ${budgetTone(countUtil)}" style="--memory-budget-use:${countUse.toFixed(2)}%"><div class="memory-budget-head"><span>Card budget</span><b>${esc(countText)}</b></div><div class="memory-budget-track"><i></i></div></div>
+    <div class="memory-budget ${budgetTone(byteUtil)}" style="--memory-budget-use:${byteUse.toFixed(2)}%"><div class="memory-budget-head"><span>SSD budget</span><b title="${esc(`${proofValue(cards.active_bytes)} / ${proofValue(budget.max_bytes)} bytes`)}">${esc(byteText)}</b></div><div class="memory-budget-track"><i></i></div></div>
+    <div class="memory-reasons">${esc(proofValue(outcomes.quarantined_count))} quarantined now · ${esc(proofValue(outcomes.merged_reinforcements))} reinforced merges · ${esc(proofValue(outcomes.archived_count))} archived · ${esc(proofValue(cards.stale_count))} stale${belowQuality!==null?` · ${esc(belowQuality)} below the current reuse threshold`:""}.<br>Quarantine ${esc(proofBytes(quarantine.bytes))} · archive ${esc(proofBytes(archive.bytes))} · usage ledger ${esc(proofBytes(usage.bytes))} · quality ${esc(proofScore(quality.average_score))} average / ${esc(proofScore(quality.threshold))} threshold.${mirrorLine}<span class="memory-mirror">Reuse ledger: ${esc(proofValue(usage.queries))} queries · ${esc(proofValue(usage.hit_queries))} hits · ${esc(proofValue(usage.miss_queries))} misses · ${esc(proofNumber(usage.hit_rate)!==null?`${(proofNumber(usage.hit_rate)*100).toFixed(1)}% hit rate`:"hit rate not recorded")} · ${esc(proofValue(usage.tracked_cards))} tracked cards${usage.last_query_at?` · last ${esc(rel(usage.last_query_at))}`:""}.</span><span class="memory-mirror">Ranking policy: prior hit count does not raise relevance.</span></div>${learningLedger()}`;
+}
+function renderBrainEvidence(){const entries=recallReceiptEntries();renderRecallLedger(entries);renderMemoryHealth()}
+function syncVerifyRecall(){
+  const button=$("verify-recall"),status=$("verify-recall-status");if(!button||!status)return;const hasQuery=!!$("q").value.trim();
+  button.disabled=VERIFY_RECALL.busy||!hasQuery;button.setAttribute("aria-busy",VERIFY_RECALL.busy?"true":"false");button.textContent=VERIFY_RECALL.busy?"Verifying…":"Verify retrieval";
+  status.className=`brain-query-note${VERIFY_RECALL.tone?` ${VERIFY_RECALL.tone}`:""}`;status.textContent=VERIFY_RECALL.message||(hasQuery?"Instant results browse saved cards locally. Verify retrieval runs the mission ranker and records a receipt.":"Enter a reusable problem to verify it against the mission ranker.");
+}
+async function verifyRecall(){
+  const text=$("q").value.trim();if(!text||VERIFY_RECALL.busy)return;VERIFY_RECALL.busy=true;VERIFY_RECALL.tone="wait";VERIFY_RECALL.message="Running the mission ranker and recording a zero-injection receipt…";syncVerifyRecall();
+  try{
+    const response=await fetch("/api/brain/query",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});let payload={};try{payload=await response.json()}catch(_){ }
+    if(!response.ok)throw new Error(payload.error||`Verification failed (${response.status}).`);const receipt=payload&&payload.receipt;if(!receipt||typeof receipt!=="object")throw new Error("Verification returned no receipt.");
+    const outcome=String(receipt.outcome||"unknown"),hits=Array.isArray(receipt.hits)?receipt.hits.length:0;VERIFY_RECALL.tone=outcome==="error"?"bad":"good";VERIFY_RECALL.message=`Verified ${outcome}: ${hits} card${hits===1?"":"s"} selected; receipt ${proofValue(receipt.receipt_id)} recorded. No prompt injection occurred.`;await poll();
+  }catch(error){VERIFY_RECALL.tone="bad";VERIFY_RECALL.message=error&&error.message?error.message:"Retrieval verification failed."}
+  finally{VERIFY_RECALL.busy=false;syncVerifyRecall()}
+}
+$("q").addEventListener("input",()=>{renderHermes();syncVerifyRecall()});
+$("verify-recall").addEventListener("click",verifyRecall);
 $("topsearch").addEventListener("keydown",e=>{
-  if(e.key==="Enter"){$("q").value=$("topsearch").value;location.hash="#/brain";renderHermes()}
+  if(e.key==="Enter"){$("q").value=$("topsearch").value;location.hash="#/brain";renderHermes();syncVerifyRecall()}
 });
 
 /* ---------- daily briefing + calendar ---------------------------------
@@ -2621,13 +2971,16 @@ function briefingRunSource(run){
   return source&&typeof source==="object"?source:{};
 }
 function briefingLinkedRun(task){
-  return S.ceo.find(run=>{
+  return [...S.ceo,...S.ceoHistory].find(run=>{
     const source=briefingRunSource(run),kind=String(source.kind||"").toLowerCase();
     return ["daily_briefing","daily-briefing","briefing"].includes(kind)
       &&String(pick(source.batch_id,source.batchId,""))===task.batchId
       &&String(pick(source.priority_id,source.priorityId,""))===task.id
       &&(!source.source_date||!task.sourceDate||String(source.source_date)===task.sourceDate);
   })||null;
+}
+function briefingCompletedTask(task){
+  const run=briefingLinkedRun(task);return!!(run&&MISSION_SUCCESS.has(String(run.status||"").toLowerCase()));
 }
 function briefingTaskSaving(task){return task.agents.some(agent=>BRIEF.saving.has(agent.key))}
 function briefingRunView(task){
@@ -2759,9 +3112,16 @@ function priorityCard(task,index){
     </div></article>`;
 }
 
+function completedBriefingDrawer(tasks){
+  if(!tasks.length)return"";
+  const rows=tasks.map(task=>{const run=briefingLinkedRun(task),cid=String(run&&run.cid||"");
+    return`<div class="brief-completed-row"><div class="brief-completed-copy"><b>${esc(task.title)}</b><span>${esc(task.repo)} · completed${run&&run.updated?` · ${esc(rel(run.updated))}`:""}</span></div><div class="brief-completed-actions">${cid?`<button type="button" class="btn line sm" data-open-mission="${esc(cid)}">Review delivery</button>`:""}<button type="button" class="btn line sm" data-brief-run="${esc(task.key)}" data-brief-action="rerun" data-brief-permission-mode="safe">Run again</button></div></div>`}).join("");
+  return`<details class="brief-completed"${BRIEF.completedOpen?" open":""}><summary><span class="brief-completed-chev"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span class="brief-completed-title">Completed plans</span><span class="brief-completed-count">${tasks.length} ready for delivery</span></summary><div class="brief-completed-list">${rows}</div></details>`;
+}
+
 function renderBriefing(){
   const body=$("briefingbody");if(!body)return;
-  const envelope=briefingEnvelope(),doc=briefingDocument(),tasks=briefingPriorities(),job=envelope.job||doc.job||{};
+  const envelope=briefingEnvelope(),doc=briefingDocument(),tasks=briefingPriorities(),completedTasks=tasks.filter(briefingCompletedTask),activeTasks=tasks.filter(task=>!briefingCompletedTask(task)),job=envelope.job||doc.job||{};
   const jobState=String(pick(job.status,doc.status,"idle")).toLowerCase();
   const freshness=briefingFreshness(),health=briefingHealthCopy(freshness,tasks.length);
   const generating=BRIEF.busy||freshness.underlyingState==="generating"||["queued","running","generating","planning"].includes(jobState);
@@ -2775,14 +3135,15 @@ function renderBriefing(){
   const tag=$("brieftag"),status=$("briefstatus"),healthBar=$("briefhealth"),attempt=briefingAttemptView(freshness);
   tag.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>${esc(health.tag)}`;tag.dataset.tone=health.tone;
   status.textContent=health.status;status.dataset.tone=health.tone;status.title=freshness.lastAttemptError||health.status;
-  healthBar.dataset.tone=health.tone;healthBar.setAttribute("aria-busy",String(BRIEF.fetching));
+  const checkBusy=BRIEF.checking||BRIEF.fetching;
+  healthBar.dataset.tone=health.tone;healthBar.setAttribute("aria-busy",String(checkBusy));
   $("briefday").textContent=briefingDayLabel(freshness.actual,freshness.expected);
   $("briefdaysub").textContent=freshness.actual?`${freshness.autoCatchup?"Catch-up on · ":"Evidence · "}${freshness.timezone}`:`Expected ${briefingDayLabel(freshness.expected,freshness.expected)}`;
   $("briefattempt").textContent=attempt.main;$("briefattempt").title=freshness.lastAttemptError||attempt.main;
   $("briefattemptsub").textContent=attempt.sub;$("briefattemptsub").title=freshness.lastAttemptError||attempt.sub;
   $("briefnext").textContent=briefingMoment(freshness.displayDueAt);
   const countdown=$("briefcountdown");countdown.dataset.briefDue=freshness.displayDueAt||"";countdown.dataset.briefState=freshness.underlyingState;countdown.textContent=briefingCountdown(freshness.displayDueAt,freshness.underlyingState);
-  const check=$("brief-check");check.disabled=BRIEF.fetching;check.classList.toggle("checking",BRIEF.fetching);check.querySelector("span").textContent=BRIEF.fetching?"Checking…":"Check now";
+  const check=$("brief-check");check.disabled=checkBusy;check.classList.toggle("checking",checkBusy);check.setAttribute("aria-busy",String(checkBusy));check.querySelector("span").textContent=BRIEF.checking?"Ensuring…":BRIEF.fetching?"Refreshing…":"Ensure current";
   const generate=$("brief-generate"),label=generate.querySelector("span:last-child"),hasCurrent=briefingHasCurrentPrimary();
   generate.disabled=generating;generate.classList.toggle("busy",generating);
   label.textContent=generating?"Generating…":hasCurrent?"Generate 3 more":"Generate briefing";
@@ -2796,11 +3157,11 @@ function renderBriefing(){
 
   let html;
   if(!S.briefingLoaded&&!S.briefing)html='<div class="brief-notice"><b>Loading your briefing</b>Reading the latest plan from disk.</div>';
-  else if(freshness.state==="offline"&&!tasks.length)html='<div class="brief-notice error"><b>Briefing status is offline</b>The live check failed. Check again without starting a model run.</div>';
+  else if(freshness.state==="offline"&&!tasks.length)html='<div class="brief-notice error"><b>Briefing status is offline</b>The live status read failed. Ensure current will retry the service and only queue a due cycle.</div>';
   else if(freshness.underlyingState==="failed"&&!tasks.length)html=`<div class="brief-notice error"><b>The first briefing attempt failed</b>${esc(freshness.lastAttemptError||"Automatic retry is scheduled.")}</div>`;
   else if(apiError&&!tasks.length)html=`<div class="brief-notice error"><b>Briefing needs attention</b>${esc(apiError)}</div>`;
   else if(!tasks.length)html='<div class="brief-notice"><b>No priorities yet</b>Generate the first three changes from yesterday’s work. Nothing runs automatically.</div>';
-  else html=`<div class="priority-grid">${tasks.map(priorityCard).join("")}</div>`;
+  else html=`${activeTasks.length?`<div class="priority-grid">${activeTasks.map(priorityCard).join("")}</div>`:`<div class="brief-notice"><b>Active briefing is clear</b>Completed plans have moved below for review, tests, commit, and push.</div>`}${completedBriefingDrawer(completedTasks)}`;
 
   const signature=JSON.stringify({html,open:[...BRIEF.open],saving:[...BRIEF.saving],runs:[...BRIEF.runs]});
   if(body.dataset.sig===signature)return;
@@ -3034,12 +3395,29 @@ $("briefingbody").addEventListener("change",async event=>{
   }finally{BRIEF.saving.delete(agentKey);$("briefingbody").dataset.sig="";renderBriefing()}
 });
 
+function briefingCheckDecision(result){
+  if(!result||typeof result!=="object"||Array.isArray(result))return{error:true,message:"The briefing service returned an invalid ensure-current result."};
+  const action=String(result.action||"").toLowerCase(),fresh=result.freshness&&typeof result.freshness==="object"?result.freshness:{},status=result.status&&typeof result.status==="object"?result.status:{},source=String(result.source_date||fresh.expected_source_date||""),sourceText=source?` for ${source}`:"",retryAt=String(fresh.retry_at||status.retry_at||""),retryText=retryAt?briefingMoment(retryAt):"the scheduled retry",failure=clipText(pick(fresh.last_attempt_error,fresh.last_error,status.error),180)||"the previous attempt failed";
+  if(action==="queued")return{error:false,message:`Briefing${sourceText} was due. A background model run is queued and will start.`};
+  if(action==="current")return{error:false,message:`Briefing${sourceText} is current. No duplicate run was queued.`};
+  if(action==="already_running")return{error:false,message:"A background briefing run is already queued or running. No duplicate run was queued."};
+  if(action==="retry_wait")return{error:false,message:`Retry waits until ${retryText} because ${failure}. No duplicate run was queued.`};
+  if(action==="starter_failed")return{error:true,message:`Could not queue the background briefing worker: ${failure}. Retry is scheduled for ${retryText}.`};
+  return{error:true,message:`The briefing service returned an unsupported action${action?` “${action}”`:""}.`};
+}
 $("brief-check").addEventListener("click",async()=>{
-  BRIEF.feedback="Checking the saved briefing status — no model run will start.";renderBriefing();
-  const result=await refreshBriefingData({force:true});BRIEF.feedback="";
-  if(result&&result.ok)toast("Briefing status checked — no model run started.");
-  else toast("Briefing status check failed; the last saved plan is still visible.",true);
-  renderBriefing();
+  if(BRIEF.checking||BRIEF.fetching)return;
+  BRIEF.checking=true;BRIEF.error="";BRIEF.feedback="Checking whether today’s briefing is current…";renderBriefing();
+  try{
+    const result=await post("/api/briefing/check",{}),decision=briefingCheckDecision(result);
+    BRIEF.nextFetchAt=0;
+    const refreshed=await refreshBriefingData({force:true});
+    if(!refreshed||!refreshed.ok){decision.error=true;decision.message+=" Saved briefing data could not refresh; the previous plan remains visible."}
+    BRIEF.error=decision.error?decision.message:"";BRIEF.feedback=decision.message;
+  }catch(error){
+    BRIEF.error=clipText(error&&error.message?error.message:"Could not reach the briefing service.",240);
+    BRIEF.feedback=`Ensure current failed: ${BRIEF.error}. The previous saved plan remains visible.`;
+  }finally{BRIEF.checking=false;$("briefingbody").dataset.sig="";renderBriefing()}
 });
 
 $("brief-generate").addEventListener("click",async()=>{
@@ -3172,10 +3550,46 @@ function saveDefaults(){try{localStorage.setItem(DEFAULTS_KEY,JSON.stringify({
   if("skip" in d)$("opt-skip").checked=d.skip;if(d.rounds)$("opt-rounds").value=d.rounds;
   if(d.critic&&d.critic!=="haiku")$("opt-critic").value=d.critic;if("auto" in d)$("opt-auto").checked=d.auto}catch(e){}})();
 const DEFAULT_MISSION="Run the boot sequence (python bootstrap.py boot), then read the tail of state/inbox.jsonl and work every directive without a matching directive-done event. If the inbox is clear, run python bootstrap.py and fix any FAIL.";
-function toast(msg,err){const n=document.createElement("div");n.className="note"+(err?" err":"");
-  n.textContent=msg;$("toast").appendChild(n);setTimeout(()=>n.remove(),5000)}
+function toast(msg,err){msg=String(msg||"");const host=$("toast"),key=`${err?"error":"info"}:${msg}`;
+  const duplicate=[...host.children].find(node=>node.dataset.toastKey===key);if(duplicate)return duplicate;
+  const n=document.createElement("div");n.className="note"+(err?" err":"");n.dataset.toastKey=key;n.setAttribute("role",err?"alert":"status");
+  n.textContent=msg;host.appendChild(n);setTimeout(()=>n.remove(),5000);return n}
 async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
+  const j=await r.json().catch(()=>({}));if(!r.ok){const error=new Error(j.error||r.status);error.payload=j;error.status=r.status;throw error}return j}
+async function runCeoDelivery(button){
+  const cid=String(button.dataset.cid||""),action=String(button.dataset.ceoDelivery||"");if(!cid||DELIVERY.busy.has(cid))return;
+  const mission=missionByCid(cid);if(!mission)return toast("That completed mission is no longer in history.",true);
+  let message="";
+  if(action==="commit"){
+    const answer=prompt("Commit message for the reviewed changes:",deliveryCommitDefault(mission));if(answer===null)return;
+    message=answer.trim();if(!message)return toast("A commit message is required.",true);
+  }
+  DELIVERY.busy.add(cid);DELIVERY.actions.set(cid,action);clearDeliveryErrors(cid,action);renderCeo();
+  try{
+    if(action==="review"||action==="test"){
+      const result=await post("/api/ceo-delivery",{cid,action});mergeDeliveryResult(cid,result);
+      const state=deliveryStep(result.delivery,action==="review"?"review":"tests");
+      if(state.bad||action==="test"&&!state.good)throw new Error(state.detail||`${action} did not pass`);
+    }else if(action==="commit"){
+      const result=await post("/api/ceo-delivery",{cid,action,message});mergeDeliveryResult(cid,result);
+    }else if(action==="prepare_push"){
+      const prepared=await post("/api/ceo-delivery",{cid,action:"prepare_push"});mergeDeliveryResult(cid,prepared);
+      const confirmation=prepared.confirmation&&typeof prepared.confirmation==="object"?prepared.confirmation:{};
+      const token=String(confirmation.token||""),remote=String(confirmation.remote||"remote"),branch=String(confirmation.branch||"branch"),head=String(confirmation.head||"HEAD");
+      if(!token)throw new Error("push confirmation token was not returned");
+      if(!confirm(`Push ${head.slice(0,12)} to ${remote}/${branch}?\n\nThis sends the reviewed commit to the remote repository. No force push will be used.`)){
+        return;
+      }
+      const pushed=await post("/api/ceo-delivery",{cid,action:"confirm_push",token});mergeDeliveryResult(cid,pushed);
+    }else throw new Error("unknown delivery action");
+    renderCeo();renderBriefing();poll();
+  }catch(error){
+    if(error.payload&&typeof error.payload==="object")mergeDeliveryResult(cid,error.payload);
+    const stepName=deliveryActionStep(action),serverState=deliveryStep((missionByCid(cid)||{}).delivery,stepName);
+    if(["","idle","pending"].includes(serverState.status))rememberDeliveryError(cid,action,error.message);
+    renderCeo();toast("Delivery action failed: "+(error.message||"unknown error"),true);poll();
+  }finally{DELIVERY.busy.delete(cid);DELIVERY.actions.delete(cid);renderCeo()}
+}
 async function launch(text,mode){
   const model=$("opt-model").value,budget=+$("opt-budget").value;
   const iname=$("iname").value.trim(),skip=$("opt-skip").checked;
@@ -3224,6 +3638,10 @@ document.addEventListener("click",async e=>{
   const calendarView=e.target.closest("[data-cal-view]");if(calendarView){calendarSetView(calendarView.dataset.calView);return}
   const calendarNav=e.target.closest("[data-cal-nav]");if(calendarNav){calendarNavigate(calendarNav.dataset.calNav);return}
   const calendarDateButton=e.target.closest("[data-cal-date]");if(calendarDateButton){calendarSelectDate(calendarDateButton.dataset.calDate);return}
+  const deliveryButton=e.target.closest("[data-ceo-delivery]");
+  if(deliveryButton){e.preventDefault();e.stopPropagation();await runCeoDelivery(deliveryButton);return}
+  const openMission=e.target.closest("[data-open-mission]");
+  if(openMission){e.preventDefault();await openMissionActivity(openMission.dataset.openMission);return}
   const g=e.target.closest("[data-go]");if(g){location.hash=g.dataset.go;return}
   const f=e.target.closest("[data-focus]"),c=e.target.closest("[data-close]");
   const oa=e.target.closest("[data-orch-act]"),fg=e.target.closest("[data-forget]");
@@ -3243,9 +3661,21 @@ document.addEventListener("click",async e=>{
     if(act==="redo"){feedback=prompt("What should this role fix?")||"";if(!feedback)return}
     if(act==="stop"&&!confirm("Stop this mission? The running role is killed."))return;
     if(act==="archive"&&!confirm("Archive this mission? It leaves the list — files are kept in state/ceo/archive, not deleted."))return;
-    try{await post("/api/ceo-action",{cid:ca.dataset.cid,role:ca.dataset.role,action:act,feedback});
-      toast(act==="stop"?"Mission stopped.":act==="resume"?"Continuing where it left off…":act==="archive"?"Archived — kept in state/ceo/archive.":"Sent: "+act);poll()}
-    catch(err){toast("Action failed: "+err.message,true)}return}
+    const permissionAction=["allow","retry","deny"].includes(act),requestId=String(ca.dataset.permissionRequestId||""),plannerDecision=ca.dataset.permissionPlanner==="true",settlingDecision=ca.dataset.permissionSettling==="true";
+    if(permissionAction&&settlingDecision){toast("This worker is still settling. Permission controls unlock automatically when it stops.",true);return}
+    if(permissionAction&&!requestId){toast("This permission decision is stale or unbound. Refresh Mission Activity before acting.",true);return}
+    const permissionLabel=String(ca.dataset.permissionLabel||"").slice(0,180);
+    if(act==="allow"&&!confirm(`Allow this recorded permission and resume the role? This elevates only this mission boundary; Rune does not grant blanket access.${permissionLabel?`\n\nRequested: ${permissionLabel}`:""}`))return;
+    if(act==="retry"&&!confirm(plannerDecision?"Retry CEO planning now? No permission is added, so use this only after fixing the credential or prerequisite.":"Retry this role now? No permission is added, so use this only after fixing the credential or prerequisite."))return;
+    if(act==="deny"&&!confirm(plannerDecision?"Deny this request and stop the planner mission? No repository role will be started.":"Deny this request and skip only this role? Eligible dependent roles may continue."))return;
+    ca.disabled=true;ca.setAttribute("aria-busy","true");
+    const actionPayload={cid:ca.dataset.cid,role:ca.dataset.role,action:act};
+    if(permissionAction)actionPayload.request_id=requestId;else actionPayload.feedback=feedback;
+    try{await post("/api/ceo-action",actionPayload);
+      const message=act==="deny"&&plannerDecision?"Permission denied — planner mission stopped.":{stop:"Mission stopped.",resume:"Continuing where it left off…",archive:"Archived — kept in state/ceo/archive.",allow:"Permission recorded — resuming this role.",retry:"Retrying without added permission.",deny:"Permission denied — skipping this role and continuing eligible work."}[act]||"Sent: "+act;
+      toast(message);await poll()}
+    catch(err){toast("Action failed: "+err.message,true)}
+    finally{ca.disabled=false;ca.removeAttribute("aria-busy")}return}
   const cl=e.target.closest("[data-codex-login]");
   if(cl){try{await navigator.clipboard.writeText("codex login");
       toast("Copied — run `codex login` in a terminal, then this card goes live.")}
@@ -3878,7 +4308,7 @@ $("cmddrop").addEventListener("click",()=>{
 document.addEventListener("click",e=>{           // click-away closes the overrides
   if(!e.target.closest("#cmdbarbox")){$("cmdpop").classList.remove("open");$("cmdbarbox").classList.remove("optsopen");}});
 $("cmdpop").addEventListener("change",()=>$("cmddrop").classList.toggle("tuned",cmdTuned()));
-$("cmdclear").addEventListener("click",()=>{CMD.items=CMD.items.filter(item=>cmdMissionInfo(item).live);renderCmdTray()});
+$("cmdclear").addEventListener("click",()=>{CMD.items=CMD.items.filter(item=>item.cid||!CMD_SUCCESS.has(cmdMissionInfo(item).status));renderCmdTray()});
 $("cmdstopactive").addEventListener("click",async()=>{
   const active=[...new Set(CMD.items.filter(item=>item.cid&&cmdMissionInfo(item).live).map(item=>item.cid))];if(!active.length)return;
   if(!confirm(`Stop ${active.length} active mission${active.length===1?"":"s"}? Running roles will be killed.`))return;
@@ -3890,6 +4320,7 @@ cmdType();
 // chat assistant
 $("chatspark").innerHTML=SPARK;
 $("chatfab").addEventListener("click",()=>chatToggle());
+$("instancechat").addEventListener("click",()=>chatToggle(true));
 $("chatclose").addEventListener("click",()=>chatToggle(false));
 $("chatclear").addEventListener("click",chatClear);
 $("chatsendbtn").addEventListener("click",chatSend);
