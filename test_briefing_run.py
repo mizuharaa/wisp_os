@@ -127,7 +127,13 @@ class BriefingRunTests(unittest.TestCase):
         ceo.LIVE.clear()
         self.patches = [
             mock.patch.object(ceo, "emit", lambda *args, **kwargs: None),
+            # Unit runs must never query or mutate the operator's live brain.
+            mock.patch.object(ceo, "_recall", lambda _text: ""),
             mock.patch.object(ceo.threading, "Thread", DormantThread),
+            mock.patch.object(
+                ceo.delivery, "capture_git_baseline",
+                lambda _workdir: {"available": False, "reason": "test fixture",
+                                  "captured_at": "2026-07-16T00:00:00+00:00"}),
         ]
         for patcher in self.patches:
             patcher.start()
@@ -156,6 +162,41 @@ class BriefingRunTests(unittest.TestCase):
         handler = object.__new__(serve.Handler)
         handler._json = lambda status, payload: (status, payload)
         return handler.api_briefing_run(data)
+
+    @staticmethod
+    def check_handler_response(data):
+        handler = object.__new__(serve.Handler)
+        handler._json = lambda status, payload: (status, payload)
+        return handler.api_briefing_check(data)
+
+    def test_check_endpoint_uses_202_only_when_a_model_worker_was_queued(self):
+        queued = {
+            "ok": True, "action": "queued", "started": True,
+            "message": "queued", "model_run": {
+                "queued": True, "will_run": True,
+                "cost": "model_tokens_when_worker_runs",
+            },
+        }
+        current = {
+            "ok": True, "action": "current", "started": False,
+            "message": "No model run was started.", "model_run": {
+                "queued": False, "will_run": False, "cost": "none",
+            },
+        }
+        with mock.patch.object(
+                serve.daily_briefing, "check_scheduled_generation",
+                side_effect=[queued, current]) as check:
+            self.assertEqual(self.check_handler_response({}), (202, queued))
+            self.assertEqual(self.check_handler_response({}), (200, current))
+        self.assertEqual(check.call_count, 2)
+
+    def test_check_endpoint_rejects_browser_generation_options(self):
+        with mock.patch.object(
+                serve.daily_briefing, "check_scheduled_generation") as check:
+            status, payload = self.check_handler_response({"force": True})
+        self.assertEqual(status, 400)
+        self.assertIn("does not accept options", payload["error"])
+        check.assert_not_called()
 
     def test_authoritative_lookup_builds_prompt_from_saved_plan_and_overrides(self):
         before = self.spec()
@@ -335,18 +376,111 @@ class BriefingRunTests(unittest.TestCase):
         self.assertEqual(skipped.count("--yolo"), 1)
         self.assertNotIn("--dangerously-skip-permissions", skipped)
 
-    def test_recovery_never_inherits_a_permission_bypass(self):
-        claude = {"model": "opus", "provider": "claude", "turns": 20,
-                  "recovery": True}
-        codex = {"model": "gpt-5.6-sol", "provider": "codex", "turns": 20,
-                 "recovery": True}
-        claude_argv = ceo._worker_argv(claude, "skip", self.repo)
-        codex_argv = ceo._worker_argv(
-            codex, "skip", self.repo, output_path=os.path.join(self.temp.name, "out.txt"))
-        self.assertNotIn("--dangerously-skip-permissions", claude_argv)
-        self.assertNotIn("--yolo", claude_argv)
-        self.assertNotIn("--dangerously-skip-permissions", codex_argv)
-        self.assertNotIn("--yolo", codex_argv)
+    def test_permission_mode_is_authoritative_for_initial_resume_and_recovery(self):
+        output_path = os.path.join(self.temp.name, "out.txt")
+        variants = (
+            (False, ""),
+            (False, "provider-session"),
+            (True, ""),
+            (True, "provider-session"),
+        )
+        for recovery, resume_sid in variants:
+            with self.subTest(provider="claude", recovery=recovery,
+                              resumed=bool(resume_sid)):
+                role = {"model": "opus", "provider": "claude", "turns": 20,
+                        "recovery": recovery}
+                safe = ceo._worker_argv(
+                    role, "safe", self.repo, resume_sid=resume_sid)
+                skipped = ceo._worker_argv(
+                    role, "skip", self.repo, resume_sid=resume_sid)
+                self.assertEqual(safe.count("--permission-mode"), 1)
+                self.assertEqual(safe[safe.index("--permission-mode") + 1], "auto")
+                self.assertNotIn("--dangerously-skip-permissions", safe)
+                self.assertEqual(
+                    skipped.count("--dangerously-skip-permissions"), 1)
+                self.assertNotIn("--permission-mode", skipped)
+                self.assertNotIn("--yolo", skipped)
+                self.assertEqual("--resume" in safe, bool(resume_sid))
+                self.assertEqual("--resume" in skipped, bool(resume_sid))
+
+            with self.subTest(provider="codex", recovery=recovery,
+                              resumed=bool(resume_sid)):
+                role = {"model": "gpt-5.6-sol", "provider": "codex",
+                        "turns": 20, "recovery": recovery}
+                safe = ceo._worker_argv(
+                    role, "safe", self.repo, resume_sid=resume_sid,
+                    output_path=output_path)
+                skipped = ceo._worker_argv(
+                    role, "skip", self.repo, resume_sid=resume_sid,
+                    output_path=output_path)
+                self.assertEqual(safe.count("--sandbox"), 1)
+                self.assertEqual(safe[safe.index("--sandbox") + 1],
+                                 "workspace-write")
+                self.assertIn('approval_policy="never"', safe)
+                self.assertNotIn("--yolo", safe)
+                self.assertEqual(skipped.count("--yolo"), 1)
+                self.assertNotIn("--sandbox", skipped)
+                self.assertFalse(any("approval_policy" in arg
+                                     for arg in skipped))
+                self.assertNotIn("--dangerously-skip-permissions", skipped)
+                self.assertEqual("resume" in safe, bool(resume_sid))
+                self.assertEqual("resume" in skipped, bool(resume_sid))
+
+    def test_codex_execution_options_precede_resume_subcommand(self):
+        role = {"model": "gpt-5.6-sol", "provider": "codex", "turns": 20}
+        output_path = os.path.normpath(os.path.join(self.temp.name, "out.txt"))
+        workdir = os.path.normpath(self.repo)
+        common = ["codex", "exec", "--json", "-o", output_path,
+                  "-m", "gpt-5.6-sol"]
+        safe_policy = ["--sandbox", "workspace-write", "-c",
+                       'approval_policy="never"']
+        self.assertEqual(
+            ceo._worker_argv(role, "safe", self.repo, output_path=output_path),
+            common + safe_policy + ["-C", workdir, "-"],
+        )
+        self.assertEqual(
+            ceo._worker_argv(role, "skip", self.repo, output_path=output_path),
+            common + ["--yolo", "-C", workdir, "-"],
+        )
+        self.assertEqual(
+            ceo._worker_argv(
+                role, "safe", self.repo, resume_sid="thread-1",
+                output_path=output_path),
+            common + safe_policy + ["resume", "thread-1", "-"],
+        )
+        self.assertEqual(
+            ceo._worker_argv(
+                role, "skip", self.repo, resume_sid="thread-1",
+                output_path=output_path),
+            common + ["--yolo", "resume", "thread-1", "-"],
+        )
+
+    def test_worker_permission_policy_prefers_role_then_mission_then_legacy(self):
+        self.assertEqual(
+            ceo._permission_mode_for(
+                {"permission_mode": "safe", "safe_permissions": True},
+                {"permission_mode": "skip"}),
+            "safe",
+        )
+        self.assertEqual(
+            ceo._permission_mode_for(
+                {"permission_mode": "safe", "safe_permissions": True},
+                {"permission_mode": "skip", "operator_authorization": {
+                    "status": "active", "kind": "provider",
+                    "expires_at": "2999-01-01T00:00:00"}}),
+            "skip",
+        )
+        self.assertEqual(
+            ceo._permission_mode_for(
+                {"permission_mode": "skip", "safe_permissions": True},
+                {"permission_mode": "invalid"}),
+            "skip",
+        )
+        self.assertEqual(
+            ceo._permission_mode_for({"safe_permissions": False}), "skip")
+        self.assertEqual(
+            ceo._permission_mode_for({"safe_permissions": True}), "safe")
+        self.assertEqual(ceo._permission_mode_for({}), "safe")
 
     def test_invalid_model_provider_and_permission_mode_fail_closed(self):
         for model in ("", "unknown", "opus --dangerously-skip-permissions"):
@@ -496,6 +630,23 @@ class BriefingRunTests(unittest.TestCase):
         detail = card.index('class="priority-detail"')
         insertion = card.index("${agents}${runbar}")
         self.assertGreater(insertion, detail)
+
+    def test_frontend_ensure_current_uses_truthful_deduplicated_check(self):
+        path = os.path.join(ROOT, "dashboard", "index.html")
+        with open(path, encoding="utf-8") as handle:
+            html = handle.read()
+
+        self.assertIn('<span>Ensure current</span>', html)
+        self.assertIn('post("/api/briefing/check",{})', html)
+        start = html.index("function briefingCheckDecision(result)")
+        end = html.index('$("brief-generate").addEventListener', start)
+        handler = html[start:end]
+        for action in ("queued", "current", "already_running", "retry_wait",
+                       "starter_failed"):
+            self.assertIn('action==="%s"' % action, handler)
+        self.assertIn("BRIEF.checking=true", handler)
+        self.assertIn("await refreshBriefingData({force:true})", handler)
+        self.assertNotIn("no model run will start", handler.lower())
 
 
 if __name__ == "__main__":

@@ -20,7 +20,9 @@ The dashboard starts with an operator overview:
 
 - **Mission activity** is a bounded, collapsible tray. Running work always
   exposes Stop/Open; recoverable work exposes Continue; finished work can be
-  dismissed without moving the rest of the page.
+  dismissed without moving the rest of the page. **Open** routes to the exact
+  mission, expands completed history when needed, and focuses the matching
+  record even when Agent console is already open.
 - **Microsoft Calendar** shows the next Outlook event on Overview and provides
   full Month, Week, Day, and Agenda views on the Calendar route.
 - **Daily briefing** shows three specific, high-impact changes selected from
@@ -75,10 +77,24 @@ inventing empty availability.
 
 CEO planning and workers classify failures before acting. Transient transport
 or capacity failures retry with bounded, interruptible backoff. Missing
-credentials pause as `waiting_permission`. Ordinary task failures may receive
+credentials and explicit operator requests pause as `waiting_permission`, even
+when a provider exits normally instead of returning an error. Mission Activity
+persists the exact request and offers **Allow & resume**, **Retry after fixing**,
+or **Deny & skip** after the worker exits. Allow is bound to the displayed
+request, mission, and role; stale clicks cannot approve a newer request.
+Credential/login requests cannot be authorized in Rune and remain Retry-only.
+Ordinary task failures may receive
 at most two local, reversible fixer cycles, after which the original role must
 pass again as verification. Stops terminate the whole process tree on Windows
 and POSIX, and a late worker response cannot overwrite a stopped state.
+
+When a Claude worker returns an actual weekly/capacity-limit error, Rune can
+switch that unfinished role to the local Codex CLI once. The fallback requires
+an installed, authenticated Codex CLI with available 5-hour and weekly
+capacity, uses GPT-5.6 Sol, preserves the mission worktree and safe/skip
+permission mode, and never reuses the incompatible Claude session id. The role
+shows the Claude → Codex handoff and result in Agent console. If Codex is not
+ready, Rune records why and keeps the normal retry budget bounded.
 
 Automatic recovery never approves destructive, outward-facing, credential, or
 spending decisions. Completed roles and resumable worker sessions are retained
@@ -97,6 +113,38 @@ Run the coach directly with:
 ```text
 python skills/workflow-coach/scripts/analyze.py
 python skills/workflow-coach/scripts/analyze.py --json
+```
+
+## Brain proof and retention
+
+Rune now queries Hermes deterministically before CEO planning, direct workers,
+dashboard chat, and ordinary Claude prompts. The model does not decide whether
+to search. Every attempt writes a bounded, secret-safe receipt containing the
+query and corpus fingerprints, ranked card IDs and scores, ranking guards,
+prompt destination, and estimated context inserted. Mission outcomes are linked
+later as correlation only. Receipts prove retrieval and prompt insertion; they
+cannot prove that a model followed a card or measure counterfactual tokens saved.
+
+The Brain page exposes those receipts and has **Verify retrieval**, which runs
+the production ranker without calling a model or counting the check as reuse.
+`GET /api/brain` returns the same proof plus storage health, and
+`POST /api/brain/query` performs the no-model verification.
+
+Hermes admits reusable evidence rather than every transcript. Verified root
+causes, recipes, mechanisms, and guardrails score positively; raw logs, one-off
+status, vague fixes, unresolved failures, and dumps are quarantined. Trusted
+near-duplicates reinforce one card, while low-quality duplicates cannot inflate
+retention. Hit count is telemetry and has zero ranking weight. Active cards,
+quarantine, usage, receipt, and compressed archive stores all have explicit
+count/byte limits; once preservation space is exhausted, new candidates are
+rejected explicitly instead of growing the SSD indefinitely.
+
+Inspect the policy from the CLI:
+
+```text
+python hermes/hermes.py stats --json
+python hermes/hermes.py query --json "a problem to reproduce"
+python hermes/hermes.py note "problem" "verified reusable solution" --tags debugging,reusable --source manual --json
 ```
 
 ## Daily briefing
@@ -125,7 +173,22 @@ Claude models receive `--dangerously-skip-permissions`, while GPT-5.6 Sol uses
 Codex with `--yolo`. This bypass applies to that run only. The server derives
 the provider, model, working directory, and command from the saved plan; the
 browser cannot submit them. Progress and Stop remain available in Mission
-Activity, and recovery workers never inherit the bypass.
+Activity. The selected provider policy remains authoritative for initial,
+resumed, and recovery workers. Rune's independent Maestro guard still pauses
+protected outward, destructive, spending, and soul-write actions; Mission
+Activity can grant a short-lived approval scoped to that exact mission, role,
+and recorded action.
+
+Successful CEO runs leave the active queue automatically and remain in
+**Completed & delivery** history; failed, stopped, exhausted, and
+permission-blocked runs stay active so they can be resumed. Completed briefing
+priorities likewise move into **Completed plans**, where they can be reopened or
+run again. Each completed mission has an explicit **Review → Tests → Commit →
+Push** lane. Review shows a redacted tracked/untracked change report, tests use a
+server-detected project command, commit includes only server-attributed paths,
+and push requires a fresh second confirmation and never force-pushes. If a
+repository was already dirty when the mission started, review and tests remain
+available but automatic commit is disabled to avoid mixing unrelated work.
 
 Run it on demand:
 
@@ -142,8 +205,11 @@ Scheduler to run `briefing.cmd`. The shared `scheduled` command freezes the
 source date belonging to the latest 09:30 cycle, so a delayed run cannot drift
 across midnight. The dashboard server also checks on boot and every minute for
 a missed cycle. Attempts are durable, failures keep the last good plan visible,
-and automatic retries wait 15 minutes. See `OPERATOR.md` for setup and
-verification.
+and automatic retries wait 15 minutes. The dashboard's **Ensure current** action
+uses that same deduplicated catch-up path: it queues one background model run
+only when the current cycle is missing or overdue, and otherwise reports the
+fresh, running, or retry-wait state without starting a duplicate. See
+`OPERATOR.md` for setup and verification.
 
 ## Core layers
 

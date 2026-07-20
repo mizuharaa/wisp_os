@@ -19,9 +19,11 @@ State: one JSON per run in state/ceo/<cid>.json.  Wire: mirror.py events.
 Stdlib only, raw urllib against the Anthropic API (repo rule: no deps).
 """
 import datetime
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -31,12 +33,22 @@ import urllib.request
 import uuid
 
 import chat    # API key resolution
+import delivery  # guarded review/test/commit/push lane
 import pulse   # account routing for workers
 import runtime as agent_runtime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+MEMORY_DIR = os.path.join(ROOT, "memory")
+if MEMORY_DIR not in sys.path:
+    sys.path.insert(0, MEMORY_DIR)
+import recall_engine  # structured Hermes retrieval + bounded proof receipts
+from hermes.hermes import note_memory  # structured retention policy outcome
+
 CDIR = os.path.join(ROOT, "state", "ceo")
 ADIR = os.path.join(CDIR, "archive")   # finished runs moved here, kept not deleted
+APPROVALS = os.path.join(ROOT, "state", "approvals.json")
 MIRROR = os.path.join(ROOT, ".claude", "hooks", "mirror.py")
 HERMES = os.path.join(ROOT, "hermes", "hermes.py")
 API = "https://api.anthropic.com/v1/messages"
@@ -54,6 +66,7 @@ MAX_CONTINUES = 3
 MAX_PLANNER_ATTEMPTS = 2
 MAX_TRANSIENT_RETRIES = 2
 MAX_RECOVERY_CYCLES = 2
+MAX_PROVIDER_FALLBACKS = 1
 RETRY_BACKOFF_BASE = 0.5
 
 CONTINUE_PROMPT = """You ran out of your turn budget mid-task — this is a \
@@ -77,9 +90,11 @@ REFINER = "claude-haiku-4-5"   # prompt smith: cheap, fast
 PLANNER = "claude-opus-4-8"    # the CEO itself: judgment is the product
 ROLE_MODELS = ("haiku", "sonnet", "opus", "fable")
 CLAUDE_WORKER_MODELS = frozenset(ROLE_MODELS)
-CODEX_WORKER_MODELS = frozenset(("gpt-5.6-sol",))
+CODEX_FALLBACK_MODEL = "gpt-5.6-sol"
+CODEX_WORKER_MODELS = frozenset((CODEX_FALLBACK_MODEL,))
 
 LIVE = {}  # cid -> {"thread","proc","stop","gate":{role_id:(action,feedback)}}
+DELIVERY_BUSY = set()  # cids with one synchronous delivery transition in flight
 # _save participates in cancellation ordering.  An RLock lets callers that are
 # already inspecting LIVE persist state without deadlocking themselves.
 LOCK = threading.RLock()
@@ -220,26 +235,57 @@ WORTH_COST = 0.15    # dollars: token-heavy runs
 WORTH_TURNS = 40     # a single role that ran deep
 
 
-def _worth_remembering(o):
-    """The brain records signal, not every run. Keep a note only when a mission
-    was actually instructive: it failed (failures teach most), was token-heavy,
-    needed several coordinated roles, leaned on hard reasoning (opus/fable), or
-    ran a role deep. Skip cheap, mechanical, first-try successes."""
+def _remembering_reasons(o):
+    """Return stable policy codes explaining why a result may be reusable."""
     roles = o.get("roles") or []
+    reasons = []
     if any(agent_runtime.compact_recovery_evidence(r, learnable_only=True)
            for r in roles):
-        return True
+        reasons.append("verified_nonobvious_recovery")
     if o.get("status") in ("failed", "error"):
-        return True
+        reasons.append("failed_mission_evidence")
     if (o.get("cost") or 0) >= WORTH_COST:
-        return True
+        reasons.append("token_expensive")
     if len([r for r in roles if r.get("status") != "skipped"]) >= 2:
-        return True
-    if any(r.get("model") in ("opus", "fable") for r in roles):
-        return True
+        reasons.append("coordinated_roles")
+    if any((r.get("model") in ("opus", "fable") or
+            ((r.get("provider_fallback")
+              if isinstance(r.get("provider_fallback"), dict) else {})
+             .get("from_model") in ("opus", "fable"))) for r in roles):
+        reasons.append("hard_reasoning_model")
     if any((r.get("turns") or 0) >= WORTH_TURNS for r in roles):
-        return True
-    return False
+        reasons.append("deep_role_budget")
+    return reasons
+
+
+def _worth_remembering(o):
+    """The brain records reusable signal, not every cheap mechanical run."""
+    return bool(_remembering_reasons(o))
+
+
+def _learning_receipt(result, policy_reasons):
+    """Bound Hermes' write decision for mission/UI state without stored text."""
+    result = result if isinstance(result, dict) else {}
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    duplicate = (result.get("duplicate")
+                 if isinstance(result.get("duplicate"), dict) else {})
+    signals = quality.get("signals") if isinstance(quality.get("signals"), list) else []
+    return {
+        "version": 1,
+        "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "attempted": True,
+        "outcome": str(result.get("outcome") or "error")[:40],
+        "reason_code": str(result.get("reason_code") or "memory-write-error")[:80],
+        "memory_id": str(result.get("id") or "")[:40],
+        "quality_score": round(float(quality.get("score") or 0), 4),
+        "quality_signals": [str(item.get("code") or "")[:60]
+                            for item in signals[:8] if isinstance(item, dict)],
+        "duplicate_id": str(duplicate.get("id") or "")[:40],
+        "duplicate_similarity": round(float(duplicate.get("similarity") or 0), 4),
+        "archived_during_compaction": max(
+            0, int(result.get("archived_during_compaction") or 0)),
+        "policy_reasons": list(policy_reasons)[:8],
+    }
 
 
 def _api(model, system, user, schema, max_tokens=4000, timeout=120):
@@ -269,16 +315,90 @@ def _api(model, system, user, schema, max_tokens=4000, timeout=120):
         return {"error": "malformed JSON from " + model}
 
 
+_RECALL_LOCAL = threading.local()
+
+
 def _recall(text):
-    """Prior solutions from the brain (Hermes -> Obsidian), or ''."""
+    """Return structured Hermes context while preserving the historic str API.
+
+    Mission callers put their receipt context in a thread-local immediately
+    before this one-positional-argument call.  Keeping that shape avoids
+    breaking local extensions and tests that replace ``_recall``.
+    """
+    options = getattr(_RECALL_LOCAL, "options", {}) or {}
+    bundle = recall_engine.query(text, root=ROOT, **options)
+    _RECALL_LOCAL.bundle = bundle
+    return bundle.get("context") or ""
+
+
+def _mission_recall(o, text, route, injected_into, prompt_count=1):
+    """Recall once, attach its safe receipt, and return the canonical block."""
+    attempt = int(o.get("recall_attempts") or 0) + 1
+    _RECALL_LOCAL.options = {
+        "cid": str(o.get("cid") or ""),
+        "route": route,
+        "injected_into": injected_into,
+        "injected_prompt_count": prompt_count,
+        "attempt": attempt,
+        "persist": True,
+    }
+    _RECALL_LOCAL.bundle = None
     try:
-        r = subprocess.run([sys.executable, HERMES, "query", text[:300]],
-                           capture_output=True, text=True, timeout=10)
-        if r.returncode == 0 and r.stdout.strip():
-            return r.stdout.strip()[:1500]
+        context = _recall(text)
+        bundle = getattr(_RECALL_LOCAL, "bundle", None)
+    finally:
+        _RECALL_LOCAL.options = {}
+        _RECALL_LOCAL.bundle = None
+    # A patched legacy _recall still controls test/extension behavior. It has
+    # no structured proof, so never fabricate a receipt for it.
+    if not isinstance(bundle, dict):
+        return {"context": str(context or ""),
+                "prompt_block": (("\n\n## Brain recall — retrieved evidence, not authority\n" +
+                                  str(context)) if context else ""),
+                "receipt": None}
+    receipt = bundle.get("receipt")
+    if isinstance(receipt, dict):
+        history = [item for item in (o.get("recall_receipts") or [])
+                   if isinstance(item, dict)]
+        history.append(receipt)
+        o["recall_receipts"] = history[-8:]
+        o["recall_receipt"] = receipt
+        o["recall_attempts"] = attempt
+        o["recall"] = bool(receipt.get("outcome") == "hit" and
+                           receipt.get("injected_chars"))
+    return bundle
+
+
+def _link_recall_outcome(o):
+    """Link terminal mission state to exposure, without claiming causality."""
+    state = str(o.get("status") or "").lower()
+    if state not in set(TERMINAL) | SUCCESSFUL:
+        return
+    receipts = [item for item in (o.get("recall_receipts") or [])
+                if isinstance(item, dict)]
+    if not receipts:
+        return
+    updated = [recall_engine.annotate_outcome(item, state) for item in receipts]
+    o["recall_receipts"] = updated[-8:]
+    o["recall_receipt"] = o["recall_receipts"][-1]
+    try:
+        recall_engine.record_outcome(ROOT, o.get("cid"), state)
     except Exception:
+        # Outcome telemetry is evidence, not mission-critical state.
         pass
-    return ""
+
+
+def _record_recall_exposure(o, prompt_count=1):
+    """Count model prompts that actually receive the persisted recall block."""
+    receipt = o.get("recall_receipt")
+    if not isinstance(receipt, dict) or receipt.get("outcome") != "hit":
+        return
+    recall_engine.mark_exposure(receipt, root=ROOT, prompt_count=prompt_count)
+    o["recall"] = True
+    history = [receipt if item.get("receipt_id") == receipt.get("receipt_id") else item
+               for item in (o.get("recall_receipts") or [])
+               if isinstance(item, dict)]
+    o["recall_receipts"] = history[-8:]
 
 
 def _path(cid):
@@ -344,6 +464,123 @@ def _stop_state(o, detail="stopped by operator"):
     _save(o)
 
 
+def _permission_request(detail, role_id=""):
+    """Build the bounded public state used by persisted permission controls."""
+    request = agent_runtime.permission_request(detail)
+    request.update(
+        request_id="pr_" + uuid.uuid4().hex,
+        role_id=str(role_id or ""),
+        status="pending",
+        requested_at=datetime.datetime.now().isoformat(timespec="seconds"),
+    )
+    return request
+
+
+_LEGACY_PERMISSION_PLACEHOLDERS = frozenset((
+    "operator permission or credentials are required",
+    "operator permission or credentials are required.",
+    "operator permission is required",
+    "operator action required",
+    "permission required",
+    "approval needed",
+    "blocked",
+))
+
+
+def _legacy_permission_request(o, role=None):
+    """Deterministically normalize a pre-request-id permission boundary."""
+    planner_request = not isinstance(role, dict)
+    role = role if isinstance(role, dict) else {}
+    planning = o.get("planning_history") or []
+    planning_detail = (planning[-1].get("detail") if planning and
+                       isinstance(planning[-1], dict) else "")
+    evidence = (role.get("last_failure") or role.get("result") or
+                role.get("detail") or planning_detail or o.get("detail") or "")
+    evidence = str(evidence or "").strip()
+    useful = bool(evidence and evidence.lower() not in _LEGACY_PERMISSION_PLACEHOLDERS)
+    if useful:
+        request = agent_runtime.permission_request(evidence)
+    else:
+        request = {
+            "kind": "unknown",
+            "scope": "unresolved-prerequisite",
+            "summary": ("Legacy permission wait has no recoverable evidence. "
+                        "Retry after fixing the prerequisite, or Deny and skip."),
+            "can_authorize": False,
+        }
+    if planner_request:
+        request.update(
+            kind="planner",
+            scope="planner-api",
+            can_authorize=False,
+        )
+    requested_at = str(o.get("updated") or o.get("started") or "legacy")
+    rid = str(role.get("id") or "")
+    material = "\x1f".join((str(o.get("cid") or ""), rid, evidence, requested_at))
+    request.update(
+        request_id="legacy_" + hashlib.sha256(
+            material.encode("utf-8", errors="replace")).hexdigest()[:32],
+        role_id=rid,
+        status="pending",
+        requested_at=requested_at,
+    )
+    return request
+
+
+def _normalize_persisted_permission_request(o, role, request):
+    """Reconcile old nonce-bearing request metadata with server-held evidence."""
+    role_record = role if isinstance(role, dict) else {}
+    request = dict(request) if isinstance(request, dict) else {}
+    if not request.get("request_id"):
+        return _legacy_permission_request(o, role if isinstance(role, dict) else None)
+    planning = o.get("planning_history") or []
+    planning_detail = (planning[-1].get("detail") if planning and
+                       isinstance(planning[-1], dict) else "")
+    evidence = (role_record.get("last_failure") or role_record.get("result") or
+                request.get("summary") or role_record.get("detail") or
+                planning_detail or o.get("detail") or "")
+    parsed = agent_runtime.permission_request(evidence) if evidence else {}
+    if parsed.get("kind") == "credential":
+        request.update(kind="credential", scope="external-prerequisite",
+                       summary=parsed.get("summary") or request.get("summary") or "",
+                       can_authorize=False)
+    elif parsed.get("kind") == "guard":
+        was_restrictive = request.get("can_authorize") is False
+        request.update(kind="guard", scope=parsed.get("scope") or "",
+                       summary=parsed.get("summary") or request.get("summary") or "",
+                       can_authorize=(bool(parsed.get("can_authorize")) and
+                                      not was_restrictive))
+    if not isinstance(role, dict):
+        request.update(kind="planner", scope="planner-api", can_authorize=False)
+    return request
+
+
+def _set_permission_wait(o, detail, role=None, next_action=None):
+    """Persist the exact permission evidence instead of a generic dead end."""
+    rid = str((role or {}).get("id") or "")
+    request = _permission_request(detail, rid)
+    if role is None:
+        # The staffing planner is an API request, not a headless tool worker.
+        # There is no narrowly scoped skip/yolo override to grant here.
+        request.update(kind="planner", scope="planner-api", can_authorize=False)
+    message = ("Fix the external prerequisite, then Retry, or Deny this request."
+               if not request.get("can_authorize") else
+               "Allow this scoped request, Retry after fixing it, or Deny and skip.")
+    next_action = next_action or message
+    if role is not None:
+        role["status"] = "waiting_permission"
+        role["detail"] = request["summary"] or "operator permission is required"
+        role["next_action"] = next_action
+        role["permission_request"] = request
+    o["status"] = "waiting_permission"
+    o["detail"] = ((rid + ": ") if rid else "") + (
+        request["summary"] or "operator permission is required")
+    o["detail"] = o["detail"][:500]
+    o["next_action"] = next_action
+    o["permission_request"] = dict(request)
+    return request
+
+
 def _wait_retry(cid, retry_number):
     return agent_runtime.wait_backoff(
         lambda: _stopped(cid), retry_number, base=RETRY_BACKOFF_BASE)
@@ -355,14 +592,95 @@ def _record_attempt(role, w, classification, secs, kind="worker"):
     attempts.append({
         "attempt": role.get("attempt", len(attempts) + 1),
         "kind": kind,
-        "status": "done" if classification == "success" else "failed",
+        "status": ("done" if classification == "success" else
+                   "gated" if classification == "permission" else "failed"),
         "classification": classification,
+        "provider": str(w.get("provider") or role.get("provider") or ""),
+        "model": str(role.get("model") or ""),
         "detail": agent_runtime.safe_excerpt(w.get("result"), 500),
         "session": w.get("session_id") or "",
         "secs": round(secs),
         "ts": datetime.datetime.now().isoformat(timespec="seconds"),
     })
     del attempts[:-12]
+
+
+def _codex_fallback_status(now=None):
+    """Return whether the local Codex CLI is a usable failover target.
+
+    This is a local readiness check only: the executable must be on PATH, an
+    authenticated Codex account must be visible, and the most recent known
+    capacity window must not still be exhausted.  A cold pulse snapshot is
+    filled from Codex's local auth/session files; no network probe is made.
+    """
+    if not shutil.which("codex"):
+        return False, "Codex CLI is not installed or is not on PATH."
+    try:
+        status = (pulse.get().get("codex") or {})
+    except Exception:
+        status = {}
+    # A newly logged-in/running CLI can be newer than the 45-second dashboard
+    # pulse. Refresh a missing/error snapshot directly from the same local
+    # Codex files so failover does not reject a connection that is already live.
+    if not status or status.get("error"):
+        try:
+            status = pulse._codex(pulse._cfg())  # local auth/session files only
+        except Exception:
+            status = {"error": "local Codex account state is unreadable"}
+    if not isinstance(status, dict):
+        return False, "Codex account status is unavailable."
+    if status.get("error"):
+        return False, "Codex is not connected; run `codex login` first."
+    current = time.time() if now is None else float(now)
+    for pct_key, reset_key, label in (
+            ("pct", "reset_at", "5-hour"),
+            ("pct7d", "reset_at7d", "weekly")):
+        try:
+            exhausted = float(status.get(pct_key)) >= 100
+        except (TypeError, ValueError):
+            exhausted = False
+        if not exhausted:
+            continue
+        try:
+            reset_at = float(status.get(reset_key) or 0)
+        except (TypeError, ValueError):
+            reset_at = 0
+        if not reset_at or reset_at > current:
+            return False, "Codex's %s capacity window is exhausted." % label
+    return True, "Codex CLI is connected and has available capacity."
+
+
+def _switch_role_to_codex(role, failure):
+    """Persist a single, auditable Claude-to-Codex provider switch in-place."""
+    previous_provider = _provider_for_model(role.get("model"))
+    if previous_provider != "claude":
+        raise ValueError("only Claude roles can fail over to Codex")
+    prior = role.get("provider_fallback")
+    used = int(prior.get("count") or 0) if isinstance(prior, dict) else 0
+    if used >= MAX_PROVIDER_FALLBACKS:
+        raise ValueError("provider fallback budget exhausted")
+    fallback = {
+        "count": used + 1,
+        "label": "Claude → Codex",
+        "from_provider": "claude",
+        "from_model": str(role.get("model") or ""),
+        "from_session": str(role.get("session") or ""),
+        "to_provider": "codex",
+        "to_model": CODEX_FALLBACK_MODEL,
+        "reason": agent_runtime.safe_excerpt(failure, 300),
+        "status": "running",
+        "summary": "Claude capacity limit; Codex is continuing this role.",
+        "switched_at": datetime.datetime.now().isoformat(timespec="seconds"),
+    }
+    role["provider_fallback"] = fallback
+    role["provider"] = "codex"
+    role["model"] = CODEX_FALLBACK_MODEL
+    # Claude and Codex session identifiers are provider-specific. Retaining the
+    # old id here could make a later Resume target the wrong CLI conversation.
+    role["session"] = ""
+    role.pop("continue_from", None)
+    role["continues"] = 0
+    return fallback
 
 
 def _age_days(o):
@@ -560,11 +878,15 @@ def plan_and_start(text, opts=None, source=None, workdir=None,
         route = mode                       # an explicit choice always wins
     # 2. answer: chat only, no tools, no agents. Cheap questions.
     if route == "answer":
-        ans = chat.ask(refined, model=DIRECT_MODELS.get(force_model))
+        answer_cid = "answer-" + uuid.uuid4().hex[:12]
+        ans = chat.ask(
+            refined, model=DIRECT_MODELS.get(force_model),
+            recall_context={"cid": answer_cid, "route": "answer"})
         if ans.get("error"):
             return None, ans["error"]
         return {"kind": "answer", "reply": ans.get("reply") or "(no reply)",
-                "model": ans.get("model"), "goal": text[:1000]}, None
+                "model": ans.get("model"), "goal": text[:1000],
+                "recall_receipt": ans.get("recall_receipt")}, None
     os.makedirs(CDIR, exist_ok=True)
     cid = uuid.uuid4().hex[:8]
     briefing_source = (isinstance(source, dict) and
@@ -583,19 +905,20 @@ def plan_and_start(text, opts=None, source=None, workdir=None,
          "status": "running", "cost": 0, "auto_recover": True,
          "planning_attempt": 0, "planning_history": [], "next_action": "",
          "started": datetime.datetime.now().isoformat(timespec="seconds")}
+    o["git_baseline"] = delivery.capture_git_baseline(run_dir)
     # 3. solo: run the prompt in ONE Claude Code session with full tools — no
     # planning call, no roster, no subagents. This is "just run it" mode.
     if route == "solo":
-        recall = _recall(keywords)
-        brief = SOLO_BRIEF + refined
-        if recall:
-            brief += ("\n\n## Brain recall — solved before, reuse don't re-solve:\n"
-                      + recall)
+        recall_bundle = _mission_recall(
+            o, keywords, "solo", "solo_worker", prompt_count=0)
+        recall = recall_bundle.get("context") or ""
+        brief = SOLO_BRIEF + refined + (recall_bundle.get("prompt_block") or "")
         o.update(name=text[:40], summary="Single Claude Code session — no delegation.",
                  recall=bool(recall),
                  roles=[{"id": "solo", "title": "Direct run (no delegation)",
                          "mission": brief, "model": force_model or "sonnet",
                          "provider": "claude",
+                         "brain_preinjected": bool(recall_bundle.get("prompt_block")),
                          "turns": force_turns or 40, "depends_on": [],
                          "review": bool(opts.get("gate")), "status": "pending",
                          "result": "", "secs": 0, "cost": 0}])
@@ -684,6 +1007,7 @@ def _start_direct_briefing(text, source, workdir, roles):
     if not isinstance(roles, list) or not 2 <= len(roles) <= 4:
         return None, "direct briefing execution requires 2-4 validated roles"
     prepared = []
+    recall_terms = []
     seen = set()
     previous = ""
     for index, item in enumerate(roles, 1):
@@ -723,6 +1047,7 @@ def _start_direct_briefing(text, source, workdir, roles):
             "review": False, "status": "pending", "result": "", "secs": 0,
             "cost": 0,
         })
+        recall_terms.extend((title, assignment, deliverable))
         seen.add(role_id)
         previous = role_id
     os.makedirs(CDIR, exist_ok=True)
@@ -741,6 +1066,17 @@ def _start_direct_briefing(text, source, workdir, roles):
         "next_action": "Executing the first saved provider role.",
         "started": datetime.datetime.now().isoformat(timespec="seconds"),
     }
+    o["git_baseline"] = delivery.capture_git_baseline(workdir)
+    recall_query = " ".join(recall_terms)[:300]
+    o["keywords"] = recall_query
+    recall_bundle = _mission_recall(
+        o, recall_query, "direct", "direct_workers", prompt_count=0)
+    recall_block = recall_bundle.get("prompt_block") or ""
+    if recall_block:
+        for role in prepared:
+            keep = max(0, 14000 - len(recall_block))
+            role["mission"] = role["mission"][:keep] + recall_block
+            role["brain_preinjected"] = True
     _save(o)
     thread = threading.Thread(target=_run, args=(cid,), daemon=True)
     with LOCK:
@@ -810,10 +1146,19 @@ def _plan_then_run(cid):
             _stop_state(o)
             _drop_live(cid)
             return
-        recall = _recall(o.get("keywords") or o["goal"])
-        brief = "MISSION:\n" + o["refined"]
-        if recall:
-            brief += "\n\n## Brain recall — solved before, reuse don't re-solve:\n" + recall
+        recall_bundle = _mission_recall(
+            o, o.get("keywords") or o["goal"], "delegate", "planner",
+            prompt_count=0)
+        recall = recall_bundle.get("context") or ""
+        recall_block = recall_bundle.get("prompt_block") or ""
+        # _api bounds user content at 12k. Reserve the recall block explicitly
+        # so a long Daily Briefing cannot silently truncate the evidence.
+        prefix = "MISSION:\n"
+        mission_limit = max(0, 12000 - len(prefix) - len(recall_block))
+        brief = prefix + o["refined"][:mission_limit] + recall_block
+        # Persist the proof before the first planner request. If Rune stops in
+        # the model call, the retrieval attempt and exposure remain visible.
+        _save(o)
         p, roles = {}, []
         final_classification = "task"
         for attempt in range(1, MAX_PLANNER_ATTEMPTS + 1):
@@ -829,6 +1174,8 @@ def _plan_then_run(cid):
                 _stop_state(o)
                 _drop_live(cid)
                 return
+            _record_recall_exposure(o, 1)
+            _save(o)
             p = _api(PLANNER, PLAN_SYSTEM, brief, PLAN_SCHEMA,
                      max_tokens=8000, timeout=180)
             if _stopped(cid):
@@ -861,9 +1208,7 @@ def _plan_then_run(cid):
                 break
             o["detail"] = agent_runtime.safe_excerpt(error, 300)
             if classification == "permission":
-                o["status"] = "waiting_permission"
-                o["next_action"] = (
-                    "Provide the named credential or approval explicitly, then Resume planning.")
+                _set_permission_wait(o, error)
                 _save(o)
                 emit(cid, "CEO planning paused for operator permission: " +
                      o["detail"][:100])
@@ -888,14 +1233,15 @@ def _plan_then_run(cid):
             else:
                 break
         if not roles:
-            o["status"] = ("waiting_permission" if final_classification == "permission"
-                           else "error")
             o["detail"] = agent_runtime.safe_excerpt(
                 p.get("error") or "CEO returned no roles", 300)
-            o["next_action"] = (
-                "Provide the named credential or approval explicitly, then Resume planning."
-                if final_classification == "permission" else
-                "Retry planning; no repository role was started.")
+            if final_classification == "permission":
+                _set_permission_wait(o, p.get("error") or o["detail"])
+            else:
+                o["status"] = "error"
+                o["next_action"] = "Retry planning; no repository role was started."
+            if o["status"] == "error":
+                _link_recall_outcome(o)
             _save(o)
             emit(cid, "CEO planning failed: " + o["detail"][:120])
             _drop_live(cid)
@@ -945,6 +1291,7 @@ def _plan_then_run(cid):
             return
         o["status"] = "error"
         o["detail"] = repr(e)[:300]
+        _link_recall_outcome(o)
         _save(o)
         emit(cid, "CEO planning crashed: " + repr(e)[:120])
         _drop_live(cid)
@@ -962,13 +1309,78 @@ def _provider_for_model(model):
     raise ValueError("unsupported worker model: %s" % (model or "(empty)"))
 
 
+def _permission_mode_for(mission, role=None):
+    """Resolve the persisted operator policy for one worker, fail-closed.
+
+    A one-role permission grant is narrower than changing the whole mission, so
+    a valid role override wins.  New mission records persist ``permission_mode``;
+    ``safe_permissions`` is retained only as a legacy-record fallback.  Unknown
+    or missing legacy values default to safe rather than accidentally enabling a
+    bypass after a corrupt/manual state edit.
+    """
+    for record in (role, mission):
+        if not isinstance(record, dict):
+            continue
+        mode = str(record.get("permission_mode") or "").strip().lower()
+        if record is role and mode == "skip":
+            authorization = record.get("operator_authorization")
+            if not isinstance(authorization, dict):
+                continue
+            if (authorization.get("status") != "active" or
+                    authorization.get("kind") not in ("provider", "protected")):
+                continue
+            try:
+                expires = datetime.datetime.fromisoformat(
+                    str(authorization.get("expires_at") or ""))
+            except ValueError:
+                continue
+            if expires <= datetime.datetime.now():
+                continue
+        if mode in ("safe", "skip"):
+            return mode
+    if isinstance(mission, dict) and mission.get("safe_permissions") is False:
+        return "skip"
+    return "safe"
+
+
+def _consume_operator_authorization(mission, role):
+    """Mark both runtime and audit copies when a scoped grant is used."""
+    authorization = role.get("operator_authorization")
+    if not isinstance(authorization, dict) or authorization.get("status") != "active":
+        return
+    consumed_at = datetime.datetime.now().isoformat(timespec="seconds")
+    authorization["status"] = "consumed"
+    authorization["consumed_at"] = consumed_at
+    if (authorization.get("kind") in ("provider", "protected") and
+            role.get("permission_mode") == "skip"):
+        # This field is a one-invocation capability, not durable role policy.
+        # Removing it also keeps the persisted/UI mode aligned with the next
+        # backend decision; an explicit mission-level skip remains untouched.
+        role.pop("permission_mode", None)
+    authorization_id = authorization.get("authorization_id")
+    request_id = authorization.get("request_id")
+    for receipt in mission.get("permission_authorizations") or []:
+        if not isinstance(receipt, dict):
+            continue
+        if ((authorization_id and receipt.get("authorization_id") == authorization_id) or
+                (not authorization_id and request_id and
+                 receipt.get("request_id") == request_id)):
+            receipt["status"] = "consumed"
+            receipt["consumed_at"] = consumed_at
+            break
+
+
 def _worker_argv(role, permission_mode="safe", workdir=ROOT, resume_sid="",
                  output_path=""):
     """Build an argv-only, provider-aware headless worker command.
 
-    The model and provider are allowlisted and must agree. Permission bypass is
-    enabled only for an explicit skip mission and never for a recovery role.
-    Prompt text is deliberately absent from argv and is supplied over stdin.
+    The model and provider are allowlisted and must agree.  Permission policy is
+    a mission-level operator choice: an explicit skip mission keeps its bypass
+    on original, resumed, and bounded-recovery workers.  Otherwise a recovery
+    worker can hit the same permission denial it was created to repair and park
+    the mission even though the operator selected skip.  Safe missions remain
+    contained.  Prompt text is deliberately absent from argv and is supplied
+    over stdin.
     """
     if permission_mode not in ("safe", "skip"):
         raise ValueError("permission_mode must be safe or skip")
@@ -977,8 +1389,7 @@ def _worker_argv(role, permission_mode="safe", workdir=ROOT, resume_sid="",
     saved_provider = str(role.get("provider") or provider).strip().lower()
     if saved_provider != provider:
         raise ValueError("worker provider does not match its model")
-    recovery = bool(role.get("recovery"))
-    bypass = permission_mode == "skip" and not recovery
+    bypass = permission_mode == "skip"
     if provider == "claude":
         try:
             turns = max(1, min(100, int(role.get("turns") or 40)))
@@ -995,10 +1406,12 @@ def _worker_argv(role, permission_mode="safe", workdir=ROOT, resume_sid="",
         return argv
     if not output_path:
         raise ValueError("Codex workers require an output path")
-    argv = ["codex", "exec"]
-    if resume_sid:
-        argv.append("resume")
-    argv += ["--json", "-o", os.path.normpath(output_path), "-m", model]
+    # Codex parses sandbox/approval policy at the `exec` level.  Keep every
+    # execution option before the optional `resume` subcommand; placing
+    # `--sandbox` after `resume` is rejected by current CLIs before any worker
+    # can start.
+    argv = ["codex", "exec", "--json", "-o", os.path.normpath(output_path),
+            "-m", model]
     if bypass:
         argv.append("--yolo")
     else:
@@ -1007,7 +1420,7 @@ def _worker_argv(role, permission_mode="safe", workdir=ROOT, resume_sid="",
         # granting the native yolo/bypass policy.
         argv += ["--sandbox", "workspace-write", "-c", 'approval_policy="never"']
     if resume_sid:
-        argv += [str(resume_sid), "-"]
+        argv += ["resume", str(resume_sid), "-"]
     else:
         argv += ["-C", os.path.normpath(workdir), "-"]
     return argv
@@ -1060,13 +1473,39 @@ def _worker(cid, role, context, cfg_dir, resume_sid="", workdir=ROOT,
     prompt = CONTINUE_PROMPT if resume_sid else role["mission"]
     if context and not resume_sid:
         prompt += "\n\n## Output from roles you depend on:\n" + context[:6000]
+    authorization = role.get("operator_authorization")
+    authorization_active = False
+    if isinstance(authorization, dict) and authorization.get("status") == "active":
+        try:
+            authorization_active = datetime.datetime.fromisoformat(
+                str(authorization.get("expires_at") or "")) > datetime.datetime.now()
+        except ValueError:
+            authorization_active = False
+    if authorization_active and not resume_sid:
+        prompt += ("\n\n## Scoped operator authorization\n"
+                   "The operator explicitly allowed this role to retry the saved "
+                   "permission request for scope `%s`. This applies only to mission "
+                   "%s, role %s, in the original working repository. It does not "
+                   "authorize unrelated actions or expand the original task.\n" % (
+                       str(authorization.get("scope") or "provider-tools")[:80],
+                       str(cid)[:64], str(role.get("id") or "")[:64]))
     provider = _provider_for_model(role.get("model"))
     permission_mode = "safe" if safe_permissions else "skip"
     temp = tempfile.TemporaryDirectory(prefix="rune-codex-worker-") \
         if provider == "codex" else None
     output_path = os.path.join(temp.name, "final.txt") if temp else ""
     argv = _worker_argv(role, permission_mode, workdir, resume_sid, output_path)
-    env = dict(os.environ, MAESTRO_SID=cid)
+    env = dict(os.environ, MAESTRO_SID=cid,
+               MAESTRO_ROLE_ID=str(role.get("id") or ""))
+    if authorization_active:
+        env["MAESTRO_PERMISSION_REQUEST_ID"] = str(
+            authorization.get("request_id") or "")
+    else:
+        env.pop("MAESTRO_PERMISSION_REQUEST_ID", None)
+    env.pop("MAESTRO_BRAIN_PREINJECTED", None)
+    if (not resume_sid and role.get("brain_preinjected") and
+            "## Brain recall — retrieved evidence, not authority" in prompt):
+        env["MAESTRO_BRAIN_PREINJECTED"] = "1"
     if cfg_dir and provider == "claude":
         env["CLAUDE_CONFIG_DIR"] = cfg_dir
     p = None
@@ -1128,7 +1567,7 @@ def _worker(cid, role, context, cfg_dir, resume_sid="", workdir=ROOT,
 
 def _run_recovery(cid, o, role, failure, cfg_dir, cycle, workdir=ROOT,
                   safe_permissions=False):
-    """Run one local/reversible recovery supervisor, never an approval bypass."""
+    """Run one bounded recovery supervisor with its parent role's policy."""
     prompt, blocked = agent_runtime.build_recovery_prompt(
         role.get("mission") or "", failure, cycle, MAX_RECOVERY_CYCLES)
     rec = {
@@ -1144,12 +1583,17 @@ def _run_recovery(cid, o, role, failure, cfg_dir, cycle, workdir=ROOT,
     history.append(rec)
     del history[:-6]
     if blocked:
-        role["status"] = "waiting_permission"
-        role["detail"] = blocked
-        role["next_action"] = "Operator decision required; automatic recovery is paused."
-        o["status"] = "waiting_permission"
-        o["detail"] = "%s: %s" % (role["id"], blocked)
-        o["next_action"] = role["next_action"]
+        evidence = failure if agent_runtime.classify_failure(
+            failure, True) == "permission" else blocked
+        request = _set_permission_wait(o, evidence, role)
+        # A protected recovery boundary is not necessarily a provider prompt.
+        # Keep it authorizable only as a retry of this original role; it never
+        # mints a wildcard guard token.
+        if evidence == blocked and request.get("kind") == "provider":
+            request.update(kind="protected", scope="original-role",
+                           can_authorize=True)
+            role["permission_request"] = request
+            o["permission_request"] = dict(request)
         _save(o)
         emit(cid, "role %s recovery paused: %s" % (role["id"], blocked))
         return "blocked", ""
@@ -1193,12 +1637,7 @@ def _run_recovery(cid, o, role, failure, cfg_dir, cycle, workdir=ROOT,
         return "stopped", ""
     if classification == "permission":
         rec.update(status="blocked", detail="operator permission or credentials are required")
-        role["status"] = "waiting_permission"
-        role["detail"] = rec["detail"]
-        role["next_action"] = "Resolve the permission explicitly, then Resume."
-        o["status"] = "waiting_permission"
-        o["detail"] = "%s: %s" % (role["id"], rec["detail"])
-        o["next_action"] = role["next_action"]
+        _set_permission_wait(o, report, role)
         _save(o)
         return "blocked", ""
     if w.get("is_error"):
@@ -1237,7 +1676,6 @@ def _wait_gate(cid, o, role):
 def _run(cid):
     o = _load_json(_path(cid))
     workdir = os.path.normpath(os.path.realpath(o.get("workdir") or ROOT))
-    safe_permissions = bool(o.get("safe_permissions"))
     # Claude roles use the selected Claude account. Pure Codex missions do not
     # claim or expose an unrelated Claude account in Activity.
     has_claude = any(_provider_for_model(role.get("model")) == "claude"
@@ -1258,6 +1696,12 @@ def _run(cid):
             if _stopped(cid):
                 _stop_state(o)
                 return
+            # A permission boundary is an operator checkpoint for the mission,
+            # not an invitation to keep spending on unrelated roles while its
+            # decision buttons remain unavailable behind a live thread.
+            if any(role.get("status") == "waiting_permission"
+                   for role in o.get("roles") or []):
+                break
             runnable = next(
                 (r for r in o["roles"] if r["status"] == "pending"
                  and all(roles[d]["status"] in ("done", "skipped")
@@ -1275,6 +1719,9 @@ def _run(cid):
                             ", ".join(roles[d]["status"] for d in bad) or "unfinished")
                 break
             role = runnable
+            # Resolve per role so an operator can grant one blocked role without
+            # silently widening permission policy for the rest of the mission.
+            safe_permissions = _permission_mode_for(o, role) == "safe"
             transient_retries = 0
             recovery_cycles = len(role.get("recovery_history") or [])
             recovery_context = ""
@@ -1286,6 +1733,11 @@ def _run(cid):
                 role["attempt"] = (role.get("attempt") or 0) + 1
                 role["detail"] = "attempt %d is running" % role["attempt"]
                 role["next_action"] = "Wait for the role report."
+                if (isinstance(role.get("provider_fallback"), dict) and
+                        _provider_for_model(role.get("model")) == "codex"):
+                    role["provider_fallback"]["status"] = "running"
+                    role["provider_fallback"]["summary"] = (
+                        "Codex is continuing the unfinished role.")
                 o["status"] = "running"
                 o["next_action"] = "%s is working." % role["title"]
                 _save(o)
@@ -1305,8 +1757,12 @@ def _run(cid):
                 # A Continue on an exhausted role resumes its prior provider session
                 # (context intact) instead of re-running the mission from zero
                 sid = role.pop("continue_from", "")
+                if not sid and o.get("route") in ("solo", "direct"):
+                    _record_recall_exposure(o, 1)
+                    _save(o)
                 w = _worker(cid, role, "" if sid else ctx, cfg_dir, resume_sid=sid,
                             workdir=workdir, safe_permissions=safe_permissions)
+                _consume_operator_authorization(o, role)
                 spend = w.get("total_cost_usd") or 0
                 sid = w.get("session_id") or sid
                 # ran out of turns => cut off mid-task, NOT finished. Continue the
@@ -1328,6 +1784,10 @@ def _run(cid):
                                 workdir=workdir, safe_permissions=safe_permissions)
                     spend += w.get("total_cost_usd") or 0
                     sid = w.get("session_id") or sid
+                # A one-request provider grant covers the original invocation
+                # and its same-session turn continuations only. Any separate
+                # fallback, retry, or recovery worker re-resolves mission policy.
+                safe_permissions = _permission_mode_for(o, role) == "safe"
                 role["session"] = sid
                 role["continues"] = cont
                 elapsed = time.time() - t0
@@ -1343,6 +1803,84 @@ def _run(cid):
                 if _stopped(cid):
                     _stop_state(o)
                     return
+                # A Claude capacity limit is an account/provider outage, not a
+                # repository failure. If the local Codex CLI is connected and
+                # has headroom, persist one provider switch before launching it
+                # synchronously. The old Claude session is retained as evidence
+                # but is never resumed through the incompatible Codex CLI.
+                if (not ran_out and w.get("is_error") and
+                        classification == "transient_limit" and
+                        _provider_for_model(role.get("model")) == "claude"):
+                    ready, readiness = _codex_fallback_status()
+                    if ready:
+                        claude_failure = role["result"]
+                        fallback = _switch_role_to_codex(role, claude_failure)
+                        role["attempt"] = (role.get("attempt") or 0) + 1
+                        role["status"] = "retrying"
+                        role["detail"] = (
+                            "Claude capacity limit detected; continuing this role "
+                            "once through Codex.")
+                        role["next_action"] = "Codex is continuing the unfinished role."
+                        o["providers"] = sorted({_provider_for_model(
+                            item.get("model")) for item in o.get("roles") or []})
+                        o["next_action"] = role["next_action"]
+                        _save(o)
+                        emit(cid, "role %s hit a Claude capacity limit — switching "
+                             "to Codex (%s)" % (role["id"], CODEX_FALLBACK_MODEL))
+                        if _stopped(cid):
+                            _stop_state(o)
+                            return
+                        failover_context = "\n\n".join(filter(None, (
+                            ctx,
+                            "### Provider failover\nClaude stopped at a usage/capacity "
+                            "limit. Continue the same assignment with Codex. Inspect "
+                            "the current repository state first, keep any valid prior "
+                            "work, and do not repeat completed changes.",
+                        )))
+                        fallback_started = time.time()
+                        w = _worker(cid, role, failover_context, cfg_dir,
+                                    workdir=workdir,
+                                    safe_permissions=safe_permissions)
+                        fallback_elapsed = time.time() - fallback_started
+                        fallback_spend = w.get("total_cost_usd") or 0
+                        role["secs"] = round((role.get("secs") or 0) +
+                                             fallback_elapsed)
+                        role["cost"] = round((role.get("cost") or 0) +
+                                             fallback_spend, 4)
+                        o["cost"] = round(sum(item.get("cost") or 0
+                                              for item in o["roles"]), 4)
+                        role["session"] = str(w.get("session_id") or "")
+                        role["result"] = str(w.get("result") or "")[:6000] or (
+                            "Codex fallback returned no final message")
+                        classification = agent_runtime.classify_failure(
+                            role["result"], bool(w.get("is_error")),
+                            w.get("subtype") or "")
+                        ran_out = w.get("subtype") == "error_max_turns"
+                        _record_attempt(role, w, classification,
+                                        fallback_elapsed, kind="provider_fallback")
+                        fallback["status"] = (
+                            "waiting_permission" if classification == "permission" else
+                            "failed" if w.get("is_error") else "succeeded")
+                        fallback["summary"] = (
+                            "Codex fallback reached an operator permission boundary."
+                            if classification == "permission" else
+                            "Codex fallback attempt failed; bounded recovery remains visible."
+                            if w.get("is_error") else
+                            "Codex completed the role after Claude hit its capacity limit.")
+                        fallback["finished_at"] = datetime.datetime.now().isoformat(
+                            timespec="seconds")
+                        fallback["result"] = agent_runtime.safe_excerpt(
+                            role["result"], 300)
+                        _save(o)
+                        if _stopped(cid):
+                            _stop_state(o)
+                            return
+                    else:
+                        role["fallback_unavailable"] = {
+                            "provider": "codex", "reason": readiness,
+                            "checked_at": datetime.datetime.now().isoformat(
+                                timespec="seconds"),
+                        }
                 if ran_out:
                     # STILL unfinished after the continue budget. Park it with a
                     # stated reason — never report half-done work as success.
@@ -1354,6 +1892,13 @@ def _run(cid):
                     role["next_action"] = "Continue resumes this exact worker session."
                     _save(o)
                     emit(cid, "role %s EXHAUSTED: %s" % (role["id"], role["detail"]))
+                    break
+                if classification == "permission":
+                    role["last_failure_class"] = "permission"
+                    role["last_failure"] = agent_runtime.safe_excerpt(role["result"], 500)
+                    _set_permission_wait(o, role["result"], role)
+                    _save(o)
+                    emit(cid, "role %s waiting for operator permission" % role["id"])
                     break
                 if w.get("is_error"):
                     role["last_failure_class"] = classification
@@ -1381,16 +1926,6 @@ def _run(cid):
                             return
                         recovery_context = ""
                         continue
-                    if classification == "permission":
-                        role["status"] = "waiting_permission"
-                        role["detail"] = "operator permission or credentials are required"
-                        role["next_action"] = "Resolve the permission explicitly, then Resume."
-                        o["status"] = "waiting_permission"
-                        o["detail"] = "%s: %s" % (role["id"], role["detail"])
-                        o["next_action"] = role["next_action"]
-                        _save(o)
-                        emit(cid, "role %s waiting for operator permission" % role["id"])
-                        break
                     if classification == "task" and recovery_cycles < MAX_RECOVERY_CYCLES:
                         recovery_cycles += 1
                         state, report = _run_recovery(
@@ -1412,6 +1947,10 @@ def _run(cid):
                         if classification in ("transient", "transient_limit") else
                         "recovery budget exhausted: " + role["last_failure"])
                     role["next_action"] = "Inspect attempt/recovery history, then Resume or archive."
+                    if isinstance(role.get("provider_fallback"), dict):
+                        role["provider_fallback"]["status"] = "failed"
+                        role["provider_fallback"]["summary"] = (
+                            "Codex could not complete the role; inspect the attempt history.")
                     _save(o)
                     emit(cid, "role %s %s: %s" % (role["id"],
                          "retry budget exhausted" if role["limit"] else "FAILED",
@@ -1436,6 +1975,10 @@ def _run(cid):
                         emit(cid, "role %s recovery verified: %s" %
                              (role["id"], role["recovery_summary"][:120]))
                 role.pop("limit", None)
+                if isinstance(role.get("provider_fallback"), dict):
+                    role["provider_fallback"]["status"] = "succeeded"
+                    role["provider_fallback"]["summary"] = (
+                        "Codex completed the role after Claude hit its capacity limit.")
                 role["detail"] = ""
                 role["next_action"] = ("Awaiting operator approval." if role.get("review")
                                        else "Role complete.")
@@ -1477,7 +2020,11 @@ def _run(cid):
             o["detail"] = "; ".join("%s: %s" %
                                      (r["id"], r.get("detail") or "operator action required")
                                      for r in waiting)[:300]
-            o["next_action"] = "Resolve the named permission explicitly, then Resume."
+            request = o.get("permission_request") or {}
+            o["next_action"] = (
+                "Fix the external prerequisite, then Retry, or Deny this request."
+                if not request.get("can_authorize", False) else
+                "Allow this scoped request, Retry after fixing it, or Deny and skip.")
         elif all(r["status"] == "exhausted" for r in stuck):
             o["status"] = "exhausted"
             o["detail"] = ("out of turns before finishing — Continue picks each role "
@@ -1488,12 +2035,38 @@ def _run(cid):
             o["detail"] = "; ".join("%s: %s" % (r["id"], r.get("detail") or r["status"])
                                      for r in stuck)[:300]
             o["next_action"] = "Inspect attempt/recovery evidence, then Resume or archive."
+        if o["status"] == "waiting_permission":
+            # Settle the owner thread immediately so nonce-bound permission
+            # controls become actionable. A wait is not a learning outcome;
+            # the resumed terminal mission will produce at most one receipt.
+            _save(o)
+            emit(cid, "mission waiting for operator permission: " +
+                 o.get("detail", "")[:160])
+            return
+        _link_recall_outcome(o)
+        if str(o.get("status") or "").lower() in SUCCESSFUL:
+            # Delivery is attached before the final save/archive so completed
+            # work leaves the active queue with a durable review/test/ship lane.
+            try:
+                delivery.initialize_completed_delivery(o)
+            except Exception as delivery_error:
+                # Shipping metadata is useful, but it is never allowed to turn
+                # successfully completed agent work into a failed mission.
+                o["delivery"] = {
+                    "version": 1, "available": False, "status": "unavailable",
+                    "reason": "Delivery setup failed; the completed work is preserved.",
+                    "created_at": datetime.datetime.now().astimezone().isoformat(
+                        timespec="seconds"),
+                }
+                emit(cid, "delivery setup unavailable (mission unaffected): " +
+                     type(delivery_error).__name__)
         _save(o)
         emit(cid, "mission %s: %s ($%s)%s" % (o["status"], o["name"], o["cost"],
                                               " — " + o["detail"] if o.get("detail") else ""))
         # 5. learn — but only when it's worth remembering (signal, not a log).
         # Trivial cheap successes are skipped so the brain stays high-signal.
-        if _worth_remembering(o):
+        policy_reasons = _remembering_reasons(o)
+        if policy_reasons:
             outcome = "; ".join("%s=%s" % (r["id"], r["status"]) for r in o["roles"])
             recovery_parts = [
                 agent_runtime.compact_recovery_evidence(r, learnable_only=True)
@@ -1505,23 +2078,51 @@ def _run(cid):
                         ("bounded recovery ended without a verified reusable recipe"
                          if had_recovery else agent_runtime.safe_excerpt(last, 320)))
             try:  # learning is best-effort and can never turn a done run into error
-                subprocess.run([sys.executable, HERMES, "note",
-                                agent_runtime.safe_excerpt(o["goal"], 180),
-                                ("%s. %s" % (outcome, evidence))[:500],
-                                "--tags", "mission,ceo,recovery" if recovery else "mission,ceo",
-                                "--source", "ceo:" + cid],
-                               capture_output=True, timeout=20)
+                note_result = note_memory(
+                    agent_runtime.safe_excerpt(o["goal"], 180),
+                    ("%s. %s" % (outcome, evidence))[:500],
+                    "mission,ceo,recovery" if recovery else "mission,ceo",
+                    "ceo:" + cid)
+                o["learning_receipt"] = _learning_receipt(
+                    note_result, policy_reasons)
+                emit(cid, "brain learning %s (%s): %s" % (
+                    o["learning_receipt"]["outcome"],
+                    ",".join(policy_reasons)[:100],
+                    o["learning_receipt"]["reason_code"]))
             except Exception as learn_error:
+                o["learning_receipt"] = {
+                    "version": 1,
+                    "ts": datetime.datetime.now().astimezone().isoformat(
+                        timespec="seconds"),
+                    "attempted": True, "outcome": "error",
+                    "reason_code": "memory-write-error",
+                    "error_type": type(learn_error).__name__[:60],
+                    "policy_reasons": policy_reasons[:8],
+                }
                 emit(cid, "brain note failed (mission unaffected): " +
                      type(learn_error).__name__)
         else:
+            o["learning_receipt"] = {
+                "version": 1,
+                "ts": datetime.datetime.now().astimezone().isoformat(
+                    timespec="seconds"),
+                "attempted": False, "outcome": "skipped",
+                "reason_code": "routine-low-reuse-signal",
+                "policy_reasons": [],
+            }
             emit(cid, "skipped brain note (routine run — brain holds signal, not logs)")
+        try:
+            _save(o)
+        except OSError as receipt_error:
+            emit(cid, "learning receipt persistence failed (mission unaffected): " +
+                 type(receipt_error).__name__)
     except Exception as e:  # never leave a run stuck at "running"
         if _stopped(cid):
             _stop_state(o)
         else:
             o["status"] = "error"
             o["detail"] = repr(e)[:300]
+            _link_recall_outcome(o)
             _save(o)
             emit(cid, "CEO run crashed: " + repr(e)[:120])
     finally:
@@ -1643,8 +2244,350 @@ def resume(cid, automatic=False):
     return None
 
 
-def action(cid, role_id, act, feedback=""):
-    """Operator verdicts: approve | redo | skip (per role), stop, resume, archive."""
+def _mint_guard_approval(action, cid, role_id, request_id, minutes=15):
+    """Mint one short-lived, server-derived Maestro guard token atomically."""
+    action = str(action or "").lower()
+    if action not in agent_runtime.GUARD_APPROVAL_ACTIONS:
+        raise ValueError("permission request is not an allowlisted guard action")
+    now = time.time()
+    try:
+        doc = _load_json(APPROVALS)
+    except (OSError, json.JSONDecodeError):
+        doc = {"tokens": []}
+    tokens = []
+    for token in doc.get("tokens", []):
+        if not isinstance(token, dict):
+            continue
+        try:
+            active = float(token.get("expires") or 0) > now
+        except (TypeError, ValueError):
+            active = False
+        if active:
+            tokens.append(token)
+    expires = now + max(1, min(30, int(minutes))) * 60
+    tokens.append({
+        "action": action,
+        "expires": expires,
+        "minted": datetime.datetime.now().isoformat(timespec="seconds"),
+        "source": "ceo-permission",
+        "cid": str(cid),
+        "role": str(role_id),
+        "request_id": str(request_id),
+    })
+    # The guard only needs a tiny active-token window; never let stale UI
+    # decisions turn this operational file into an unbounded audit log.
+    doc = {"tokens": tokens[-32:]}
+    os.makedirs(os.path.dirname(APPROVALS), exist_ok=True)
+    temp_path = APPROVALS + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(doc, handle, ensure_ascii=False, indent=2)
+    os.replace(temp_path, APPROVALS)
+    return expires
+
+
+def _permission_target(o, role_id):
+    """Resolve only a server-persisted waiting role; never trust UI scope."""
+    waiting = [role for role in o.get("roles") or []
+               if role.get("status") == "waiting_permission"]
+    role_id = str(role_id or "")
+    if role_id:
+        role = next((item for item in waiting if item.get("id") == role_id), None)
+        return role, ("named role is not waiting for permission" if not role else None)
+    if len(waiting) == 1:
+        return waiting[0], None
+    if waiting:
+        return None, "role is required when more than one permission is waiting"
+    if not o.get("roles") and o.get("status") == "waiting_permission":
+        return None, None  # planner permission failure
+    return None, "mission has no persisted permission request"
+
+
+def _reset_permission_dependents(o):
+    """Requeue roles parked only because a permission-blocked dependency stopped."""
+    for role in o.get("roles") or []:
+        if (role.get("status") == "blocked" and
+                str(role.get("detail") or "").startswith("blocked:")):
+            role["status"] = "pending"
+            role["detail"] = ""
+            role["next_action"] = "Waiting for dependencies."
+
+
+def permission_decision(cid, role_id, decision, request_id):
+    """Resolve a permission wait after its worker thread has exited.
+
+    allow: authorize only the persisted role/scope, then retry it with provider
+           prompts skipped. A Maestro guard request also gets one 15-minute,
+           named token derived from server-held evidence.
+    retry: operator fixed an external prerequisite; rerun without escalation.
+    deny:  skip the named role and continue only its unfinished dependents.
+    """
+    decision = str(decision or "").lower()
+    if decision not in ("allow", "retry", "deny"):
+        return "unknown permission decision"
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(cid or "")):
+        return "invalid mission id"
+    request_id = str(request_id or "")
+    if not re.fullmatch(r"(?:pr|legacy)_[a-f0-9]{32}", request_id):
+        return "valid permission request_id is required"
+    thread = None
+    target = None
+    request = None
+    with LOCK:
+        if cid in LIVE:
+            return "permission worker is still settling; refresh and try again"
+        try:
+            o = _load_json(_path(cid))
+        except FileNotFoundError:
+            return "no such mission"
+        except (OSError, json.JSONDecodeError):
+            return "mission file unreadable"
+        target, error = _permission_target(o, role_id)
+        if error:
+            return error
+        request = dict((target or o).get("permission_request") or
+                       o.get("permission_request") or {})
+        request = _normalize_persisted_permission_request(o, target, request)
+        if request.get("request_id") != request_id:
+            return "permission request is stale; refresh Mission Activity"
+        if request.get("status") not in (None, "pending"):
+            return "permission request was already resolved"
+        if decision == "allow" and not bool(request.get("can_authorize", False)):
+            return ("this request cannot be authorized in Rune; fix the external "
+                    "prerequisite, then use Retry")
+
+        now_iso = datetime.datetime.now().isoformat(timespec="seconds")
+        expires = None
+        if decision == "allow":
+            if request.get("kind") == "guard":
+                try:
+                    expires = _mint_guard_approval(
+                        request.get("scope"), cid,
+                        (target or {}).get("id") or "planner",
+                        request.get("request_id"))
+                except (OSError, ValueError, TypeError) as exc:
+                    return "could not persist the scoped guard approval: %s" % type(exc).__name__
+            else:
+                expires = time.time() + 15 * 60
+
+        request.update(status={"allow": "allowed", "retry": "retrying",
+                               "deny": "denied"}[decision],
+                       resolved_at=now_iso, decision=decision)
+        if expires is not None:
+            request["expires_at"] = datetime.datetime.fromtimestamp(
+                expires).isoformat(timespec="seconds")
+        authorization = {
+            "authorization_id": "auth_" + uuid.uuid4().hex,
+            "request_id": str(request.get("request_id") or ""),
+            "decision": decision,
+            "role_id": str((target or {}).get("id") or "planner"),
+            "kind": str(request.get("kind") or "provider"),
+            "scope": str(request.get("scope") or "provider-tools"),
+            "workdir": os.path.normpath(os.path.realpath(o.get("workdir") or ROOT)),
+            "at": now_iso,
+            "status": "active" if decision == "allow" else "recorded",
+        }
+        if request.get("expires_at"):
+            authorization["expires_at"] = request["expires_at"]
+        history = o.setdefault("permission_authorizations", [])
+        history.append(authorization)
+        del history[:-12]
+        o["permission_request"] = dict(request)
+        o["resumes"] = o.get("resumes", 0) + (0 if decision == "deny" else 1)
+
+        if target is None:  # planner permission failure
+            if decision == "deny":
+                o["status"] = "stopped"
+                o["detail"] = "CEO planning permission was denied by the operator."
+                o["next_action"] = "Archive this mission or start a narrower one."
+                _save(o)
+            else:
+                o["status"] = "planning"
+                o["detail"] = ""
+                o["next_action"] = "Retrying the bounded CEO staffing plan."
+                _save(o)
+                thread = threading.Thread(target=_plan_then_run, args=(cid,), daemon=True)
+                LIVE[cid] = {"thread": thread, "proc": None, "stop": False, "gate": {}}
+        else:
+            target["permission_request"] = dict(request)
+            if decision == "allow":
+                # A Maestro guard token authorizes one evidence-derived action;
+                # never widen that into blanket Claude/Codex provider bypass.
+                # Generic provider/protected prompts do require a bounded role
+                # override so the exact retry cannot hit the same CLI dead end.
+                if request.get("kind") in ("provider", "protected"):
+                    target["permission_mode"] = "skip"
+                target["operator_authorization"] = authorization
+            if decision == "deny":
+                target["status"] = "skipped"
+                target["detail"] = "permission request denied by the operator"
+                target["next_action"] = "Role skipped; unfinished dependents may continue."
+            else:
+                target["status"] = "pending"
+                target["result"] = ""
+                target.pop("limit", None)
+                target["detail"] = ""
+                target["next_action"] = "Role queued after operator decision."
+            _reset_permission_dependents(o)
+            o["status"] = "running"
+            o["detail"] = ""
+            o["next_action"] = ("Continuing after the denied role was skipped."
+                                if decision == "deny" else
+                                "Resuming the operator-resolved permission role.")
+            _save(o)
+            thread = threading.Thread(target=_run, args=(cid,), daemon=True)
+            LIVE[cid] = {"thread": thread, "proc": None, "stop": False, "gate": {}}
+    if thread:
+        thread.start()
+    emit(cid, "permission %s for %s (%s)" % (
+        decision, authorization["role_id"], authorization["scope"]))
+    return None
+
+
+def _record_path(cid):
+    """Locate an active or archived mission without accepting a path."""
+    cid = str(cid or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", cid):
+        return ""
+    active = _path(cid)
+    archived = os.path.join(ADIR, cid + ".json")
+    if os.path.isfile(active):
+        return active
+    if os.path.isfile(archived):
+        return archived
+    return ""
+
+
+def _save_record(record, path):
+    """Atomically update a record in its current active/archive location."""
+    record["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temp_path = path + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(record, handle, ensure_ascii=False, indent=1)
+    os.replace(temp_path, path)
+
+
+def public_run(record):
+    """Return a browser-safe mission copy without confirmation secrets."""
+    clean = json.loads(json.dumps(record if isinstance(record, dict) else {}))
+    clean.pop("git_baseline", None)
+    latest_request = None
+    for role in clean.get("roles") or []:
+        if role.get("status") != "waiting_permission":
+            continue
+        request = role.get("permission_request")
+        request = _normalize_persisted_permission_request(clean, role, request)
+        role["permission_request"] = request
+        latest_request = request
+    top_request = clean.get("permission_request")
+    if clean.get("status") == "waiting_permission":
+        if latest_request is not None:
+            clean["permission_request"] = dict(latest_request)
+        else:
+            clean["permission_request"] = _normalize_persisted_permission_request(
+                clean, None, top_request)
+    if isinstance(clean.get("delivery"), dict):
+        clean["delivery"] = delivery.public_delivery(clean["delivery"])
+    return clean
+
+
+def _delivery_repo_key(record):
+    record = record if isinstance(record, dict) else {}
+    baseline = record.get("git_baseline")
+    root = baseline.get("repo_root") if isinstance(baseline, dict) else ""
+    value = str(root or record.get("workdir") or "").strip()
+    return os.path.normcase(os.path.realpath(value)) if value else ""
+
+
+def _peer_repo_busy(cid, record):
+    wanted = _delivery_repo_key(record)
+    if not wanted:
+        return False
+    for other_cid, state in list(LIVE.items()):
+        thread = state.get("thread") if isinstance(state, dict) else None
+        if other_cid == cid or not thread or not thread.is_alive():
+            continue
+        path = _record_path(other_cid)
+        try:
+            other = _load_json(path) if path else {}
+        except (OSError, json.JSONDecodeError):
+            other = {}
+        if _delivery_repo_key(other) == wanted:
+            return True
+    for other_cid in list(DELIVERY_BUSY):
+        if other_cid == cid:
+            continue
+        path = _record_path(other_cid)
+        try:
+            other = _load_json(path) if path else {}
+        except (OSError, json.JSONDecodeError):
+            other = {}
+        if _delivery_repo_key(other) == wanted:
+            return True
+    return False
+
+
+def delivery_action(cid, act, message="", token=""):
+    """Run one guarded delivery transition for a completed mission."""
+    cid = str(cid or "").strip()
+    path = _record_path(cid)
+    if not path:
+        return None, "no such completed mission"
+    record = None
+    with LOCK:
+        live = LIVE.get(cid) or {}
+        thread = live.get("thread")
+        if thread and thread.is_alive():
+            return None, "mission is still running"
+        if cid in DELIVERY_BUSY:
+            return None, "another delivery action is already running"
+        try:
+            record = _load_json(path)
+        except (OSError, json.JSONDecodeError):
+            return None, "mission record is unreadable"
+        if str(record.get("status") or "").lower() not in SUCCESSFUL:
+            return None, "delivery is available only for successful missions"
+        DELIVERY_BUSY.add(cid)
+        peer_active = _peer_repo_busy(cid, record)
+        if peer_active:
+            DELIVERY_BUSY.discard(cid)
+            return None, "another mission or delivery action is using this repository"
+    result, error = None, None
+    try:
+        result = delivery.perform(record, act, message=message, token=token,
+                                  peer_active=peer_active)
+    except delivery.DeliveryError as exc:
+        error = str(exc)
+    except Exception as exc:
+        error = "delivery action crashed: %s" % type(exc).__name__
+    finally:
+        with LOCK:
+            try:
+                _save_record(record, path)
+            except OSError:
+                if not error:
+                    error = "delivery result could not be persisted"
+            DELIVERY_BUSY.discard(cid)
+    if error:
+        # Delivery transitions deliberately persist any state they managed to
+        # reach before failing (for example, tests=unavailable or push=failed).
+        # Return that browser-safe state with the error so the workbench can
+        # render a durable next step instead of leaving a stale "pending" card
+        # behind a short-lived toast.
+        return {"delivery": delivery.public_delivery(
+            record.get("delivery") or {})}, error
+    payload = dict(result or {})
+    payload["delivery"] = delivery.public_delivery(record.get("delivery") or {})
+    return payload, None
+
+
+def action(cid, role_id, act, feedback="", request_id=""):
+    """Operator verdicts, including persisted permission decisions."""
+    if act in ("allow", "retry", "deny"):
+        # Permission scope always comes from persisted server evidence. Feedback
+        # is deliberately ignored here so credentials or broader instructions
+        # cannot be smuggled into an authorization receipt.
+        return permission_decision(cid, role_id, act, request_id)
     if act == "resume":
         return resume(cid)  # valid precisely when the mission is NOT live
     if act == "archive":

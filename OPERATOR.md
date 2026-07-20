@@ -125,8 +125,11 @@ effort to `/api/briefing/generate`. Once a primary batch exists it becomes
 repositories or calling a model.
 
 The freshness strip shows the saved plan day, last attempt, next scheduled
-refresh or retry, and whether automatic catch-up is active. **Check now** is a
-GET-only status refresh and never starts a model run.
+refresh or retry, and whether automatic catch-up is active. **Ensure current**
+checks the authoritative 09:30 cycle. If that cycle is missing or overdue, it
+queues one external background model run; if the briefing is current, already
+running, or waiting for its scheduled retry, it reports that state without
+starting a duplicate. The control says explicitly whether a run was queued.
 
 **View more** reveals each priority's CEO plan and planned agents. Changing an
 agent's model or effort posts to `/api/briefing/agent` and changes plan metadata
@@ -139,8 +142,81 @@ and executes the saved role cards directly. Claude cards use
 `--dangerously-skip-permissions`; GPT-5.6 Sol cards use Codex `--yolo`. Provider,
 model, repository, and argv are resolved from the stored briefing on the server,
 not trusted from browser input. These workers have no console window; monitor or
-stop them in Mission Activity. Automatic recovery is always contained and does
-not inherit permission bypass.
+stop them in Mission Activity. The chosen provider policy is preserved for
+initial, resumed, and bounded-recovery workers. This does not disable Rune's
+independent Maestro guard for protected outward, destructive, spending, or
+soul-write actions.
+
+When a role reaches `waiting_permission`, Mission Activity remains actionable
+after its worker exits. **Allow & resume** authorizes only the displayed request,
+mission, and role for a short window; **Retry after fixing** adds no permission;
+**Deny & skip** skips only that role. Every action includes the server-issued
+request ID, so a delayed click cannot approve a newer boundary. Credential and
+login requests cannot be approved in the dashboard: fix them outside Rune, then
+use Retry.
+
+Mission Activity **Open** targets the mission id rather than only changing the
+route. It collapses the tray, opens Agent console (including its completed
+drawer), expands the matching record, and moves keyboard focus to it. This also
+works when Agent console is already the current route.
+
+If a Claude worker reports a weekly/capacity limit, the harness checks the local
+Codex CLI. When it is installed, authenticated, and still has 5-hour and weekly
+headroom, Rune performs one persisted Claude → Codex switch for that unfinished
+role using GPT-5.6 Sol. The repository, role assignment, and current run's
+permission mode are preserved; the Claude session id is retained only as audit
+evidence and is not passed to Codex. Agent console displays the handoff as
+running, completed, or failed. An unavailable/exhausted Codex account is shown
+instead of causing an unbounded provider loop.
+
+### Verify brain retrieval
+
+Open **Brain â†’ Recall evidence** to inspect every deterministic lookup. A
+receipt identifies the mission/route, query and corpus fingerprints, exact card
+IDs and scores, ranking/diversity guards, and the prompt count plus estimated
+context tokens actually inserted. A `miss` and a ranker `error` are recorded as
+deliberately as a hit. Later mission status is correlation only: the interface
+does not claim that the model obeyed a card or know how many tokens would have
+been spent without it.
+
+Enter a problem in Brain search and choose **Verify retrieval** to replay the
+production ranker without calling a model. This creates a verification-only
+receipt and does not increment reuse telemetry. Storage health shows active
+count/bytes and budgets, quarantine/archive utilization, below-threshold legacy
+cards, merges, and recent admission decisions with their quality reason codes.
+
+For an offline check:
+
+```text
+python hermes/hermes.py stats --json
+python hermes/hermes.py query --json "daily briefing stale server refresh"
+```
+
+## Complete and deliver a plan
+
+When every role succeeds, the run is removed from the active CEO queue and
+retained under **Agent console → Completed & delivery**. Recoverable failures
+stay in the active queue. Daily briefing cards that already succeeded move to
+the **Completed plans** drawer instead of being suggested as unfinished work;
+use **Review delivery** to open their mission or **Run again** for an explicit
+new execution.
+
+Delivery is intentionally sequential:
+
+1. **Review changes** records Git status, changed paths, tracked diffs, bounded
+   untracked source previews, and `git diff --check` evidence.
+2. **Run tests** chooses a repository-native test command on the server. A test
+   command that changes the worktree fails the gate so generated files cannot
+   enter a commit without another review.
+3. **Commit** is enabled only when review and tests match the current Git
+   fingerprint and the repository was clean at mission start. Git hooks remain
+   enabled, and only the exact attributed path set is committed.
+4. **Push** first shows the server-resolved remote, branch, and HEAD. Confirming
+   consumes a short-lived one-use token and sends an explicit non-force refspec.
+
+Older runs and runs that began in an already-dirty repository can still be
+reviewed and tested, but automatic commit stays blocked. This protects operator
+changes that Rune cannot safely attribute to one mission.
 
 ## Failure behavior
 

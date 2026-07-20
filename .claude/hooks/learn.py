@@ -29,6 +29,10 @@ SEEN = os.path.join(ROOT, "state", "learn-seen.json")
 API = "https://api.anthropic.com/v1/messages"
 MODEL = "claude-haiku-4-5"  # ponytail: judgment call is cheap; escalate never
 
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from hermes import hermes as hermes_store
+
 SYSTEM = """You extract durable learnings from one exchange between an operator \
 and a coding agent, for a solved-problems knowledge base. A learning is worth \
 keeping ONLY if it would save real future work: a non-obvious root cause, a \
@@ -131,9 +135,19 @@ def main():
         seen = {}
     if seen.get(sid) == ph:
         return 0
+    # Stop hooks can fire across thousands of sessions.  Keep only a bounded
+    # idempotency window; this operational cache is not durable knowledge.
+    seen.pop(sid, None)
     seen[sid] = ph
+    seen = dict(list(seen.items())[-512:])
     try:
-        json.dump(seen, open(SEEN, "w", encoding="utf-8"))
+        os.makedirs(os.path.dirname(SEEN), exist_ok=True)
+        temp = SEEN + ".tmp.%s" % os.getpid()
+        with open(temp, "w", encoding="utf-8") as handle:
+            json.dump(seen, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, SEEN)
     except OSError:
         pass
     key = _api_key()
@@ -145,15 +159,17 @@ def main():
         return 0
     if not (isinstance(v, dict) and v.get("learned") and v.get("problem") and v.get("solution")):
         return 0
-    if already_known(v["problem"]):
-        return 0
     try:
-        subprocess.run([sys.executable, HERMES, "note", v["problem"][:200], v["solution"][:600],
-                        "--tags", (v.get("tags") or "auto")[:80], "--source", "auto-learn"],
-                       capture_output=True, timeout=20)
-        subprocess.run([sys.executable, MIRROR, "--event", "learn",
-                        "--detail", ("brain: " + v["problem"])[:180]],
-                       capture_output=True, timeout=10)
+        result = hermes_store.note_memory(
+            v["problem"][:200], v["solution"][:600],
+            (v.get("tags") or "auto")[:80], source="auto-learn")
+        outcome = str(result.get("outcome") or "rejected")
+        reason = str(result.get("reason_code") or "unknown")
+        event = "learn" if outcome in ("accepted", "merged") else "learn-policy"
+        subprocess.run([sys.executable, MIRROR, "--event", event,
+                        "--detail", ("brain %s (%s): %s" %
+                                     (outcome, reason, v["problem"]))[:180]],
+                        capture_output=True, timeout=10)
     except Exception:
         pass
     return 0

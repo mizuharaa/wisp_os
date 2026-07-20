@@ -18,6 +18,11 @@ GATES = {
     "spend": r"\bnpm\s+publish\b|\btwine\s+upload\b|\bstripe\b|\baws\s+\S+\s+(create|run-instances)|\bgcloud\b.*\bcreate\b",
 }
 
+APPROVAL_ADMIN_PATHS = (
+    "/state/approvals.json", "/.claude/hooks/approve.py",
+    "/.claude/hooks/guard.py",
+)
+
 
 def gate_for(data):
     """Return (action, evidence) if this tool call is gated, else (None, None)."""
@@ -25,10 +30,19 @@ def gate_for(data):
     ti = data.get("tool_input") or {}
     if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
         p = (ti.get("file_path") or ti.get("notebook_path") or "").replace("\\", "/").lower()
+        while p.startswith("./"):
+            p = p[2:]
+        rooted = "/" + p.lstrip("/")
+        if any(rooted.endswith(path) for path in APPROVAL_ADMIN_PATHS):
+            return "approval-admin", p
         if "/soul/" in p or p.startswith("soul/"):
             return "soul-write", p
     cmd = ti.get("command", "")
     if cmd:
+        normalized = cmd.replace("\\", "/").lower()
+        if any(path.lstrip("/") in normalized
+               for path in APPROVAL_ADMIN_PATHS):
+            return "approval-admin", cmd
         if re.search(r"soul[/\\]", cmd) and re.search(
             r"(>>?|Set-Content|Out-File|Add-Content|sed\s+-i|\btee\b)", cmd
         ):
@@ -40,15 +54,36 @@ def gate_for(data):
 
 
 def approved(action):
+    if action == "approval-admin":
+        return False
     try:
         with open(APPROVALS, encoding="utf-8") as f:
             tokens = json.load(f).get("tokens", [])
     except (OSError, json.JSONDecodeError):
         return False  # ponytail: unreadable approvals = no approvals (fail closed)
     now = time.time()
-    return any(
-        t.get("action") in (action, "*") and t.get("expires", 0) > now for t in tokens
-    )
+    sid = os.environ.get("MAESTRO_SID", "")
+    role_id = os.environ.get("MAESTRO_ROLE_ID", "")
+    request_id = os.environ.get("MAESTRO_PERMISSION_REQUEST_ID", "")
+    for token in tokens:
+        try:
+            active = float(token.get("expires") or 0) > now
+        except (TypeError, ValueError):
+            active = False
+        if token.get("action") not in (action, "*") or not active:
+            continue
+        # CEO-minted approvals are scoped to the exact mission and role that
+        # showed the operator the blocked request. A sibling worker cannot
+        # consume the token. Legacy/manual tokens have no scope and retain the
+        # approve.py behavior used by an operator at the terminal.
+        if token.get("cid") and token.get("cid") != sid:
+            continue
+        if token.get("role") and token.get("role") != role_id:
+            continue
+        if token.get("request_id") and token.get("request_id") != request_id:
+            continue
+        return True
+    return False
 
 
 def main():
@@ -62,9 +97,8 @@ def main():
     sys.stderr.write(
         "MAESTRO GUARD: blocked gated action '%s'.\n"
         "Evidence: %s\n"
-        "If Daniel approved this, mint a token: "
-        "python .claude/hooks/approve.py %s --minutes 15\n"
-        % (action, str(evidence)[:200], action)
+        "Resolve this request from Rune's Mission Activity permission card.\n"
+        % (action, str(evidence)[:200])
     )
     return 2
 

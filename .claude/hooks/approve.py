@@ -13,6 +13,10 @@ APPROVALS = os.path.join(ROOT, "state", "approvals.json")
 
 
 def main():
+    if os.environ.get("MAESTRO_SID") or os.environ.get("MAESTRO_ROLE_ID"):
+        print("worker sessions cannot mint approvals; use Rune Mission Activity",
+              file=sys.stderr)
+        return 2
     if len(sys.argv) < 2:
         print(__doc__)
         return 1

@@ -5,11 +5,13 @@ GET  /...                serves the repo root (dashboard + live state), no-store
 GET  /api/instances      managed Claude Code windows Maestro launched, with liveness.
 GET  /api/integrations   configured MCPs, hooks, agents, skills.
 GET  /api/workflows      advisory workflow-coach suggestions (never execution).
+GET  /api/brain          recall receipts and bounded Hermes storage health.
 GET  /api/calendar       range-filtered last-good Outlook events.
 GET  /api/briefing       where you left off: commits (here + GitHub), the missions
                          that ran and what's UNFINISHED, Hermes notes, calendar,
                          queued directives. Reads disk only — always works offline.
 POST /api/message        queue a directive -> state/inbox.jsonl + wire.
+POST /api/brain/query    verify one query with the production ranker; no model.
 POST /api/spawn          launch a session on this repo:
                          mode "tab"        -> own titled console window (focusable/closable)
                          mode "background" -> headless claude -p, log in state/spawn-logs/
@@ -19,6 +21,8 @@ POST /api/orchestrate    start a conductor feedback loop (orchestrator.py).
 GET  /api/orchestrations loop states with per-round worker/critic logs.
 POST /api/orch-action    {oid,action:accept|revise|reject|stop[,feedback]}.
 POST /api/ceo-action     stop/resume/archive or resolve a gated CEO role.
+POST /api/ceo-delivery   review/test/commit or two-step non-force push.
+POST /api/briefing/check atomically catch up the current 09:30 cycle when due.
 POST /api/briefing/run   run one stored priority (IDs + safe|skip mode only).
 GET  /api/ssh-creds      saved ssh credential KEYS (never secrets).
 POST /api/ssh-forget     {key} drop a saved ssh credential.
@@ -244,6 +248,39 @@ def vault_note(rel):
         return None
 
 
+def brain_payload(limit=100):
+    """Return bounded retrieval receipts and storage health without overclaiming.
+
+    Observable prompt insertion is kept separate from counterfactual token
+    savings or model compliance, neither of which can be proven from a run.
+    """
+    try:
+        from memory import recall_engine
+        receipt_doc = recall_engine.read_receipts(ROOT, limit=limit)
+    except Exception:
+        receipt_doc = {"summary": {}, "receipts": []}
+    try:
+        from hermes import hermes as hermes_store
+        storage = hermes_store.storage_health()
+    except Exception:
+        storage = {
+            "schema_version": 2,
+            "kind": "hermes.storage_health",
+            "status": "unavailable",
+        }
+    return {
+        "schema_version": 1,
+        "summary": receipt_doc.get("summary") or {},
+        "receipts": receipt_doc.get("receipts") or [],
+        "storage": storage,
+        "proof": {
+            "boundary": "retrieval_and_prompt_insertion",
+            "exact_savings_known": False,
+            "model_use_proven": False,
+        },
+    }
+
+
 def integrations():
     out = {"mcp": [], "hooks": [], "agents": [], "skills": {}}
     try:
@@ -424,8 +461,13 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"content": body})
         if self.path == "/api/orchestrations":
             return self._json(200, {"orchestrations": orchestrator.list_all()})
+        if self.path == "/api/brain":
+            return self._json(200, brain_payload())
         if self.path == "/api/ceo":
-            return self._json(200, {"runs": ceo.list_all()})
+            return self._json(200, {
+                "runs": [ceo.public_run(run) for run in ceo.list_all()],
+                "history": [ceo.public_run(run) for run in ceo.list_history()],
+            })
         if self.path == "/api/ssh-creds":
             return self._json(200, {"keys": askpass.keys()})  # names only, never secrets
         if self.path == "/api/pulse":
@@ -493,9 +535,12 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/orch-action": self.api_orch_action,
             "/api/ssh-forget": self.api_ssh_forget,
             "/api/chat": self.api_chat,
+            "/api/brain/query": self.api_brain_query,
             "/api/skill": self.api_skill,
             "/api/ceo": self.api_ceo,
             "/api/ceo-action": self.api_ceo_action,
+            "/api/ceo-delivery": self.api_ceo_delivery,
+            "/api/briefing/check": self.api_briefing_check,
             "/api/briefing/generate": self.api_briefing_generate,
             "/api/briefing/agent": self.api_briefing_agent,
             "/api/briefing/run": self.api_briefing_run,
@@ -540,6 +585,15 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(409, {"error": str(exc),
                                     "job": daily_briefing.job_status()})
         return self._json(202, {"ok": True, "job": job})
+
+    def api_briefing_check(self, data):
+        """Catch up the due 09:30 cycle without duplicating model work."""
+        if data:
+            return self._json(400, {
+                "error": "briefing check does not accept options",
+            })
+        result = daily_briefing.check_scheduled_generation()
+        return self._json(202 if result.get("started") else 200, result)
 
     def api_briefing_agent(self, data):
         required = ("batch_id", "priority_id", "agent_id")
@@ -628,19 +682,102 @@ class Handler(SimpleHTTPRequestHandler):
         return self._json(200, out)
 
     def api_ceo_action(self, data):
-        err = ceo.action(str(data.get("cid") or ""), str(data.get("role") or ""),
-                         str(data.get("action") or ""), str(data.get("feedback") or ""))
+        unknown = set(data) - {"cid", "role", "action", "feedback", "request_id"}
+        if unknown:
+            return self._json(400, {"error": "unsupported CEO action fields: %s" %
+                                    ", ".join(sorted(unknown))})
+        cid = data.get("cid")
+        role = data.get("role", "")
+        action = data.get("action")
+        feedback = data.get("feedback", "")
+        request_id = data.get("request_id", "")
+        if not isinstance(cid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", cid):
+            return self._json(400, {"error": "valid mission cid is required"})
+        if not isinstance(role, str) or not re.fullmatch(r"[A-Za-z0-9_-]{0,64}", role):
+            return self._json(400, {"error": "invalid role id"})
+        allowed = {"approve", "redo", "skip", "stop", "resume", "archive",
+                   "allow", "retry", "deny"}
+        if not isinstance(action, str) or action not in allowed:
+            return self._json(400, {"error": "unknown CEO action"})
+        if not isinstance(feedback, str) or len(feedback) > 2000:
+            return self._json(400, {"error": "feedback must be a short string"})
+        if action in ("allow", "retry", "deny") and feedback:
+            return self._json(400, {"error": "permission decisions do not accept feedback"})
+        permission_action = action in ("allow", "retry", "deny")
+        if permission_action:
+            if (not isinstance(request_id, str) or
+                    not re.fullmatch(r"(?:pr|legacy)_[a-f0-9]{32}", request_id)):
+                return self._json(400, {"error": "valid permission request_id is required"})
+        elif request_id:
+            return self._json(400, {"error": "request_id is only valid for permission decisions"})
+        err = ceo.action(cid, role, action, feedback, request_id=request_id)
         if err:
             return self._json(409, {"error": err})
         emit(session="operator", event="ceo-action",
-             detail="%s/%s -> %s" % (data.get("cid"), data.get("role"), data.get("action")))
+             detail="%s/%s -> %s" % (cid, role, action))
         return self._json(200, {"ok": True})
+
+    def api_ceo_delivery(self, data):
+        """Guarded post-mission delivery; repository controls stay server-side."""
+        action = data.get("action")
+        cid = data.get("cid")
+        if not isinstance(action, str) or action not in (
+                "review", "test", "commit", "prepare_push", "confirm_push"):
+            return self._json(400, {"error": "unknown delivery action"})
+        if not isinstance(cid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", cid):
+            return self._json(400, {"error": "valid mission cid is required"})
+        allowed = {"cid", "action"}
+        if action == "commit":
+            allowed.add("message")
+        elif action == "confirm_push":
+            allowed.add("token")
+        unknown = set(data) - allowed
+        if unknown:
+            return self._json(400, {"error": "unsupported delivery fields: %s" %
+                                    ", ".join(sorted(unknown))})
+        message = data.get("message", "")
+        token = data.get("token", "")
+        if action == "commit" and (not isinstance(message, str) or len(message) > 200):
+            return self._json(400, {"error": "commit message must be at most 200 characters"})
+        if action == "confirm_push" and (not isinstance(token, str) or
+                                          not token or len(token) > 200):
+            return self._json(400, {"error": "push confirmation token is required"})
+        out, err = ceo.delivery_action(cid, action, message=message, token=token)
+        if err:
+            payload = {"error": err}
+            if isinstance(out, dict):
+                payload.update(out)
+            return self._json(409, payload)
+        emit(session="operator", event="ceo-delivery",
+             detail=("%s -> %s" % (cid, action))[:200])
+        return self._json(200, out)
 
     def api_chat(self, data):
         out = chat.ask(str(data.get("message") or ""),
                        history=data.get("history") if isinstance(data.get("history"), list) else [],
                        model=(str(data.get("model")) if data.get("model") else None))
         return self._json(200 if "reply" in out else 502, out)
+
+    def api_brain_query(self, data):
+        """Run the production ranker as a no-model reproducibility check."""
+        text = data.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return self._json(400, {"error": "query text is required"})
+        if len(text) > 2000:
+            return self._json(400, {"error": "query text is limited to 2000 characters"})
+        try:
+            from memory import recall_engine
+            bundle = recall_engine.query(
+                text, root=ROOT, cid="verify-" + uuid.uuid4().hex[:12],
+                route="brain_verify", injected_into="verification_only",
+                injected_prompt_count=0, track_usage=False)
+        except Exception:
+            return self._json(503, {"error": "brain ranker is temporarily unavailable"})
+        return self._json(200, {
+            "ok": True,
+            "receipt": bundle.get("receipt"),
+            "proof": {"model_called": False, "context_injected": False},
+        })
 
     def api_message(self, data):
         text = (data.get("text") or "").strip()

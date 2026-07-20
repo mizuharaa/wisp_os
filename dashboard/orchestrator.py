@@ -28,6 +28,10 @@ import pulse  # account routing: which Claude account this loop delegates to
 import runtime as agent_runtime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from hermes import hermes as hermes_store
+
 ODIR = os.path.join(ROOT, "state", "orchestrations")
 MIRROR = os.path.join(ROOT, ".claude", "hooks", "mirror.py")
 IS_WIN = sys.platform == "win32"
@@ -109,9 +113,16 @@ def list_all():
     return out
 
 
-def _claude(oid, argv, prompt, timeout, cwd, config_dir=None):
+def _claude(oid, argv, prompt, timeout, cwd, config_dir=None,
+            recall_route="orchestrator_worker", brain_recall=True):
     """One claude -p call; prompt via stdin (survives quotes/newlines on cmd)."""
-    env = dict(os.environ, MAESTRO_SID=oid)
+    env = dict(os.environ, MAESTRO_SID=oid,
+               MAESTRO_RECALL_ROUTE=recall_route)
+    if not brain_recall:
+        # The critic must judge only the mission/report supplied below. Prior
+        # memories would frame that verdict and make the feedback loop less
+        # independent. Worker prompts still use the mandatory recall hook.
+        env["MAESTRO_SKIP_BRAIN_RECALL"] = "1"
     if config_dir:
         env["CLAUDE_CONFIG_DIR"] = config_dir  # run under the delegated account
     p = subprocess.Popen(
@@ -319,7 +330,9 @@ def _run(oid):
                 oid, o, "critic",
                 lambda: _claude(oid, cargv,
                                 CRITIC_PROMPT % (o["mission"], report),
-                                CRITIC_TIMEOUT, cwd, cfg_dir))
+                                CRITIC_TIMEOUT, cwd, cfg_dir,
+                                recall_route="orchestrator_critic",
+                                brain_recall=False))
             if c.get("classification") == "stopped":
                 o["status"] = "stopped"
                 o["detail"] = "stopped by operator"
@@ -367,12 +380,27 @@ def _run(oid):
                 worth = ((o.get("cost") or 0) >= 0.15 or rnd >= 2
                          or o.get("model") in ("opus", "fable"))
                 if worth:
-                    subprocess.run([sys.executable, os.path.join(ROOT, "hermes", "hermes.py"),
-                                    "note", agent_runtime.safe_excerpt(o["mission"], 180),
-                                    agent_runtime.safe_excerpt(
-                                        "accepted after %d round(s): %s" % (rnd, report), 400),
-                                    "--tags", "mission,orchestrated", "--source", "loop:" + oid],
-                                   capture_output=True)
+                    try:
+                        learned = hermes_store.note_memory(
+                            agent_runtime.safe_excerpt(o["mission"], 180),
+                            agent_runtime.safe_excerpt(
+                                "accepted after %d round(s): %s" % (rnd, report), 400),
+                            "mission,orchestrated", source="loop:" + oid)
+                        quality = learned.get("quality") if isinstance(
+                            learned.get("quality"), dict) else {}
+                        o["learning_receipt"] = {
+                            "outcome": learned.get("outcome"),
+                            "id": learned.get("id"),
+                            "reason_code": learned.get("reason_code"),
+                            "quality_score": quality.get("score"),
+                            "quality_threshold": quality.get("threshold"),
+                        }
+                        _save(o)
+                        emit(oid, "brain %s: %s" % (
+                            learned.get("outcome"), learned.get("reason_code")))
+                    except Exception as learn_error:
+                        emit(oid, "brain note failed (mission unaffected): " +
+                             type(learn_error).__name__)
                 else:
                     emit(oid, "skipped brain note (routine run — brain holds signal)")
                 return
@@ -397,6 +425,11 @@ def _run(oid):
             _save(o)
             emit(oid, "orchestrator crashed: " + repr(e)[:120])
     finally:
+        try:
+            from memory import recall_engine
+            recall_engine.record_outcome(ROOT, oid, o.get("status"))
+        except Exception:
+            pass  # outcome telemetry can never change mission state
         with LOCK:
             LIVE.pop(oid, None)
 

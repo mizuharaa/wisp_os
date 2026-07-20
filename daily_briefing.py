@@ -47,6 +47,7 @@ STORE = os.path.join(STATE_DIR, "briefing.json")
 LOCK_PATH = os.path.join(STATE_DIR, "briefing.lock")
 STATUS_PATH = os.path.join(STATE_DIR, "briefing-status.json")
 SCHEDULE_LOCK_PATH = os.path.join(STATE_DIR, "briefing-schedule.lock")
+SCHEDULE_CLAIM_LOCK_PATH = os.path.join(STATE_DIR, "briefing-schedule-claim.lock")
 PULSE_CACHE = os.path.join(STATE_DIR, "pulse-cache.json")
 ICS = os.path.join(STATE_DIR, "calendar.ics")
 
@@ -85,6 +86,7 @@ MAX_DISCOVERY_DEPTH = 4
 MAX_PROMPT_CHARS = 55_000
 LOCK_STALE_SECONDS = 60 * 60
 SCHEDULE_LOCK_STALE_SECONDS = 2 * 60 * 60
+SCHEDULE_CLAIM_LOCK_STALE_SECONDS = 2 * 60
 SCHEDULE_RETRY_SECONDS = 15 * 60
 SCHEDULE_HOUR = 9
 SCHEDULE_MINUTE = 30
@@ -1447,6 +1449,18 @@ def _schedule_lock_path(status_path):
         else status_path + ".lock"
 
 
+def _schedule_claim_lock_path(status_path):
+    """A short-lived parent-side lock for deciding who may launch a worker.
+
+    This is deliberately separate from ``_schedule_lock_path``. The latter is
+    held by the external worker for the full generation; sharing it here would
+    make the child see its parent as a competing generation and exit early.
+    """
+    return SCHEDULE_CLAIM_LOCK_PATH \
+        if os.path.abspath(status_path) == os.path.abspath(STATUS_PATH) \
+        else status_path + ".claim.lock"
+
+
 def _status_timestamp(status):
     return (status.get("last_attempt_at") or status.get("started_at") or
             status.get("requested_at") or status.get("updated_at") or "")
@@ -1585,9 +1599,9 @@ def _default_scheduled_starter(date, more=False, force=False):
             "status": "queued", "date": date}
 
 
-def ensure_scheduled_generation(now=None, tz=None, store_path=STORE,
-                                status_path=STATUS_PATH, starter=None):
-    """Start one frozen-date catch-up when the latest 09:30 cycle is due."""
+def _ensure_scheduled_generation_claimed(now=None, tz=None, store_path=STORE,
+                                         status_path=STATUS_PATH, starter=None):
+    """Decide and launch while the caller owns the short-lived claim lock."""
     local, tz = _local_now(now, tz)
     freshness = briefing_freshness(store_path, local, tz, status_path)
     if freshness["state"] in ("fresh", "awaiting_schedule", "generating"):
@@ -1639,6 +1653,122 @@ def ensure_scheduled_generation(now=None, tz=None, store_path=STORE,
             retry_at=retry.isoformat(), last_success_at=freshness["last_success_at"])
         return {"started": False, "reason": "starter_failed", "status": failed,
                 "freshness": briefing_freshness(store_path, local, tz, status_path)}
+
+
+def ensure_scheduled_generation(now=None, tz=None, store_path=STORE,
+                                status_path=STATUS_PATH, starter=None):
+    """Start at most one frozen-date catch-up for the latest 09:30 cycle.
+
+    Dashboard checks, the background watcher, and Windows Task Scheduler can
+    arrive together. A small claim lock serializes the *decision and launch*
+    without being inherited by the long-running external generation worker.
+    """
+    claim_path = _schedule_claim_lock_path(status_path)
+    try:
+        with _exclusive_lock(
+                claim_path, "another briefing schedule check is already running",
+                SCHEDULE_CLAIM_LOCK_STALE_SECONDS):
+            return _ensure_scheduled_generation_claimed(
+                now=now, tz=tz, store_path=store_path,
+                status_path=status_path, starter=starter)
+    except GenerationBusy:
+        local, tz = _local_now(now, tz)
+        return {
+            "started": False,
+            "reason": "check_in_progress",
+            "freshness": briefing_freshness(
+                store_path=store_path, now=local, tz=tz,
+                status_path=status_path),
+        }
+
+
+def check_scheduled_generation(now=None, tz=None, store_path=STORE,
+                               status_path=STATUS_PATH, starter=None):
+    """Operator-facing, truthful result for Daily Briefing's **Check now**.
+
+    Reading a fresh snapshot is free. A missing/overdue snapshot queues the
+    same external safe scheduled worker used by automatic catch-up. This
+    function never performs repository discovery or a model call inline.
+    """
+    result = ensure_scheduled_generation(
+        now=now, tz=tz, store_path=store_path,
+        status_path=status_path, starter=starter)
+    freshness = result.get("freshness") or briefing_freshness(
+        store_path=store_path, now=now, tz=tz, status_path=status_path)
+    reason = str(result.get("reason") or ("queued" if result.get("started") else ""))
+    source = str(result.get("source_date") or
+                 freshness.get("expected_source_date") or "")
+    started = bool(result.get("started"))
+
+    if started:
+        action = "queued"
+        ok = True
+        message = ("Briefing was missing or overdue. Queued one external model "
+                   "generation for %s." % source)
+        model_run = {
+            "queued": True,
+            "will_run": True,
+            "cost": "model_tokens_when_worker_runs",
+        }
+    elif reason in ("fresh", "awaiting_schedule"):
+        action = "current"
+        ok = True
+        message = ("Briefing is current for %s. No model run was started."
+                   % source)
+        model_run = {"queued": False, "will_run": False, "cost": "none"}
+    elif reason in ("generating", "check_in_progress"):
+        action = "already_running"
+        ok = True
+        message = ("A briefing generation is already queued or running. "
+                   "No duplicate model run was started.")
+        model_run = {
+            "queued": False,
+            "will_run": True,
+            "cost": "already_queued_or_running",
+        }
+    elif reason == "retry_wait":
+        action = "retry_wait"
+        ok = True
+        retry_at = str(freshness.get("retry_at") or "the scheduled retry")
+        message = ("The last attempt failed; retry is deferred until %s. "
+                   "No duplicate model run was started." % retry_at)
+        model_run = {
+            "queued": False,
+            "will_run": False,
+            "cost": "deferred_until_retry",
+        }
+    elif reason == "starter_failed":
+        action = "starter_failed"
+        ok = False
+        retry_at = str(freshness.get("retry_at") or "the scheduled retry")
+        message = ("Rune could not queue the briefing worker. The last good "
+                   "briefing was kept and retry is scheduled for %s." % retry_at)
+        model_run = {
+            "queued": False,
+            "will_run": False,
+            "cost": "deferred_until_retry",
+        }
+    else:
+        action = reason or "status_only"
+        ok = True
+        message = "Briefing status checked. No model run was started."
+        model_run = {"queued": False, "will_run": False, "cost": "none"}
+
+    payload = {
+        "ok": ok,
+        "action": action,
+        "started": started,
+        "reason": reason,
+        "source_date": source,
+        "message": message,
+        "model_run": model_run,
+        "freshness": freshness,
+    }
+    if result.get("job") is not None:
+        payload["job"] = result["job"]
+    if result.get("status") is not None:
+        payload["status"] = result["status"]
+    return payload
 
 
 def scheduled_generate(date=None, model=None, effort=None, more=False, force=False,

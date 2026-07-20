@@ -6,11 +6,13 @@ not just when someone remembers the boot sequence.
 """
 import json
 import os
-import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-HERMES = os.path.join(ROOT, "hermes", "hermes.py")
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from memory import recall_engine
 
 
 def main():
@@ -19,13 +21,26 @@ def main():
     except json.JSONDecodeError:
         return 0
     prompt = (data.get("prompt") or "").strip()
-    if len(prompt.split()) < 3:  # too short to match anything meaningful
+    if not prompt:
         return 0
-    r = subprocess.run([sys.executable, HERMES, "query", prompt[:300]],
-                       capture_output=True, text=True, timeout=15)
-    if r.returncode == 0 and r.stdout.strip():
-        print("[Hermes recall] Prior solutions match this prompt - reuse before re-solving:")
-        print(r.stdout.strip()[:1500])
+    # CEO workers already carry a receipted block in their explicit mission.
+    # The trusted process environment prevents duplicate cards/tokens while
+    # ordinary Claude sessions still recall before every operator prompt.
+    if (os.environ.get("MAESTRO_BRAIN_PREINJECTED") == "1" or
+            os.environ.get("MAESTRO_SKIP_BRAIN_RECALL") == "1"):
+        return 0
+    try:
+        bundle = recall_engine.query(
+            prompt, root=ROOT,
+            cid=str(os.environ.get("MAESTRO_SID") or data.get("session_id") or ""),
+            route=str(os.environ.get("MAESTRO_RECALL_ROUTE") or "claude_hook"),
+            injected_into="claude_user_prompt_hook", injected_prompt_count=0)
+    except Exception:
+        return 0
+    if bundle.get("prompt_block"):
+        recall_engine.mark_exposure(
+            bundle.get("receipt"), root=ROOT, prompt_count=1)
+        print(bundle["prompt_block"].lstrip())
     return 0
 
 

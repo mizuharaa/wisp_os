@@ -98,6 +98,15 @@ class BriefingScheduleTests(unittest.TestCase):
             starter=starter,
         )
 
+    def check(self, now, starter):
+        return daily_briefing.check_scheduled_generation(
+            store_path=self.store,
+            status_path=self.status,
+            now=now,
+            tz=BANGKOK,
+            starter=starter,
+        )
+
     def test_schedule_rolls_at_0930_bangkok_not_midnight(self):
         midnight = daily_briefing.schedule_window(
             now=dt.datetime(2026, 7, 16, 0, 1, tzinfo=BANGKOK), tz=BANGKOK)
@@ -168,6 +177,89 @@ class BriefingScheduleTests(unittest.TestCase):
         state = self.freshness(now)
         self.assertEqual(state["state"], "generating")
         self.assertTrue(state["auto_catchup"])
+
+    def test_check_now_fresh_snapshot_is_free_and_starts_no_model(self):
+        self.write_briefing("2026-07-15")
+        starter = InertStarter()
+        result = self.check(
+            dt.datetime(2026, 7, 16, 10, 5, tzinfo=BANGKOK), starter)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["action"], "current")
+        self.assertFalse(result["started"])
+        self.assertEqual(result["model_run"], {
+            "queued": False, "will_run": False, "cost": "none",
+        })
+        self.assertIn("No model run was started", result["message"])
+        self.assertEqual(starter.calls, [])
+
+    def test_check_now_missing_cycle_queues_one_external_model_run(self):
+        starter = InertStarter()
+        now = dt.datetime(2026, 7, 16, 10, 5, tzinfo=BANGKOK)
+
+        first = self.check(now, starter)
+        second = self.check(now, starter)
+
+        self.assertEqual(len(starter.calls), 1)
+        self.assertTrue(first["ok"])
+        self.assertEqual(first["action"], "queued")
+        self.assertTrue(first["started"])
+        self.assertEqual(first["source_date"], "2026-07-15")
+        self.assertEqual(first["model_run"]["cost"],
+                         "model_tokens_when_worker_runs")
+        self.assertEqual(first["job"]["status"], "queued")
+        self.assertEqual(second["action"], "already_running")
+        self.assertFalse(second["started"])
+        self.assertFalse(second["model_run"]["queued"])
+        self.assertIn("No duplicate model run", second["message"])
+
+    def test_check_now_running_claim_and_retry_window_never_duplicate(self):
+        now = dt.datetime(2026, 7, 16, 10, 5, tzinfo=BANGKOK)
+        starter = InertStarter()
+
+        daily_briefing._atomic_write(self.status, {
+            "status": "running",
+            "source_date": "2026-07-15",
+            "pid": os.getpid(),
+            "started_at": now.isoformat(),
+            "last_attempt_at": now.isoformat(),
+        })
+        running = self.check(now, starter)
+        self.assertEqual(running["action"], "already_running")
+        self.assertEqual(starter.calls, [])
+
+        daily_briefing._atomic_write(self.status, {
+            "status": "failed",
+            "source_date": "2026-07-15",
+            "last_attempt_at": now.isoformat(),
+            "error": "provider unavailable",
+            "retry_at": (now + dt.timedelta(minutes=15)).isoformat(),
+        })
+        retry = self.check(now, starter)
+        self.assertEqual(retry["action"], "retry_wait")
+        self.assertEqual(retry["model_run"]["cost"], "deferred_until_retry")
+        self.assertEqual(starter.calls, [])
+
+        os.remove(self.status)
+        claim = daily_briefing._schedule_claim_lock_path(self.status)
+        with daily_briefing._exclusive_lock(
+                claim, "test claim", daily_briefing.SCHEDULE_CLAIM_LOCK_STALE_SECONDS):
+            claimed = self.check(now, starter)
+        self.assertEqual(claimed["action"], "already_running")
+        self.assertEqual(starter.calls, [])
+
+    def test_check_now_starter_failure_is_not_reported_as_success(self):
+        now = dt.datetime(2026, 7, 16, 10, 5, tzinfo=BANGKOK)
+        starter = InertStarter(RuntimeError("worker launch denied"))
+
+        result = self.check(now, starter)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["action"], "starter_failed")
+        self.assertFalse(result["started"])
+        self.assertEqual(result["model_run"]["cost"], "deferred_until_retry")
+        self.assertIn("last good briefing was kept", result["message"])
+        self.assertIn("worker launch denied", result["freshness"]["last_error"])
 
     def test_scheduled_starter_receives_a_frozen_iso_date_and_safe_flags(self):
         starter = InertStarter()
