@@ -2740,6 +2740,19 @@ def delivery_fix(cid):
             evidence = str(item.get("output") or item.get("error") or
                            item.get("detail") or "")
             break
+    commit_blocked = str((lane.get("commit") or {}).get("blocked_reason") or "")
+    if not step and commit_blocked:
+        step = "commit"
+    if step == "commit" and commit_blocked:
+        # This is delivery.py's attribution boundary, not a code defect: the
+        # gate refuses to auto-commit paths that were already dirty before the
+        # mission started (the operator's own work in progress), and no
+        # in-mission edit can ever change that fact. Spawning a fixer agent
+        # here cannot succeed — it can only edit those same excluded paths and
+        # burn cost re-discovering the same block. Surface it directly instead.
+        return None, ("Commit is blocked, not broken: %s No agent can fix this "
+                      "from inside the mission — stage and commit those paths "
+                      "yourself in Git, then Review again." % commit_blocked)
     if not step:
         return None, "no failed delivery step to fix"
     workdir = str(record.get("workdir") or "")

@@ -654,6 +654,34 @@ class MissionDeliveryPersistenceTests(unittest.TestCase):
         self.assertIsNone(out)
         self.assertIn("no failed delivery step", err)
 
+    def test_delivery_fix_refuses_to_spawn_an_agent_for_attribution_blocks(self):
+        # Commit blocked because every reviewed path was already dirty before
+        # the mission started is a Git-attribution boundary, not a bug a
+        # worker can edit its way out of -- no agent should be spawned.
+        record = {
+            "cid": "blocked1", "status": "done", "name": "Fix the commit step",
+            "goal": "fix delivery", "workdir": self.temp.name,
+            "delivery": {"version": 1, "status": "tested",
+                         "review": {"status": "reviewed"},
+                         "tests": {"status": "passed"},
+                         "commit": {"status": "pending", "blocked_reason":
+                                    "every reviewed change overlaps files that "
+                                    "were already dirty before the mission "
+                                    "started; commit the operator's work "
+                                    "manually in Git"}},
+        }
+        with open(os.path.join(ceo.ADIR, "blocked1.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump(record, handle)
+
+        with mock.patch.object(ceo, "plan_and_start") as spawn:
+            out, err = ceo.delivery_fix("blocked1")
+
+        spawn.assert_not_called()
+        self.assertIsNone(out)
+        self.assertIn("Commit is blocked, not broken", err)
+        self.assertIn("already dirty before the mission started", err)
+
     def test_peer_delivery_in_same_repository_blocks_every_stage(self):
         peer = dict(self.record, cid="finished2")
         with open(os.path.join(ceo.ADIR, "finished2.json"), "w",
