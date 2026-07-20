@@ -20,6 +20,9 @@ from unittest import mock
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT, "dashboard"))
 os.environ["RUNE_DISABLE_BOOT_RECOVERY"] = "1"
+os.environ["RUNE_DISABLE_VERIFIER"] = "1"
+os.environ["RUNE_DISABLE_AI_REVIEW"] = "1"
+os.environ["RUNE_DISABLE_REPLAN"] = "1"
 
 import runtime as agent_runtime
 import ceo
@@ -250,6 +253,84 @@ class CeoRecoveryTests(unittest.TestCase):
         history = ceo.list_history()
         self.assertEqual([entry["cid"] for entry in history], ["m1"])
         self.assertTrue(history[0]["archived"])
+
+    def test_failed_role_triggers_one_replan_from_the_ledger(self):
+        self.save(mission())
+        self.make_live()
+        workers = iter([
+            {"is_error": True, "result": "unit test assertion failed one"},
+            {"is_error": False, "result": "RECOVERY REPORT: adjusted fixture one"},
+            {"is_error": True, "result": "unit test assertion failed two"},
+            {"is_error": False, "result": "RECOVERY REPORT: adjusted fixture two"},
+            {"is_error": True, "result": "unit test assertion failed three"},
+            {"is_error": False,
+             "result": "replacement role finished; focused test passed"},
+        ])
+        plans = []
+
+        def fake_api(model, system, user, schema, **_kw):
+            plans.append((system, user))
+            return {"name": "replan", "summary": "",
+                    "roles": [{"id": "fresh-fixer", "title": "Fresh fixer",
+                                "mission": "Take the different approach.",
+                                "model": "haiku", "turns": 10,
+                                "depends_on": [], "review": False}]}
+
+        with mock.patch.dict(os.environ, {"RUNE_DISABLE_REPLAN": "0"}), \
+                mock.patch.object(ceo, "_worker", lambda *a, **kw: next(workers)), \
+                mock.patch.object(ceo, "_api", fake_api):
+            ceo._run("m1")
+
+        got = self.load()
+        by_id = {r["id"]: r for r in got["roles"]}
+        self.assertEqual(got["replans"], 1)
+        self.assertEqual(got["status"], "done")
+        self.assertEqual(by_id["eng"]["status"], "skipped")
+        self.assertIn("superseded", by_id["eng"]["detail"])
+        self.assertEqual(by_id["r2-fresh-fixer"]["status"], "done")
+        self.assertEqual(len(plans), 1)
+        self.assertIn("ROLE LEDGER", plans[0][1])
+        self.assertIn("unit test assertion failed three", plans[0][1])
+        self.assertIn("MID-MISSION REPLAN", plans[0][0])
+
+    def test_verifier_sends_incomplete_work_back_once(self):
+        self.save(mission())
+        self.make_live()
+        workers = iter([
+            {"is_error": False, "result": "I plan to update the files next."},
+            {"is_error": False,
+             "result": "Updated app.py and ran the focused test; it passed."},
+        ])
+        verdicts = iter([
+            {"verdict": "revise",
+             "feedback": "Nothing was changed — edit app.py and run the test."},
+            {"verdict": "accept", "feedback": ""},
+        ])
+        with mock.patch.dict(os.environ, {"RUNE_DISABLE_VERIFIER": "0"}), \
+                mock.patch.object(ceo, "_worker", lambda *a, **kw: next(workers)), \
+                mock.patch.object(ceo, "_api", lambda *a, **kw: next(verdicts)):
+            ceo._run("m1")
+        got = self.load()
+        item = got["roles"][0]
+        self.assertEqual(got["status"], "done")
+        self.assertEqual(item["status"], "done")
+        self.assertEqual(item["verifies"], 1)
+        self.assertEqual(item["verification"]["verdict"], "accept")
+        self.assertIn("VERIFIER FEEDBACK", item["mission"])
+        self.assertEqual(len(item["attempts"]), 2)
+
+    def test_unavailable_verifier_never_blocks_completion(self):
+        self.save(mission())
+        self.make_live()
+        with mock.patch.dict(os.environ, {"RUNE_DISABLE_VERIFIER": "0"}), \
+                mock.patch.object(ceo, "_worker", return_value={
+                    "is_error": False, "result": "focused test passed"}), \
+                mock.patch.object(ceo, "_api",
+                                  return_value={"error": "API 500: down"}):
+            ceo._run("m1")
+        got = self.load()
+        self.assertEqual(got["status"], "done")
+        self.assertEqual(got["roles"][0]["verification"]["verdict"], "accept")
 
     def test_delivery_setup_failure_never_turns_success_into_error(self):
         self.save(mission())

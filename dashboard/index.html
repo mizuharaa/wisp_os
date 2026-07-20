@@ -482,6 +482,35 @@
     border-radius:9px; padding:7px 10px; margin-top:6px; white-space:pre-wrap; overflow-wrap:anywhere;
     max-height:150px; overflow-y:auto}
   .rrow .racts{display:flex; gap:6px; margin-top:7px; flex-wrap:wrap}
+  .rout.md{white-space:normal; font-family:inherit; font-size:12px; color:var(--ink); max-height:280px; line-height:1.5}
+  .md p{margin:5px 0}
+  .md h3,.md h4,.md h5,.md h6{margin:9px 0 4px; font-size:12.5px; font-weight:780; color:var(--ink)}
+  .md ul,.md ol{margin:5px 0; padding-left:20px}
+  .md li{margin:2px 0}
+  .md code{font-family:var(--mono); font-size:10.5px; background:var(--field); border:1px solid var(--line); border-radius:5px; padding:0 4px; overflow-wrap:anywhere}
+  .md pre.mdcode{font-family:var(--mono); font-size:10.5px; background:var(--field); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:6px 0; overflow-x:auto; white-space:pre}
+  .md table{border-collapse:collapse; margin:6px 0; font-size:11px; display:block; max-width:100%; overflow-x:auto}
+  .md th,.md td{border:1px solid var(--line); padding:3px 8px; text-align:left}
+  .md th{background:var(--canvas); font-weight:700}
+  .md hr{border:0; border-top:1px solid var(--line); margin:8px 0}
+  .md a{color:var(--green)}
+  .msg .md{white-space:normal}
+  .roleflow{margin:4px 0 10px; padding:10px 12px 6px; background:var(--canvas); border-radius:10px; overflow-x:auto}
+  .roleflow svg{display:block}
+  .roleflow text{font:600 9.5px var(--mono); fill:var(--ink2)}
+  .diffstat{display:grid; gap:3px; margin:9px 0 2px}
+  .dsrow{display:grid; grid-template-columns:minmax(0,1fr) auto 96px; gap:8px; align-items:center; font-size:10.5px}
+  .dsfile{font-family:var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink2)}
+  .dsnum{font-family:var(--mono); color:var(--ink3)}
+  .dsbar{display:flex; height:7px; border-radius:4px; overflow:hidden; background:var(--field); border:1px solid var(--line)}
+  .dsbar i.add{background:var(--success)}
+  .dsbar i.del{background:var(--red)}
+  .ai-review{margin-top:9px; padding:9px 12px; border-radius:var(--radius-md); border:1px solid var(--line); background:var(--canvas); font-size:12px}
+  .ai-review[data-tone="warn"]{border-color:var(--warning); background:var(--warning-soft)}
+  .ai-review[data-tone="good"]{border-color:var(--success)}
+  .ai-review b{font-size:11px}
+  .ai-review p{margin:4px 0 0; color:var(--ink2); line-height:1.45}
+  .ai-review ul{margin:5px 0 0; padding-left:18px; color:var(--ink2)}
   .permission-gate{margin-top:8px;padding:10px 12px;border:1px solid var(--warning);border-radius:var(--radius-md);background:var(--warning-soft);color:var(--ink2)}
   .permission-gate-head{display:flex;align-items:center;gap:8px;min-width:0}.permission-gate-head b{font-size:11.5px;color:var(--ink)}
   .permission-gate-mode{margin-inline-start:auto;border:1px solid color-mix(in srgb,var(--warning) 42%,transparent);border-radius:var(--radius-pill);padding:4px 7px;background:var(--card);color:var(--warning);font:800 9px/1 var(--mono);white-space:nowrap}
@@ -1630,6 +1659,82 @@ function fmtDur(ms){const s=Math.max(0,Math.floor(ms/1000));
   return Math.floor(s/3600)+"h "+String(Math.floor(s%3600/60)).padStart(2,"0")+"m"}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function md(text){
+  text=String(text||"");
+  const blocks=[];
+  text=text.replace(/```\w*\n?([\s\S]*?)(?:```|$)/g,(m,code)=>{blocks.push(`<pre class="mdcode">${esc(code.replace(/\n$/,""))}</pre>`);return`\x00${blocks.length-1}\x00`});
+  const inline=s=>esc(s)
+    .replace(/`([^`]+)`/g,"<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g,"$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const lines=text.split(/\r?\n/),out=[];let list=null,para=[],table=null;
+  const flushP=()=>{if(para.length){out.push(`<p>${inline(para.join(" "))}</p>`);para=[]}};
+  const flushL=()=>{if(list){out.push(`<${list.tag}>${list.items.map(i=>`<li>${inline(i)}</li>`).join("")}</${list.tag}>`);list=null}};
+  const flushT=()=>{if(table){const[head,...body]=table;out.push(`<table><tr>${head.map(c=>`<th>${inline(c)}</th>`).join("")}</tr>${body.map(r=>`<tr>${r.map(c=>`<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</table>`);table=null}};
+  for(const raw of lines){
+    const line=raw.trimEnd(),bare=line.trim();
+    if(!bare){flushP();flushL();flushT();continue}
+    if(/^\x00\d+\x00$/.test(bare)){flushP();flushL();flushT();out.push(bare);continue}
+    if(/^\|.*\|$/.test(bare)){flushP();flushL();
+      if(/^\|[\s:|-]+\|$/.test(bare))continue;
+      (table=table||[]).push(bare.slice(1,-1).split("|").map(c=>c.trim()));continue}
+    flushT();
+    const h=bare.match(/^(#{1,4})\s+(.*)/),ul=bare.match(/^[-*•]\s+(.*)/),ol=bare.match(/^\d+[.)]\s+(.*)/);
+    if(h){flushP();flushL();out.push(`<h4>${inline(h[2])}</h4>`);continue}
+    if(ul){flushP();if(!list||list.tag!=="ul"){flushL();list={tag:"ul",items:[]}}list.items.push(ul[1]);continue}
+    if(ol){flushP();if(!list||list.tag!=="ol"){flushL();list={tag:"ol",items:[]}}list.items.push(ol[1]);continue}
+    if(/^[-=_*]{3,}$/.test(bare)){flushP();flushL();out.push("<hr>");continue}
+    para.push(bare);
+  }
+  flushP();flushL();flushT();
+  return out.join("").replace(/\x00(\d+)\x00/g,(m,i)=>blocks[+i]||"");
+}
+function roleFlow(roleList){
+  if(!Array.isArray(roleList)||roleList.length<2)return"";
+  const ids=new Map(roleList.map((r,i)=>[String(r.id||("r"+i)),r]));
+  const hasEdge=roleList.some(r=>(Array.isArray(r.depends_on)?r.depends_on:[]).some(d=>ids.has(String(d))));
+  if(!hasEdge)return"";// a flat roster has no structure worth drawing — the status segments already show it
+  const level=new Map();
+  const depth=(id,seen=new Set())=>{if(level.has(id))return level.get(id);
+    if(seen.has(id))return 0;seen.add(id);
+    const deps=(Array.isArray(ids.get(id)?.depends_on)?ids.get(id).depends_on:[]).filter(d=>ids.has(d));
+    const value=deps.length?1+Math.max(...deps.map(d=>depth(d,seen))):0;
+    level.set(id,value);return value};
+  [...ids.keys()].forEach(id=>depth(id));
+  const cols=[];for(const[id,lv]of level)(cols[lv]=cols[lv]||[]).push(id);
+  const colW=118,rowH=46,padX=46,padY=13,r=8;
+  const pos=new Map();
+  cols.forEach((col,ci)=>col.forEach((id,ri)=>pos.set(id,{x:padX+r+ci*colW,y:padY+ri*rowH})));
+  const maxRows=Math.max(...cols.map(c=>c.length));
+  const width=padX*2+r*2+(cols.length-1)*colW,height=padY+(maxRows-1)*rowH+r+26;
+  const tone=rs=>["done","skipped"].includes(rs)?"var(--success)":["working","running","retrying","repairing","recovering"].includes(rs)?"var(--green)":["failed","blocked","error","exhausted"].includes(rs)?"var(--red)":["review","waiting_permission","waiting-permission"].includes(rs)?"var(--warning)":"var(--line2)";
+  const edges=[],nodes=[];
+  for(const[id,p]of pos){
+    const role=ids.get(id),rs=String(role.status||"pending").toLowerCase();
+    (Array.isArray(role.depends_on)?role.depends_on:[]).filter(d=>pos.has(d)).forEach(d=>{
+      const q=pos.get(d);
+      edges.push(`<path d="M${q.x+r} ${q.y} C ${q.x+colW/2} ${q.y}, ${p.x-colW/2} ${p.y}, ${p.x-r-2} ${p.y}" fill="none" stroke="var(--line2)" stroke-width="1.5"/>`)});
+    const filled=["pending","blocked"].includes(rs)?"var(--card)":tone(rs);
+    const label=String(id).length>14?String(id).slice(0,13)+"…":String(id);
+    nodes.push(`<g><circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${filled}" stroke="${tone(rs)}" stroke-width="2"><title>${esc(role.title||id)}: ${esc(rs)}${role.detail?" — "+esc(role.detail):""}</title></circle><text x="${p.x}" y="${p.y+r+13}" text-anchor="middle">${esc(label)}</text></g>`);
+  }
+  return`<div class="roleflow" aria-label="Role dependency flow"><svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img">${edges.join("")}${nodes.join("")}</svg></div>`;
+}
+function diffstatPanel(report){
+  const m=String(report||"").match(/(?:^|\n)STAT\n([\s\S]*?)(?:\n{2,}|$)/);
+  if(!m)return"";
+  const rows=[];
+  for(const line of m[1].split("\n")){
+    const row=line.match(/^\s*(.+?)\s+\|\s+(\d+)\s*(\+*)(-*)\s*$/);
+    if(row)rows.push({file:row[1].trim(),n:+row[2],add:row[3].length,del:row[4].length});
+  }
+  if(!rows.length)return"";
+  const shown=rows.slice(0,12),peak=Math.max(...shown.map(r=>r.add+r.del),1);
+  const bars=shown.map(r=>{const width=Math.max(8,Math.round((r.add+r.del)/peak*100));
+    return`<div class="dsrow"><span class="dsfile" title="${esc(r.file)}">${esc(r.file)}</span><span class="dsnum">${r.n}</span><span class="dsbar" style="width:${width}%"><i class="add" style="flex:${r.add}"></i><i class="del" style="flex:${r.del}"></i></span></div>`}).join("");
+  return`<div class="diffstat" role="img" aria-label="Changed files">${bars}${rows.length>shown.length?`<div class="dsnum">+${rows.length-shown.length} more files</div>`:""}</div>`;
+}
 const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
 const CLAUDE_LOGO=(()=>{let r="";for(let k=0;k<12;k++){const a=k*Math.PI/6,c=Math.cos(a),s=Math.sin(a);
   r+=`<line x1="${(12+c*3).toFixed(1)}" y1="${(12+s*3).toFixed(1)}" x2="${(12+c*9.6).toFixed(1)}" y2="${(12+s*9.6).toFixed(1)}"/>`}
@@ -1806,7 +1911,7 @@ function recoveryLog(source,title="Recovery history"){
   }).join("");
   return`<section class="recovery-log"><h4>${esc(title)}</h4>${rows}</section>`;
 }
-const DELIVERY_GOOD=new Set(["passed","reviewed","committed","pushed","not_needed","done","success","clean"]),DELIVERY_LIVE=new Set(["running","working","reviewing","testing","committing","pushing"]),DELIVERY_BAD=new Set(["failed","error","blocked","timed_out","timeout","confirmation_invalid","confirmation_expired"]);
+const DELIVERY_GOOD=new Set(["passed","reviewed","committed","pushed","not_needed","done","success","clean"]),DELIVERY_LIVE=new Set(["running","working","reviewing","testing","committing","pushing"]),DELIVERY_BAD=new Set(["failed","error","blocked","stale","timed_out","timeout","confirmation_invalid","confirmation_expired"]);
 const deliveryErrorKey=(cid,name)=>`${String(cid||"")}:${String(name||"")}`;
 const deliveryActionStep=action=>action==="test"?"tests":action==="prepare_push"||action==="confirm_push"?"push":action;
 function clearDeliveryErrors(cid,action){
@@ -1865,13 +1970,16 @@ function deliveryPanel(o){
     <div class="delivery-step-detail">${esc(item.step.detail)}</div>
     <button type="button" class="btn line sm" data-ceo-delivery="${item.key}" data-cid="${esc(cid)}"${item.enabled?"":" disabled"}${busy?' aria-busy="true"':""}>${esc(busy?busyText:item.label)}</button></div>`}).join("");
   const testEvidence=pick(tests.raw.output,tests.raw.error,tests.raw.detail);
+  const ai=review.raw&&review.raw.ai&&typeof review.raw.ai==="object"?review.raw.ai:null;
   const evidence=[
+    ai?`<div class="ai-review" data-tone="${ai.verdict==="attention"?"warn":"good"}" role="note"><b>${ai.verdict==="attention"?"AI review — needs your eyes":"AI review — looks right"}</b><p>${esc(ai.summary||"")}</p>${Array.isArray(ai.issues)&&ai.issues.length?`<ul>${ai.issues.map(issue=>`<li><code>${esc(issue.file||"")}</code> ${esc(issue.note||"")}</li>`).join("")}</ul>`:""}</div>`:"",
+    review.raw.report?diffstatPanel(review.raw.report):"",
     review.raw.report?`<details><summary>Change review report</summary><pre>${esc(review.raw.report)}</pre></details>`:"",
     testEvidence?`<details><summary>Test output · ${esc(tests.status)}</summary><pre>${esc(testEvidence)}</pre></details>`:"",
   ].filter(Boolean).join("");
   const next=String(delivery.next_action||"").trim();
   const noticeLabel=interrupted?`${interrupted[0][0].toUpperCase()+interrupted[0].slice(1)} ${interrupted[1].unavailable?"unavailable":"stopped"}`:"Delivery needs attention";
-  const notices=[currentProblem?`<div class="delivery-blocked${hasFailure?" bad":""}" role="status"><b>${esc(noticeLabel)}</b><span>${esc(currentProblem)}</span></div>`:"",attributionProblem&&attributionProblem!==currentProblem?`<div class="delivery-blocked" role="note"><b>Commit boundary</b><span>${esc(attributionProblem)}</span></div>`:""].filter(Boolean).join("");
+  const notices=[currentProblem?`<div class="delivery-blocked${hasFailure?" bad":""}" role="status"><b>${esc(noticeLabel)}</b><span>${esc(currentProblem)}</span><button type="button" class="btn line sm" data-ceo-delivery="fix" data-cid="${esc(cid)}"${anyBusy?" disabled":""} title="Start a solo agent in this repository with the failure evidence; it diagnoses and fixes, but never commits or pushes.">Fix with agent</button></div>`:"",attributionProblem&&attributionProblem!==currentProblem?`<div class="delivery-blocked" role="note"><b>Commit boundary</b><span>${esc(attributionProblem)}</span></div>`:""].filter(Boolean).join("");
   return`<section class="delivery-pipeline" aria-label="Review and delivery pipeline"${anyBusy?' aria-busy="true"':""}><div class="delivery-head"><div class="delivery-head-copy"><b>Review and delivery</b><span>${esc(next||(!available?"Delivery controls are unavailable for this saved mission.":!changed?"No repository changes need delivery.":"Review the completed work, verify it, then commit and push explicitly."))}</span></div><span class="delivery-state ${topTone}">${esc(topStatus)}</span></div><div class="delivery-steps">${rows}</div>${notices}${evidence?`<div class="delivery-evidence">${evidence}</div>`:""}</section>`;
 }
 function deliveryCommitDefault(o){
@@ -1955,8 +2063,10 @@ function ceoCard(o,full,history=false){
     const reviewGated=rs==="review"&&o.live;
     const acts=PERMISSION_WAIT.has(rs)?permissionGatePanel(o,role):reviewGated?`<div class="racts"><button class="btn line sm" data-ceo-act="approve" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Approve</button><button class="btn line sm" data-ceo-act="redo" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Redo</button><button class="btn line sm danger" data-ceo-act="skip" data-cid="${esc(o.cid||"")}" data-role="${esc(role.id||"")}">Skip</button></div>`:"";
     const showResult=full||["review","waiting_permission","waiting-permission","failed","error","exhausted"].includes(rs),result=String(role.result||"");
-    const output=result&&showResult?`<div class="rout">${esc(result.slice(0,1800))}</div>`:"";
-    const dependencies=Array.isArray(role.depends_on)?role.depends_on:[],modelMeta=[role.model,role.turns!=null?`${role.turns}t`:"",role.secs?`${role.secs}s`:"",role.cost?`$${role.cost}`:"",role.review?"gated":"",role.continues?`continued ${role.continues}×`:"",dependencies.length?`after ${dependencies.join(",")}`:""].filter(Boolean).join(" · ");
+    const output=result&&showResult?`<div class="rout md">${md(result.slice(0,2400))}</div>`:"";
+    const verification=role.verification&&typeof role.verification==="object"?role.verification:null;
+    const verifyChip=!verification?"":verification.verdict==="accept"?"verified":rs==="done"?"verifier flagged":"";
+    const dependencies=Array.isArray(role.depends_on)?role.depends_on:[],modelMeta=[role.model,role.turns!=null?`${role.turns}t`:"",role.secs?`${role.secs}s`:"",role.cost?`$${role.cost}`:"",role.review?"gated":"",verifyChip,role.continues?`continued ${role.continues}×`:"",dependencies.length?`after ${dependencies.join(",")}`:""].filter(Boolean).join(" · ");
     const fallbackPanel=providerFallbackPanel(role);
     return`<div class="rrow"><span class="rstat ${esc(rs)}">${esc(label)}</span><div class="rbd"><div class="rt">${esc(role.title||role.id||"Role")}${modelMeta?`<small>${esc(modelMeta)}</small>`:""}</div>${role.detail?`<div class="rm">${esc(role.detail)}</div>`:""}${fallbackPanel}${full&&!history&&role.mission?`<div class="rm">${esc(String(role.mission).slice(0,300))}</div>`:""}${output}${recoveryLog(role,"Role recovery")}${acts}</div></div>`;
   }).join("");
@@ -1971,7 +2081,7 @@ function ceoCard(o,full,history=false){
   const controlHint=PERMISSION_WAIT.has(status)?"Resolve the named permission above, or archive to abandon the mission.":resumable?`Retries only the ${Math.max(0,roleList.length-doneN)} unfinished role${roleList.length-doneN===1?"":"s"}.`:deliveryStuck?"Delivery is blocked — commit or push it manually in Git, or archive to set it aside. Archiving keeps every file.":"Finished — archive when the record is no longer needed.";
   const controls=o.live?"":`<div style="display:flex;align-items:center;gap:11px;margin-top:10px;flex-wrap:wrap">${resumable?`<button class="btn solid sm" data-ceo-act="resume" data-cid="${esc(o.cid||"")}" data-role="">Continue</button>`:""}${archive}<span class="rm" style="margin:0;color:var(--ink3)">${controlHint}</span></div>`;
   const quick=o.live?`<button type="button" class="mquickstop" data-ceo-act="stop" data-cid="${esc(o.cid||"")}" data-role="">Stop</button>`:"";
-  return`<details class="mrun" data-cid="${esc(o.cid||"")}" ${MOPEN.has(o.cid)?"open":""}><summary><span class="chev"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span class="mname" title="${esc(cardTitle)}">${esc(cardTitle)}</span><span class="mbar">${segs}</span><span class="mmeta">${planning?"staffing…":`${doneN}/${roleList.length}`} · $${Number(o.cost||0).toFixed(2)}${o.resumes?` · resumed ${o.resumes}×`:""}${o.account?` · ${esc(o.account)}`:""}</span>${quick}${statPill}</summary><div class="mbody">${history?deliveryPanel(o):""}${full?missionBriefPanel(o):""}${why}${roleRows||missionPermission||`<div class="none">Waiting for role details.</div>`}${recoveryLog(o)}${controls}</div></details>`;
+  return`<details class="mrun" data-cid="${esc(o.cid||"")}" ${MOPEN.has(o.cid)?"open":""}><summary><span class="chev"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span class="mname" title="${esc(cardTitle)}">${esc(cardTitle)}</span><span class="mbar">${segs}</span><span class="mmeta">${planning?"staffing…":`${doneN}/${roleList.length}`} · $${Number(o.cost||0).toFixed(2)}${o.resumes?` · resumed ${o.resumes}×`:""}${o.account?` · ${esc(o.account)}`:""}</span>${quick}${statPill}</summary><div class="mbody">${history?deliveryPanel(o):""}${full?missionBriefPanel(o):""}${why}${full?roleFlow(roleList):""}${roleRows||missionPermission||`<div class="none">Waiting for role details.</div>`}${recoveryLog(o)}${controls}</div></details>`;
 }
 function renderCeo(){
   const focusCid=[...MOPEN].reverse()[0]||"",activeAll=S.ceo.filter(o=>!MISSION_SUCCESS.has(String(o.status||"").toLowerCase()));
@@ -2009,7 +2119,7 @@ function chatClear(){
 }
 function chatAdd(role,text,think){const log=$("chatlog");
   const d=document.createElement("div");d.className="msg "+role+(think?" think":"");
-  d.innerHTML=`<span class="who">${role==="u"?"you":"rune"}</span>${esc(text)}`;
+  d.innerHTML=`<span class="who">${role==="u"?"you":"rune"}</span>${role==="a"&&!think?`<div class="md">${md(text)}</div>`:esc(text)}`;
   log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
 async function chatSend(){
   const inp=$("chatinput"),text=inp.value.trim();
@@ -3572,6 +3682,11 @@ async function runCeoDelivery(button){
       if(state.bad||action==="test"&&!state.good)throw new Error(state.detail||`${action} did not pass`);
     }else if(action==="commit"){
       const result=await post("/api/ceo-delivery",{cid,action,message});mergeDeliveryResult(cid,result);
+    }else if(action==="fix"){
+      const result=await post("/api/ceo-delivery",{cid,action:"fix"});
+      const fixer=result&&result.mission&&typeof result.mission==="object"?result.mission:null;
+      toast(fixer?`Fixer agent started: ${clipText(String(fixer.name||fixer.cid||"solo mission"),60)}`:"Fixer agent started.");
+      if(fixer&&fixer.cid)await openMissionActivity(String(fixer.cid));
     }else if(action==="prepare_push"){
       const prepared=await post("/api/ceo-delivery",{cid,action:"prepare_push"});mergeDeliveryResult(cid,prepared);
       const confirmation=prepared.confirmation&&typeof prepared.confirmation==="object"?prepared.confirmation:{};

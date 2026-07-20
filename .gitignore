@@ -34,3 +34,11 @@ state/recall-receipts.jsonl.*
 state/serve.log
 state/serve-*.log
 state/serve-*.err
+state/approvals.json
+state/dashboard-server.err.log
+state/dashboard-server.out.log
+state/desktop.log
+state/desktop-debug.log
+state/events.jsonl
+state/inbox.jsonl
+state/windows.json

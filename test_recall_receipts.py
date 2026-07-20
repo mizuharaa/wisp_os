@@ -13,6 +13,9 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT, "memory"))
 sys.path.insert(0, os.path.join(ROOT, "dashboard"))
 os.environ["RUNE_DISABLE_BOOT_RECOVERY"] = "1"
+os.environ["RUNE_DISABLE_VERIFIER"] = "1"
+os.environ["RUNE_DISABLE_AI_REVIEW"] = "1"
+os.environ["RUNE_DISABLE_REPLAN"] = "1"
 
 import recall_engine
 import ceo

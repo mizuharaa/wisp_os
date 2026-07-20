@@ -29,7 +29,6 @@ import sys
 import tempfile
 import threading
 import time
-import urllib.request
 import uuid
 
 import chat    # API key resolution
@@ -51,7 +50,6 @@ ADIR = os.path.join(CDIR, "archive")   # finished runs moved here, kept not dele
 APPROVALS = os.path.join(ROOT, "state", "approvals.json")
 MIRROR = os.path.join(ROOT, ".claude", "hooks", "mirror.py")
 HERMES = os.path.join(ROOT, "hermes", "hermes.py")
-API = "https://api.anthropic.com/v1/messages"
 IS_WIN = sys.platform == "win32"
 WORKER_TIMEOUT = 1800
 
@@ -67,6 +65,7 @@ MAX_PLANNER_ATTEMPTS = 2
 MAX_TRANSIENT_RETRIES = 2
 MAX_RECOVERY_CYCLES = 2
 MAX_PROVIDER_FALLBACKS = 1
+MAX_VERIFY_REDOS = 1
 RETRY_BACKOFF_BASE = 0.5
 
 CONTINUE_PROMPT = """You ran out of your turn budget mid-task — this is a \
@@ -222,6 +221,61 @@ record it: python hermes/hermes.py note "<problem>" "<solution>" --tags mission'
 If prior solutions are provided under "Brain recall", fold them into the \
 relevant briefs so workers reuse instead of re-solving."""
 
+REPLAN_SYSTEM = PLAN_SYSTEM + """
+
+MID-MISSION REPLAN: some roles already ran; a ledger of their outcomes \
+follows the mission. Plan ONLY the remaining work as 1-3 roles. Never repeat \
+work a 'done' role finished. Read the failure evidence and choose a DIFFERENT \
+approach — re-issuing a failed brief unchanged is forbidden. If a failure \
+looks like a missing external prerequisite, produce one small role that \
+verifies and reports it rather than a big build."""
+
+VERIFY_MODEL = "claude-haiku-4-5"   # tier-1: the check must stay near-free
+VERIFY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": ["accept", "revise"]},
+        "feedback": {"type": "string"},
+    },
+    "required": ["verdict", "feedback"],
+    "additionalProperties": False,
+}
+VERIFY_SYSTEM = """You are the completion verifier for an agentic OS. A role \
+just reported finishing its mission. Judge ONLY from the report whether the \
+mission was actually completed. You have no tools.
+
+"accept": the report gives concrete evidence the work happened — files \
+changed, commands run, measurable results, or a direct answer to what the \
+mission asked for.
+"revise": the report shows the work was NOT completed — it describes plans or \
+intentions instead of actions taken, skips an explicit deliverable the mission \
+names, reports an unresolved error as if it were success, or answers a \
+different task than the one assigned.
+
+Bias toward accept: a wrong revise wastes an entire worker session. Never \
+revise for style, verbosity, or polish the mission did not ask for. feedback: \
+for revise, one short paragraph with the exact concrete instruction for what \
+remains; empty for accept."""
+
+
+def _verify_role(role):
+    """Closed-loop completion check: does the report prove the mission happened?
+
+    Advisory and best-effort — an unreachable verifier never blocks completion.
+    ponytail: judges the report only (no tools), like the orchestrator critic;
+    a repo-inspecting verifier is the upgrade path if false accepts show up."""
+    if os.environ.get("RUNE_DISABLE_VERIFIER") == "1":
+        return "accept", ""
+    user = ("MISSION:\n%s\n\nROLE REPORT:\n%s" %
+            (str(role.get("mission") or "")[:6000],
+             str(role.get("result") or "")[:5000]))
+    v = _api(VERIFY_MODEL, VERIFY_SYSTEM, user, VERIFY_SCHEMA,
+             max_tokens=600, timeout=60)
+    if (not isinstance(v, dict) or v.get("error") or
+            v.get("verdict") not in ("accept", "revise")):
+        return "accept", ""
+    return v["verdict"], str(v.get("feedback") or "")[:1000]
+
 
 def emit(cid, detail, event="ceo"):
     subprocess.run([sys.executable, MIRROR, "--session", cid, "--event", event,
@@ -290,29 +344,8 @@ def _learning_receipt(result, policy_reasons):
 
 def _api(model, system, user, schema, max_tokens=4000, timeout=120):
     """One structured-output Messages call. Returns parsed dict or {"error"}."""
-    key = chat._api_key()
-    if not key:
-        return {"error": "no ANTHROPIC_API_KEY (set it in the environment or .env)"}
-    body = {"model": model, "max_tokens": max_tokens,
-            "system": system,
-            "messages": [{"role": "user", "content": user[:12000]}],
-            "output_config": {"format": {"type": "json_schema", "schema": schema}}}
-    req = urllib.request.Request(API, data=json.dumps(body).encode("utf-8"), headers={
-        "content-type": "application/json", "x-api-key": key,
-        "anthropic-version": "2023-06-01"})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = json.load(r)
-    except urllib.error.HTTPError as e:
-        return {"error": "API %s: %s" % (e.code, e.read().decode("utf-8", "ignore")[:200])}
-    except Exception as e:
-        return {"error": type(e).__name__ + ": " + str(e)[:200]}
-    txt = "".join(b.get("text", "") for b in (data.get("content") or [])
-                  if b.get("type") == "text")
-    try:
-        return json.loads(txt[txt.find("{"):txt.rfind("}") + 1])
-    except (json.JSONDecodeError, ValueError):
-        return {"error": "malformed JSON from " + model}
+    return chat.structured(model, system, user, schema,
+                           max_tokens=max_tokens, timeout=timeout)
 
 
 _RECALL_LOCAL = threading.local()
@@ -1656,6 +1689,79 @@ def _run_recovery(cid, o, role, failure, cfg_dir, cycle, workdir=ROOT,
     return "repaired", report
 
 
+def _replan_if_stuck(cid, o):
+    """One bounded mid-mission replan when a role fails terminally.
+
+    The CEO reads the full role ledger and staffs a revised tail for the
+    remaining work instead of firing tasks and forgetting them. Unfinished
+    roles are superseded; done work is kept. Once per mission — a replan of a
+    replan is the operator's call, not an automatic loop."""
+    if os.environ.get("RUNE_DISABLE_REPLAN") == "1":
+        return False
+    if o.get("replans") or o.get("route") != "delegate" or _stopped(cid):
+        return False
+    if not any(r["status"] == "failed" for r in o.get("roles") or []):
+        return False
+    if any(r["status"] in ("waiting_permission", "review")
+           for r in o.get("roles") or []):
+        return False
+    ledger = "\n".join(
+        "- %s (%s): %s%s" % (
+            r["id"], r.get("title") or "", r["status"],
+            (" — " + agent_runtime.safe_excerpt(
+                r.get("last_failure") or r.get("detail") or "", 200))
+            if r["status"] not in ("done", "skipped") else "")
+        for r in o["roles"])
+    brief = ("MISSION:\n%s\n\nROLE LEDGER (everything that already happened):\n%s"
+             % (str(o.get("refined") or o.get("goal") or "")[:8000], ledger))
+    p = _api(PLANNER, REPLAN_SYSTEM, brief, PLAN_SCHEMA,
+             max_tokens=8000, timeout=180)
+    raw = p.get("roles") if isinstance(p, dict) and not p.get("error") else None
+    if (not isinstance(raw, list) or not raw or
+            any(not isinstance(item, dict) for item in raw) or _stopped(cid)):
+        emit(cid, "mid-mission replan unavailable: " + agent_runtime.safe_excerpt(
+            str((p if isinstance(p, dict) else {}).get("error") or "no roles"), 120))
+        return False
+    for r in o["roles"]:
+        if r["status"] in ("failed", "blocked", "pending"):
+            r["status"] = "skipped"
+            r["detail"] = "superseded by the mid-mission replan"
+            r["next_action"] = ""
+    ov = o.get("opts") or {}
+    seen = {r["id"] for r in o["roles"]}
+    added = []
+    for i, item in enumerate(raw[:3]):
+        rid = "r2-" + (re.sub(r"[^a-z0-9\-]", "",
+                              str(item.get("id") or "").lower()) or "r%d" % i)
+        while rid in seen:
+            rid += "x"
+        seen.add(rid)
+        item["id"] = rid
+        item["model"] = item.get("model") if item.get("model") in ROLE_MODELS else "opus"
+        item["provider"] = "claude"
+        try:
+            item["turns"] = max(5, min(80, int(item.get("turns") or 30)))
+        except (TypeError, ValueError):
+            item["turns"] = 30
+        if ov.get("model"):
+            item["model"] = ov["model"]
+        if ov.get("turns"):
+            item["turns"] = ov["turns"]
+        if ov.get("gate"):
+            item["review"] = True
+        item["depends_on"] = [d for d in (item.get("depends_on") or [])
+                              if d in seen and d != rid]
+        item.update(status="pending", result="", secs=0, cost=0)
+        added.append(item)
+    o["roles"].extend(added)
+    o["replans"] = 1
+    o["next_action"] = "The CEO replanned the remaining work after a role failure."
+    _save(o)
+    emit(cid, "mid-mission replan staffed: " + ", ".join(
+        "%s(%s/%dt)" % (r["id"], r["model"], r["turns"]) for r in added))
+    return True
+
+
 def _wait_gate(cid, o, role):
     """Park a review-gated role until the operator acts (approve/redo/skip)."""
     role["status"] = "review"
@@ -1707,6 +1813,9 @@ def _run(cid):
                  and all(roles[d]["status"] in ("done", "skipped")
                          for d in r["depends_on"] if d in roles)), None)
             if not runnable:
+                if _replan_if_stuck(cid, o):
+                    roles = {r["id"]: r for r in o["roles"]}
+                    continue
                 # anything still pending has a failed/blocked dependency — name it,
                 # so a blocked role never sits there without a reason
                 for r in o["roles"]:
@@ -1956,6 +2065,32 @@ def _run(cid):
                          "retry budget exhausted" if role["limit"] else "FAILED",
                          role["detail"][:120]))
                     break
+                # Closed loop: a cheap verifier judges the report against the
+                # mission before "done". One bounded redo — never an open loop.
+                verdict, veto = _verify_role(role)
+                role["verification"] = {
+                    "verdict": verdict, "feedback": veto[:500],
+                    "model": VERIFY_MODEL,
+                    "at": datetime.datetime.now().isoformat(timespec="seconds")}
+                if _stopped(cid):
+                    _stop_state(o)
+                    return
+                if (verdict == "revise" and veto and
+                        int(role.get("verifies") or 0) < MAX_VERIFY_REDOS):
+                    role["verifies"] = int(role.get("verifies") or 0) + 1
+                    role["status"] = "retrying"
+                    role["detail"] = "verifier sent it back: " + veto[:160]
+                    role["next_action"] = "Re-running the role to close the verifier's gap."
+                    role["mission"] += (
+                        "\n\nVERIFIER FEEDBACK (a completion check found this gap — "
+                        "inspect the existing work first and finish only what is "
+                        "missing, do not redo completed steps): " + veto)
+                    o["next_action"] = role["next_action"]
+                    _save(o)
+                    emit(cid, "role %s verifier revise (%d/%d): %s" %
+                         (role["id"], role["verifies"], MAX_VERIFY_REDOS, veto[:100]))
+                    recovery_context = ""
+                    continue
                 # A successful original rerun is the verification step for the
                 # latest recovery cycle. Keep only compact, secret-safe evidence.
                 if role.get("recovery_history"):
@@ -1979,7 +2114,8 @@ def _run(cid):
                     role["provider_fallback"]["status"] = "succeeded"
                     role["provider_fallback"]["summary"] = (
                         "Codex completed the role after Claude hit its capacity limit.")
-                role["detail"] = ""
+                role["detail"] = ("" if verdict == "accept" else
+                                  "completed with a verifier reservation: " + veto[:160])
                 role["next_action"] = ("Awaiting operator approval." if role.get("review")
                                        else "Role complete.")
                 if not role.get("review"):
@@ -2579,6 +2715,44 @@ def delivery_action(cid, act, message="", token=""):
     payload = dict(result or {})
     payload["delivery"] = delivery.public_delivery(record.get("delivery") or {})
     return payload, None
+
+
+def delivery_fix(cid):
+    """Spawn one solo fixer mission from a persisted failed delivery step.
+
+    The brief is derived entirely from server-held evidence — the browser
+    supplies only the mission id, matching the delivery lane's trust model."""
+    path = _record_path(cid)
+    if not path:
+        return None, "no such completed mission"
+    try:
+        record = _load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return None, "mission record is unreadable"
+    lane = record.get("delivery") if isinstance(record.get("delivery"), dict) else {}
+    step, evidence = "", ""
+    for name in ("review", "tests", "commit", "push"):
+        item = lane.get(name) if isinstance(lane.get(name), dict) else {}
+        if item.get("status") in ("failed", "unavailable", "stale"):
+            step = name
+            evidence = str(item.get("output") or item.get("error") or
+                           item.get("detail") or "")
+            break
+    if not step:
+        return None, "no failed delivery step to fix"
+    workdir = str(record.get("workdir") or "")
+    if not os.path.isdir(workdir):
+        return None, "mission working directory is unavailable"
+    goal = ("Fix the failing delivery step '%s' for the completed mission "
+            "\"%s\" in this repository.\n\nOriginal mission goal:\n%s\n\n"
+            "Failure evidence:\n%s\n\nDiagnose the root cause, apply the "
+            "minimal fix, and re-run the failing check yourself to confirm it "
+            "passes. Do not commit and do not push." % (
+                step, str(record.get("name") or cid)[:80],
+                str(record.get("goal") or "")[:1500],
+                agent_runtime.safe_excerpt(evidence, 2500)))
+    return plan_and_start(goal, {"mode": "solo", "refine": "off"},
+                          workdir=workdir)
 
 
 def action(cid, role_id, act, feedback="", request_id=""):

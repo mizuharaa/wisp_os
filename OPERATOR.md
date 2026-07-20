@@ -204,15 +204,29 @@ new execution.
 Delivery is intentionally sequential:
 
 1. **Review changes** records Git status, changed paths, tracked diffs, bounded
-   untracked source previews, and `git diff --check` evidence.
-2. **Run tests** chooses a repository-native test command on the server. A test
-   command that changes the worktree fails the gate so generated files cannot
-   enter a commit without another review.
-3. **Commit** is enabled only when review and tests match the current Git
-   fingerprint and the repository was clean at mission start. Git hooks remain
-   enabled, and only the exact attributed path set is committed.
+   untracked source previews, and `git diff --check` evidence, then adds an
+   advisory AI review: a verdict ("looks right" / "needs your eyes"), a
+   plain-language summary, and per-file issues rendered above the raw report
+   next to a visual diffstat. The AI opinion informs you; it never blocks.
+2. **Run tests** chooses a repository-native test command on the server,
+   preferring the project's own environment (root pytest/unittest markers, a
+   verified Poetry env, or a nested project's `.venv`). Drop a
+   `.rune-test.json` at the repository root — `{"argv": ["poetry", "run",
+   "pytest", "-q"], "cwd": "apps/api"}` — to pin the command explicitly. A test
+   run that changes the *reviewed* files fails the gate; unrelated churn (logs,
+   caches, sync noise) neither fails tests nor invalidates the review.
+3. **Commit** is enabled only when review and tests still match the reviewed
+   files and the repository was clean at mission start. Git hooks remain
+   enabled, and exactly the reviewed path set is committed — files that
+   appeared after the review can never ride along.
 4. **Push** first shows the server-resolved remote, branch, and HEAD. Confirming
    consumes a short-lived one-use token and sends an explicit non-force refspec.
+
+If the reviewed files change underneath a review, the step turns **stale** with
+the reason kept on the card — run Review again to see the current diff. Any
+failed step offers **Fix with agent**: one solo mission is started in the
+mission's repository with the persisted failure evidence; it diagnoses,
+repairs, and re-runs the failing check itself, but never commits or pushes.
 
 Older runs and runs that began in an already-dirty repository can still be
 reviewed and tested, but automatic commit stays blocked. This protects operator

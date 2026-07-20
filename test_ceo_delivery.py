@@ -12,6 +12,9 @@ from unittest import mock
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT, "dashboard"))
 os.environ["RUNE_DISABLE_BOOT_RECOVERY"] = "1"
+os.environ["RUNE_DISABLE_VERIFIER"] = "1"
+os.environ["RUNE_DISABLE_AI_REVIEW"] = "1"
+os.environ["RUNE_DISABLE_REPLAN"] = "1"
 
 import ceo
 import delivery
@@ -273,6 +276,60 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaisesRegex(delivery.DeliveryError, "changed after review"):
             delivery.perform(mission, "test")
 
+    def test_stale_review_is_persisted_and_recoverable(self):
+        mission = self.changed_mission()
+        delivery.perform(mission, "review")
+        self.write("app.py", "VALUE = 3\n")
+        with self.assertRaisesRegex(delivery.DeliveryError, "changed after review"):
+            delivery.perform(mission, "test")
+
+        stale = mission["delivery"]
+        self.assertEqual(stale["review"]["status"], "stale")
+        self.assertEqual(stale["status"], "needs_review")
+        self.assertIn("Review again", stale["review"]["detail"])
+        self.review_and_test(mission)  # a fresh review unblocks the lane
+
+    def test_unrelated_churn_never_wedges_or_rides_into_delivery(self):
+        mission = self.changed_mission()
+        delivery.perform(mission, "review")
+        self.write("noise.log", "server appended this after the review\n")
+        tested = delivery.perform(mission, "test")["delivery"]
+        self.assertEqual(tested["tests"]["status"], "passed")
+
+        self.write("noise.log", "and again before the commit\n")
+        committed = delivery.perform(
+            mission, "commit", message="fix: reviewed change only")["delivery"]
+        self.assertEqual(committed["commit"]["status"], "committed")
+        self.assertEqual(committed["commit"]["paths"], ["app.py"])
+        self.assertIn("?? noise.log",
+                      self.git("status", "--porcelain").stdout)
+
+        bare = os.path.join(self.temp.name, "churn-remote.git")
+        subprocess.run(["git", "init", "--bare", bare], check=True,
+                       capture_output=True, text=True)
+        self.git("remote", "add", "origin", bare)
+        prepared = delivery.perform(mission, "prepare_push")
+        pushed = delivery.perform(
+            mission, "confirm_push",
+            token=prepared["confirmation"]["token"])["delivery"]
+        self.assertEqual(pushed["push"]["status"], "pushed")
+
+    def test_pinned_test_command_beats_detection(self):
+        self.write(".rune-test.json", json.dumps(
+            {"argv": [sys.executable, "-c", "print('pinned suite ok')"]}))
+        self.git("add", ".rune-test.json")
+        self.git("commit", "-m", "pin test command")
+        mission = self.changed_mission()
+        delivery.perform(mission, "review")
+        tested = delivery.perform(mission, "test")["delivery"]
+        self.assertEqual(tested["tests"]["status"], "passed")
+        self.assertEqual(tested["tests"]["argv"][1:], ["-c", "print('pinned suite ok')"])
+
+        self.write(".rune-test.json", json.dumps(
+            {"argv": ["pytest"], "cwd": "../outside"}))
+        with self.assertRaisesRegex(delivery.DeliveryError, "cwd must stay inside"):
+            delivery._override_test_argv(self.repo)
+
     def test_large_file_change_beyond_report_limit_invalidates_review(self):
         self.write("large.txt", "a" * 20_000 + "\n")
         mission = self.mission()
@@ -376,6 +433,34 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn("UNTRACKED FILE new_feature.py", reviewed["review"]["report"])
         self.assertIn("+FEATURE_FLAG = True", reviewed["review"]["report"])
 
+    def test_ai_review_is_advisory_and_readable(self):
+        mission = self.changed_mission()
+        judgment = {"verdict": "attention",
+                    "summary": "The diff edits app.py but ships no test update.",
+                    "issues": [{"file": "app.py", "note": "value change is untested"}]}
+        with mock.patch.dict(os.environ, {"RUNE_DISABLE_AI_REVIEW": "0"}), \
+                mock.patch("chat._api_key", return_value="k"), \
+                mock.patch("chat.structured", return_value=judgment) as call:
+            reviewed = delivery.perform(mission, "review")["delivery"]
+
+        self.assertEqual(reviewed["review"]["status"], "reviewed")  # advisory
+        self.assertEqual(reviewed["review"]["ai"]["verdict"], "attention")
+        self.assertIn("AI REVIEW — needs attention", reviewed["review"]["report"])
+        self.assertIn("app.py: value change is untested", reviewed["review"]["report"])
+        self.assertTrue(reviewed["review"]["detail"].startswith(
+            "AI review: needs attention"))
+        self.assertIn("MISSION GOAL", call.call_args[0][2])
+        delivery.perform(mission, "test")  # the AI pass must not stale the gate
+
+    def test_ai_review_failure_never_blocks_the_review(self):
+        mission = self.changed_mission()
+        with mock.patch.dict(os.environ, {"RUNE_DISABLE_AI_REVIEW": "0"}), \
+                mock.patch("chat._api_key", return_value="k"), \
+                mock.patch("chat.structured", return_value={"error": "API 500"}):
+            reviewed = delivery.perform(mission, "review")["delivery"]
+        self.assertEqual(reviewed["review"]["status"], "reviewed")
+        self.assertNotIn("ai", reviewed["review"])
+
 
 class MissionDeliveryPersistenceTests(unittest.TestCase):
     def setUp(self):
@@ -439,6 +524,40 @@ class MissionDeliveryPersistenceTests(unittest.TestCase):
         self.assertEqual(saved["delivery"]["push"]["status"],
                          "confirmation_expired")
 
+    def test_delivery_fix_spawns_a_solo_fixer_from_server_evidence(self):
+        record = {
+            "cid": "fixme1", "status": "done", "name": "Pipeline event API",
+            "goal": "add the pipeline event API", "workdir": self.temp.name,
+            "delivery": {"version": 1, "status": "tests_failed",
+                         "tests": {"status": "failed",
+                                    "output": "ModuleNotFoundError: no voice_daemon"}},
+        }
+        with open(os.path.join(ceo.ADIR, "fixme1.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump(record, handle)
+        calls = {}
+
+        def fake_start(text, opts=None, source=None, workdir=None,
+                       safe_permissions=False):
+            calls.update(text=text, opts=opts, workdir=workdir)
+            return {"cid": "fx1", "kind": "mission"}, None
+
+        with mock.patch.object(ceo, "plan_and_start", side_effect=fake_start):
+            out, err = ceo.delivery_fix("fixme1")
+
+        self.assertIsNone(err)
+        self.assertEqual(out["cid"], "fx1")
+        self.assertEqual(calls["opts"]["mode"], "solo")
+        self.assertEqual(calls["workdir"], self.temp.name)
+        self.assertIn("delivery step 'tests'", calls["text"])
+        self.assertIn("ModuleNotFoundError", calls["text"])
+        self.assertIn("Do not commit", calls["text"])
+
+    def test_delivery_fix_requires_a_failed_step(self):
+        out, err = ceo.delivery_fix("finished1")
+        self.assertIsNone(out)
+        self.assertIn("no failed delivery step", err)
+
     def test_peer_delivery_in_same_repository_blocks_every_stage(self):
         peer = dict(self.record, cid="finished2")
         with open(os.path.join(ceo.ADIR, "finished2.json"), "w",
@@ -482,6 +601,19 @@ class DeliveryApiTests(unittest.TestCase):
         self.assertEqual(status, 400)
         status, _ = self.response({"cid": "mission1", "action": "prepare_push",
                                    "token": "forged"})
+        self.assertEqual(status, 400)
+
+    def test_endpoint_fix_action_returns_the_spawned_fixer_mission(self):
+        with mock.patch.object(serve, "emit"), mock.patch.object(
+                serve.ceo, "delivery_fix",
+                return_value=({"cid": "fx1", "kind": "mission"}, None)) as fix:
+            status, payload = self.response({"cid": "mission1", "action": "fix"})
+        self.assertEqual(status, 200)
+        fix.assert_called_once_with("mission1")
+        self.assertEqual(payload["mission"]["cid"], "fx1")
+
+        status, _ = self.response(
+            {"cid": "mission1", "action": "fix", "message": "forged"})
         self.assertEqual(status, 400)
 
     def test_endpoint_returns_persisted_delivery_state_with_action_error(self):

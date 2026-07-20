@@ -38,6 +38,33 @@ def _api_key():
     return None
 
 
+def structured(model, system, user, schema, max_tokens=4000, timeout=120):
+    """One structured-output Messages call. Returns parsed dict or {"error"}."""
+    key = _api_key()
+    if not key:
+        return {"error": "no ANTHROPIC_API_KEY (set it in the environment or .env)"}
+    body = {"model": model, "max_tokens": max_tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": user[:12000]}],
+            "output_config": {"format": {"type": "json_schema", "schema": schema}}}
+    req = urllib.request.Request(API, data=json.dumps(body).encode("utf-8"), headers={
+        "content-type": "application/json", "x-api-key": key,
+        "anthropic-version": "2023-06-01"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        return {"error": "API %s: %s" % (e.code, e.read().decode("utf-8", "ignore")[:200])}
+    except Exception as e:
+        return {"error": type(e).__name__ + ": " + str(e)[:200]}
+    txt = "".join(b.get("text", "") for b in (data.get("content") or [])
+                  if b.get("type") == "text")
+    try:
+        return json.loads(txt[txt.find("{"):txt.rfind("}") + 1])
+    except (json.JSONDecodeError, ValueError):
+        return {"error": "malformed JSON from " + model}
+
+
 def _read(path, limit=1600):
     try:
         with open(os.path.join(ROOT, path), encoding="utf-8", errors="ignore") as handle:

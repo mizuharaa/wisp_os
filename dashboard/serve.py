@@ -722,7 +722,7 @@ class Handler(SimpleHTTPRequestHandler):
         action = data.get("action")
         cid = data.get("cid")
         if not isinstance(action, str) or action not in (
-                "review", "test", "commit", "prepare_push", "confirm_push"):
+                "review", "test", "commit", "prepare_push", "confirm_push", "fix"):
             return self._json(400, {"error": "unknown delivery action"})
         if not isinstance(cid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", cid):
             return self._json(400, {"error": "valid mission cid is required"})
@@ -742,6 +742,13 @@ class Handler(SimpleHTTPRequestHandler):
         if action == "confirm_push" and (not isinstance(token, str) or
                                           not token or len(token) > 200):
             return self._json(400, {"error": "push confirmation token is required"})
+        if action == "fix":
+            out, err = ceo.delivery_fix(cid)
+            if err:
+                return self._json(409, {"error": err})
+            emit(session="operator", event="ceo-delivery",
+                 detail=("%s -> fix mission %s" % (cid, out.get("cid", "")))[:200])
+            return self._json(200, {"ok": True, "mission": ceo.public_run(out)})
         out, err = ceo.delivery_action(cid, action, message=message, token=token)
         if err:
             payload = {"error": err}

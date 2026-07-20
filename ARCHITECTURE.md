@@ -45,7 +45,13 @@ command bar -> dashboard/ceo.py -> planner -> role worker
                          permission -> operator wait|
                          task -> safe fixer (<=2) -> original-role verification
                                                     |
+                     success -> completion verifier (accept / one revise)
+                                                    |
+              terminal role failure -> one CEO replan from the role ledger
+                                                    |
                                    verified learning -> Hermes (best effort)
+                                                    |
+                       delivery lane: review -> test -> commit -> push
 ```
 
 ## Calendar path
@@ -85,12 +91,42 @@ most two native-permission fixer cycles; the original role is always the
 verifier. Permission, credential, destructive, outward, spending, and access
 decisions remain operator-gated.
 
+A role that reports success must pass a tier-1 completion verifier before it is
+marked done: a Haiku call judges the role's report against its mission brief
+and either accepts or sends the role back once with concrete feedback. The
+verdict is persisted on the role and shown in the console; an unreachable
+verifier never blocks completion. When a role fails terminally in a delegated
+mission, the CEO performs at most one mid-mission replan: it rereads the full
+role ledger (every outcome plus failure evidence) and staffs a revised 1–3 role
+tail with an explicit different-approach instruction. Done work is kept;
+unfinished roles are superseded. `RUNE_DISABLE_VERIFIER=1` and
+`RUNE_DISABLE_REPLAN=1` turn these model gates off for offline runs and tests.
+
 New missions opt into restart recovery. On server boot, interrupted planning or
 working states resume from persisted context; review and permission waits do
 not. Stop is monotonic, kills descendants, and wins races with a late worker.
 
 `dashboard/orchestrator.py` uses the same tree-kill and transient-retry
 helpers for both worker and critic calls.
+
+## Delivery lane
+
+`dashboard/delivery.py` guards review → test → commit → push for completed
+missions. Gate fingerprints are scoped to the reviewed path set: unrelated
+worktree churn (logs, caches, sync noise) can neither invalidate a review nor
+ride into a commit, because commit stages exactly the reviewed paths. A review
+whose files changed underneath it persists as `stale` with a durable reason
+instead of dead-ending in a transient error.
+
+Review combines git hygiene checks with an advisory Haiku read of the diff
+against the mission goal (verdict, plain-language summary, per-file issues; it
+informs the operator and is never a gate; `RUNE_DISABLE_AI_REVIEW=1` disables).
+Tests resolve the project's own interpreter — root pytest/unittest markers, a
+verified Poetry environment, or a nested project's `.venv` — and a
+`.rune-test.json` at the repository root (`{"argv": [...], "cwd": "optional"}`)
+pins the command explicitly. A failed step exposes the `fix` action, which
+spawns one solo fixer mission built server-side from the persisted failure
+evidence; it may repair and re-run checks but never commits or pushes.
 
 ## Workflow suggestion path
 
@@ -159,6 +195,7 @@ only its persisted plan metadata while its status remains `planned`.
 | GET | `/api/workflows` | Ranked, evidence-backed workflow suggestions; never execution. |
 | GET | `/api/ceo` | Persisted CEO missions, live state, attempts, and recovery history. |
 | POST | `/api/ceo-action` | Stop, resume, archive, or resolve a gated role. |
+| POST | `/api/ceo-delivery` | Guarded review/test/commit/two-step push, or `fix` to spawn a solo fixer. |
 | GET | `/api/briefing` | Last good briefing, async job status, settings, and calendar. |
 | GET | `/api/briefing/job` | Current in-process generation job. |
 | GET | `/api/briefing/settings` | Default model, effort, and repository roots. |

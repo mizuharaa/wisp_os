@@ -210,6 +210,21 @@ def _digest_index(digest, repo, paths):
         _digest_part(digest, result.get("stdout") or result.get("stderr") or "")
 
 
+def _fingerprint(repo, head, branch, paths):
+    """Hash HEAD/branch plus the worktree and index state of a fixed path set.
+
+    Scoping to a path list is what keeps review->test->commit stable while
+    unrelated files (logs, caches, sync noise) churn elsewhere in the repo."""
+    paths = sorted(set(paths))
+    digest = hashlib.sha256()
+    for value in (head, branch):
+        _digest_part(digest, value)
+    for relative in paths:
+        _digest_worktree_path(digest, repo, relative)
+    _digest_index(digest, repo, paths)
+    return digest.hexdigest()[:24]
+
+
 def _snapshot(repo):
     head_result = _git(repo, "rev-parse", "HEAD")
     head = (head_result.get("stdout") or "").strip() if not head_result["returncode"] else ""
@@ -220,14 +235,9 @@ def _snapshot(repo):
         _git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all"),
         "Git status")
     paths = _status_paths(status)
-    digest = hashlib.sha256()
-    for value in (head, branch, status):
-        _digest_part(digest, value)
-    for relative in paths:
-        _digest_worktree_path(digest, repo, relative)
-    _digest_index(digest, repo, paths)
     return {"head": head, "branch": branch, "paths": paths,
-            "clean": not bool(status), "fingerprint": digest.hexdigest()[:24]}
+            "clean": not bool(status),
+            "fingerprint": _fingerprint(repo, head, branch, paths)}
 
 
 def capture_git_baseline(workdir):
@@ -431,6 +441,68 @@ def _untracked_review(repo):
     return "\n\n".join(sections)
 
 
+AI_REVIEW_MODEL = "claude-haiku-4-5"
+AI_REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": ["approve", "attention"]},
+        "summary": {"type": "string"},
+        "issues": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"file": {"type": "string"},
+                               "note": {"type": "string"}},
+                "required": ["file", "note"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["verdict", "summary", "issues"],
+    "additionalProperties": False,
+}
+AI_REVIEW_SYSTEM = """You review a completed agent mission's repository \
+changes before a human operator commits them. Judge ONLY the diff report \
+against the mission goal.
+
+Verdict "approve" when the changes plausibly implement the goal and show no \
+red flags. "attention" when the operator should look first: changes unrelated \
+to the goal, deleted or overwritten existing work, leftover debug/temporary \
+code, credentials or secrets in the diff, half-finished code, or a \
+deliverable the goal names that is absent from the diff.
+
+summary: one or two plain-language sentences saying what the change does and \
+whether it is ready — written for a person, not a terminal. issues: up to 5 \
+concrete {file, note} items; empty for approve."""
+
+
+def _ai_review(mission, report):
+    """Best-effort model read of the reviewed diff. Advisory, never a gate."""
+    if os.environ.get("RUNE_DISABLE_AI_REVIEW") == "1":
+        return None
+    try:
+        import chat  # lazy: resolved on the server's sys.path, needs its key
+    except Exception:
+        return None
+    if not chat._api_key():
+        return None
+    goal = str(mission.get("goal") or mission.get("name") or "")[:2000]
+    result = chat.structured(
+        AI_REVIEW_MODEL, AI_REVIEW_SYSTEM,
+        "MISSION GOAL:\n%s\n\nDIFF REPORT:\n%s" % (goal, report[:9000]),
+        AI_REVIEW_SCHEMA, max_tokens=1000, timeout=90)
+    if (not isinstance(result, dict) or result.get("error") or
+            result.get("verdict") not in ("approve", "attention")):
+        return None
+    issues = [{"file": str(item.get("file") or "")[:200],
+               "note": str(item.get("note") or "")[:300]}
+              for item in (result.get("issues") or [])[:5]
+              if isinstance(item, dict)]
+    return {"verdict": result["verdict"],
+            "summary": str(result.get("summary") or "")[:500],
+            "issues": issues, "model": AI_REVIEW_MODEL}
+
+
 def _review(mission):
     delivery, baseline, repo, snap = _state(mission)
     status = _git(repo, "status", "--short", "--untracked-files=all")
@@ -453,10 +525,24 @@ def _review(mission):
         "STATUS\n" + (status.get("stdout") or "clean"),
         "STAT\n" + (stat.get("stdout") or "no tracked diff"),
         "\n\n".join(patch_parts)) if part.strip())
+    ai = _ai_review(mission, report)
+    if ai:
+        header = "AI REVIEW — %s\n%s" % (
+            "needs attention" if ai["verdict"] == "attention" else "approve",
+            ai["summary"])
+        if ai["issues"]:
+            header += "\n" + "\n".join("- %s: %s" % (item["file"], item["note"])
+                                       for item in ai["issues"])
+        report = header + "\n\n" + report
     review = {"status": "reviewed" if not check["returncode"] else "failed",
               "checked_at": _now(), "fingerprint": snap["fingerprint"],
               "head": snap["head"], "changed_paths": snap["paths"],
               "report": _redact(report, REPORT_LIMIT)}
+    if ai:
+        review["ai"] = ai
+        review["detail"] = ("AI review: %s — %s" % (
+            "needs attention" if ai["verdict"] == "attention" else "looks right",
+            ai["summary"]))[:300]
     if check["returncode"]:
         review["error"] = _redact(check.get("stdout") or check.get("stderr") or
                                   "git diff --check failed", 2000)
@@ -574,6 +660,47 @@ def _poetry_test_python(repo, project):
     return candidate if not probe["returncode"] else ""
 
 
+def _project_venv_python(repo, project):
+    """Use a nested project's own .venv when it exists and can run pytest."""
+    base = os.path.join(repo, *project.split("/"))
+    candidate = os.path.join(base, ".venv", "Scripts" if IS_WIN else "bin",
+                             "python.exe" if IS_WIN else "python")
+    if (not os.path.isfile(candidate) or
+            not os.path.isfile(os.path.join(base, ".venv", "pyvenv.cfg"))):
+        return ""
+    probe = _run([candidate, "-c", "import pytest"], repo, timeout=20,
+                 env={"PYTHONDONTWRITEBYTECODE": "1"})
+    return candidate if not probe["returncode"] else ""
+
+
+def _override_test_argv(repo):
+    """Read an operator-pinned test command from .rune-test.json in the repo.
+
+    Returns (argv, cwd) or None. The file is local and operator-controlled —
+    the same trust boundary as the workers that already run inside the repo."""
+    path = os.path.join(repo, ".rune-test.json")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            spec = json.load(handle)
+    except (OSError, ValueError) as exc:
+        raise DeliveryError(".rune-test.json is unreadable: %s" % str(exc)[:200])
+    argv = spec.get("argv") if isinstance(spec, dict) else None
+    if (not isinstance(argv, list) or not argv or
+            any(not isinstance(item, str) or not item for item in argv)):
+        raise DeliveryError(
+            '.rune-test.json must contain {"argv": ["command", ...]}')
+    raw_cwd = str(spec.get("cwd") or "")
+    cwd = _clean_path(raw_cwd)
+    if raw_cwd and not cwd:
+        raise DeliveryError(".rune-test.json cwd must stay inside the repository")
+    full = os.path.normpath(os.path.join(repo, *cwd.split("/"))) if cwd else repo
+    if cwd and not os.path.isdir(full):
+        raise DeliveryError(".rune-test.json cwd does not exist: " + cwd)
+    return list(argv), full
+
+
 def detect_test_argv(repo):
     """Choose a fixed argv from repository markers; never accept browser input."""
     pyproject = ""
@@ -606,7 +733,11 @@ def detect_test_argv(repo):
                 "choose one test scope")
         target, project, poetry_project = nested_pytest[0]
         python = _poetry_test_python(repo, project) if poetry_project else ""
+        if not python:
+            python = _project_venv_python(repo, project)
         if not python and importlib.util.find_spec("pytest") is not None:
+            # Last resort; imports of the project's installed packages may
+            # fail here — the test output explains how to pin a real command.
             python = sys.executable
         if not python:
             raise DeliveryError(
@@ -633,15 +764,40 @@ def detect_test_argv(repo):
     raise DeliveryError("Rune could not detect a safe project test command")
 
 
+def _reviewed_paths(review):
+    """The exact path set the operator reviewed; delivery never widens it."""
+    values = review.get("changed_paths") if isinstance(review, dict) else None
+    return sorted({path for path in (_clean_path(item) for item in (values or []))
+                   if path})
+
+
+def _mark_review_stale(delivery, snap):
+    """Persist why the review no longer holds instead of a dead-end retry."""
+    review = dict(delivery.get("review") or {})
+    review["status"] = "stale"
+    review["detail"] = ("The reviewed files changed after the review. Run "
+                        "Review again to see the current diff.")
+    delivery["review"] = review
+    delivery["status"] = "needs_review"
+    delivery["current"] = {"head": snap["head"], "branch": snap["branch"],
+                           "changed_paths": snap["paths"],
+                           "fingerprint": snap["fingerprint"]}
+
+
 def _test(mission):
     delivery, _baseline, repo, snap = _state(mission)
     review = delivery.get("review") or {}
     if review.get("status") != "reviewed":
         raise DeliveryError("review changes before running tests")
-    if review.get("fingerprint") != snap["fingerprint"]:
-        raise DeliveryError("worktree changed after review; review it again")
+    reviewed = _reviewed_paths(review)
+    gate = _fingerprint(repo, snap["head"], snap["branch"], reviewed)
+    if review.get("fingerprint") != gate:
+        _mark_review_stale(delivery, snap)
+        raise DeliveryError(
+            "the reviewed files changed after review; review them again")
     try:
-        argv = detect_test_argv(repo)
+        override = _override_test_argv(repo)
+        argv, test_cwd = override if override else (detect_test_argv(repo), repo)
     except DeliveryError as exc:
         detail = str(exc)[:500]
         delivery["tests"] = {"status": "unavailable", "checked_at": _now(),
@@ -664,22 +820,29 @@ def _test(mission):
         }
         raise
     # Python's import cache must not manufacture untracked files between the
-    # review and commit gates. Other test-side worktree mutations are treated
-    # as a failed gate: generated files have not been reviewed and must never
-    # be swept into an automatic commit silently.
+    # review and commit gates. Mutations to the REVIEWED paths are a failed
+    # gate: that generated content was never approved for commit. Unrelated
+    # paths (logs, caches) never enter the commit set, so they cannot fail it.
     python_runner = (argv[0] == sys.executable or
                      (len(argv) >= 3 and argv[1:3] == ["-m", "pytest"]))
     test_env = {"PYTHONDONTWRITEBYTECODE": "1"} if python_runner else None
-    result = _run(argv, repo, timeout=900, env=test_env)
+    result = _run(argv, test_cwd, timeout=900, env=test_env)
     after = _snapshot(repo)
-    mutated = after["fingerprint"] != snap["fingerprint"]
+    after_gate = _fingerprint(repo, after["head"], after["branch"], reviewed)
+    mutated = after_gate != gate
     output = ((result.get("stdout") or "") +
               (("\n" + result.get("stderr", "")) if result.get("stderr") else ""))
     if mutated:
-        output += ("\nTest command changed the worktree. Review the generated changes "
-                   "before continuing; they were not approved for commit.")
+        output += ("\nTest command changed the reviewed files. Review the generated "
+                   "changes before continuing; they were not approved for commit.")
+    if (result["returncode"] and argv[0] == sys.executable and "--" in argv and
+            "ModuleNotFoundError" in output):
+        output += ("\nHint: these tests ran under Rune's own Python because the "
+                   "project's environment was not found. Create the project's "
+                   ".venv (or Poetry env), or pin the command in .rune-test.json "
+                   'at the repository root: {"argv": ["..."], "cwd": "optional/subdir"}.')
     tests = {"status": "passed" if not result["returncode"] and not mutated else "failed",
-             "ran_at": _now(), "fingerprint": after["fingerprint"],
+             "ran_at": _now(), "fingerprint": after_gate,
              "head": after["head"], "argv": list(argv),
              "returncode": result["returncode"],
              "worktree_mutated": mutated,
@@ -720,22 +883,27 @@ def _commit(mission, message, peer_active=False):
     review, tests = delivery.get("review") or {}, delivery.get("tests") or {}
     if review.get("status") != "reviewed" or tests.get("status") != "passed":
         raise DeliveryError("review and passing tests are required before commit")
-    if (review.get("fingerprint") != snap["fingerprint"] or
-            tests.get("fingerprint") != snap["fingerprint"]):
-        raise DeliveryError("worktree changed after review/tests; run them again")
+    reviewed = _reviewed_paths(review)
+    gate = _fingerprint(repo, snap["head"], snap["branch"], reviewed)
+    if (review.get("fingerprint") != gate or tests.get("fingerprint") != gate):
+        _mark_review_stale(delivery, snap)
+        raise DeliveryError(
+            "the reviewed files changed after review/tests; run them again")
     # A worker may have committed its own clean result. Record that commit rather
     # than creating an empty one, but only when the mission began clean.
-    if not snap["paths"] and snap["head"] != baseline.get("head"):
+    if not reviewed and snap["head"] != baseline.get("head"):
         delivery["commit"] = {"status": "committed", "head": snap["head"],
                               "short_head": snap["head"][:10],
                               "committed_at": _now(), "existing": True,
-                              "input_fingerprint": snap["fingerprint"]}
+                              "input_fingerprint": gate}
         delivery["push"] = {"status": "pending"}
         delivery["status"] = "committed"
         return {"delivery": public_delivery(delivery)}
     if snap["head"] != baseline.get("head"):
         raise DeliveryError("Git HEAD changed during the mission while changes remain dirty")
-    paths = list(snap["paths"])
+    # Commit exactly what was reviewed — never the whole current status, so
+    # unrelated files that appeared since review cannot ride into the commit.
+    paths = list(reviewed)
     if not paths:
         raise DeliveryError("there are no attributable changes to commit")
     add = _git(repo, "add", "-A", "--", *paths, timeout=120)
@@ -807,8 +975,11 @@ def _prepare_push(mission):
         raise DeliveryError("a verified commit is required before push")
     if snap["head"] != commit.get("head"):
         raise DeliveryError("Git HEAD changed after commit")
-    if not snap["clean"]:
-        raise DeliveryError("worktree must be clean before push")
+    # Push publishes commits only; unrelated local churn cannot alter them.
+    dirty = sorted(set(commit.get("paths") or []) & set(snap["paths"]))
+    if dirty:
+        raise DeliveryError("committed files changed again before push: " +
+                            ", ".join(dirty[:5]))
     remote, remote_branch, set_upstream = _push_target(repo, snap["branch"])
     token = secrets.token_urlsafe(24)
     expires = int(time.time()) + PUSH_TOKEN_TTL
@@ -847,8 +1018,10 @@ def _confirm_push(mission, token):
     commit = delivery.get("commit") or {}
     if snap["head"] != push.get("head") or snap["head"] != commit.get("head"):
         raise DeliveryError("Git HEAD changed after push confirmation")
-    if not snap["clean"] or snap["branch"] != push.get("local_branch"):
-        raise DeliveryError("branch or worktree changed after push confirmation")
+    if snap["branch"] != push.get("local_branch"):
+        raise DeliveryError("branch changed after push confirmation")
+    if set(commit.get("paths") or []) & set(snap["paths"]):
+        raise DeliveryError("committed files changed after push confirmation")
     remote, remote_branch, set_upstream = _push_target(repo, snap["branch"])
     if (remote != push.get("remote") or remote_branch != push.get("branch") or
             bool(set_upstream) != bool(push.get("set_upstream"))):
