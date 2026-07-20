@@ -387,6 +387,108 @@ class CeoRecoveryTests(unittest.TestCase):
         self.assertEqual(item["status"], "failed")
         self.assertIn("transient retry budget exhausted", item["detail"])
 
+    def test_blocked_role_resumes_through_review_to_done(self):
+        """Full lifecycle: a failed dependency blocks its dependent, resume()
+        resets both, and the rerun drives working -> review -> done — with every
+        persisted per-role status inside the legal state set at every step."""
+        legal = {"pending", "working", "retrying", "repairing", "review",
+                 "waiting_permission", "blocked", "exhausted", "stopped",
+                 "failed", "done", "skipped"}
+        roles = [role(id="eng", title="Engineer"),
+                 role(id="verify", title="Verifier", depends_on=["eng"],
+                      review=True)]
+        self.save(mission(roles=roles))
+        self.make_live()
+        seen = []
+        real_save = ceo._save
+
+        def spy_save(o):
+            seen.append({r["id"]: r["status"] for r in o.get("roles") or []})
+            real_save(o)
+
+        with mock.patch.object(ceo, "_worker", lambda *a, **kw: {
+                "is_error": True, "result": "connection reset by peer"}), \
+                mock.patch.object(ceo, "_save", spy_save):
+            ceo._run("m1")
+        got = self.load()
+        self.assertEqual(got["status"], "failed")
+        self.assertEqual(got["roles"][0]["status"], "failed")
+        self.assertEqual(got["roles"][1]["status"], "blocked")
+        self.assertIn("eng didn't finish", got["roles"][1]["detail"])
+        self.assertIn({"eng": "working", "verify": "pending"}, seen)
+        self.assertIn({"eng": "retrying", "verify": "pending"}, seen)
+
+        # resume(): blocked and failed both exit to pending, then the rerun
+        # completes eng and parks verify at its review gate until approval.
+        def inject_gate_verdict(_secs):
+            with ceo.LOCK:
+                ceo.LIVE["m1"]["gate"]["verify"] = ("approve", "")
+
+        with mock.patch.object(ceo.threading, "Thread", InlineThread), \
+                mock.patch.object(ceo, "_worker", lambda *a, **kw: {
+                    "is_error": False,
+                    "result": "Completed the assignment; tests pass."}), \
+                mock.patch.object(ceo.time, "sleep", inject_gate_verdict), \
+                mock.patch.object(ceo, "_save", spy_save):
+            self.assertIsNone(ceo.resume("m1"))
+        got = self.load()
+        self.assertEqual(got["status"], "done")
+        self.assertEqual([r["status"] for r in got["roles"]], ["done", "done"])
+        self.assertEqual(got["resumes"], 1)
+        self.assertIn({"eng": "pending", "verify": "pending"}, seen)
+        self.assertIn({"eng": "done", "verify": "review"}, seen)
+        for snapshot in seen:
+            self.assertLessEqual(set(snapshot.values()), legal)
+
+    def test_turn_budget_cutoff_auto_continues_then_parks_exhausted(self):
+        self.save(mission())
+        self.make_live()
+        calls = []
+
+        def worker(_cid, _current, _ctx, _cfg, **kwargs):
+            calls.append(kwargs.get("resume_sid") or "")
+            return {"is_error": False, "subtype": "error_max_turns",
+                    "session_id": "sess-1", "result": "partial work"}
+
+        with mock.patch.object(ceo, "_worker", worker):
+            ceo._run("m1")
+        got = self.load()
+        item = got["roles"][0]
+        # cut off mid-task: the same session continues, never a fresh restart
+        self.assertEqual(len(calls), 1 + ceo.MAX_CONTINUES)
+        self.assertEqual(calls[1:], ["sess-1"] * ceo.MAX_CONTINUES)
+        self.assertEqual(item["status"], "exhausted")
+        self.assertEqual(item["continues"], ceo.MAX_CONTINUES)
+        self.assertEqual(item["session"], "sess-1")
+        self.assertIn("cut off, not finished", item["detail"])
+        self.assertEqual(got["status"], "exhausted")
+
+    def test_resume_resets_only_unfinished_roles_and_continues_exhausted(self):
+        roles = [role(id="landed", status="done", result="finished"),
+                 role(id="stuck", status="exhausted", session="sess-9",
+                      result="cut off mid-task"),
+                 role(id="broken", status="failed", result="boom",
+                      detail="failed")]
+        self.save(mission(status="exhausted", roles=roles))
+        ran = []
+        with mock.patch.object(ceo.threading, "Thread", InlineThread), \
+                mock.patch.object(ceo, "_run", lambda cid: ran.append(cid)):
+            self.assertIsNone(ceo.resume("m1"))
+        got = self.load()
+        self.assertEqual(ran, ["m1"])
+        by = {r["id"]: r for r in got["roles"]}
+        self.assertEqual(by["landed"]["status"], "done")
+        self.assertEqual(by["landed"]["result"], "finished")
+        # exhausted keeps its provider session so the continue resumes in place
+        self.assertEqual(by["stuck"]["status"], "pending")
+        self.assertEqual(by["stuck"]["continue_from"], "sess-9")
+        self.assertEqual(by["stuck"]["continues"], 0)
+        self.assertEqual(by["stuck"]["result"], "cut off mid-task")
+        # a genuine failure reruns fresh: stale error text is dropped
+        self.assertEqual(by["broken"]["status"], "pending")
+        self.assertEqual(by["broken"]["result"], "")
+        self.assertEqual(got["status"], "running")
+
     def test_claude_weekly_limit_continues_once_through_codex(self):
         self.save(mission(safe_permissions=True))
         self.make_live()

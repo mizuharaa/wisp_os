@@ -10,8 +10,10 @@
               Opus for hard implementation, Fable only for frontier-complex
               reasoning, Sonnet for light/logistics, Haiku for mechanical.
   4. execute  Roles run as headless Claude or Codex workers in dependency order.
-              Per-role status (pending/working/blocked/review/done/failed)
-              is persisted after every transition — the dashboard polls it.
+              Per-role status (pending/working/blocked/review/done/failed,
+              refined by retrying/repairing/waiting_permission/exhausted/
+              stopped/skipped) is persisted after every transition — the
+              dashboard polls it.
   5. learn    On completion the outcome is written to Hermes, which mirrors
               a card into the Obsidian vault. The flywheel closes itself.
 
