@@ -339,23 +339,55 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaisesRegex(delivery.DeliveryError, "changed after review"):
             delivery.perform(mission, "test")
 
-    def test_dirty_or_legacy_baseline_blocks_automatic_commit(self):
+    def test_dirty_baseline_excludes_preexisting_work_from_commit(self):
         self.write("preexisting.txt", "user work\n")
         dirty = delivery.capture_git_baseline(self.repo)
         self.assertFalse(dirty["clean"])
         self.write("app.py", "VALUE = 4\n")
         mission = self.mission(dirty)
         delivery.initialize_completed_delivery(mission)
+        self.assertNotIn("blocked_reason", mission["delivery"])
         self.review_and_test(mission)
-        with self.assertRaisesRegex(delivery.DeliveryError, "already dirty"):
-            delivery.perform(mission, "commit", message="unsafe")
+        review = mission["delivery"]["review"]
+        self.assertEqual(review["preexisting_paths"], ["preexisting.txt"])
+        self.assertIn("PRE-EXISTING OPERATOR CHANGES", review["report"])
 
+        committed = delivery.perform(
+            mission, "commit", message="fix: attributed work only")["delivery"]
+        self.assertEqual(committed["commit"]["paths"], ["app.py"])
+        self.assertEqual(committed["commit"]["excluded_preexisting"],
+                         ["preexisting.txt"])
+        status = self.git("status", "--porcelain").stdout
+        self.assertIn("?? preexisting.txt", status)  # operator WIP untouched
+        self.assertNotIn("app.py", status)
+
+    def test_commit_blocked_when_every_reviewed_change_is_preexisting(self):
+        self.write("preexisting.txt", "user work\n")
+        dirty = delivery.capture_git_baseline(self.repo)
+        self.write("preexisting.txt", "user work, edited again\n")
+        mission = self.mission(dirty)
+        delivery.initialize_completed_delivery(mission)
+        self.review_and_test(mission)
+        with self.assertRaisesRegex(delivery.DeliveryError,
+                                    "already dirty before the mission"):
+            delivery.perform(mission, "commit", message="unsafe")
+        self.assertIn("already dirty",
+                      mission["delivery"]["commit"]["blocked_reason"])
+
+    def test_legacy_baseline_blocks_automatic_commit(self):
         legacy = self.mission(dict(self.baseline, legacy=True), cid="legacy")
         delivery.initialize_completed_delivery(legacy)
         delivery.perform(legacy, "review")
         delivery.perform(legacy, "test")
         with self.assertRaisesRegex(delivery.DeliveryError, "before Git attribution"):
             delivery.perform(legacy, "commit", message="unsafe")
+
+    def test_missing_workdir_never_attributes_the_server_repo(self):
+        mission = self.mission()
+        mission["workdir"] = ""
+        initialized = delivery.initialize_completed_delivery(mission)
+        self.assertFalse(initialized["available"])
+        self.assertIn("working directory", initialized["reason"])
 
     def test_push_requires_fresh_one_use_token_and_never_forces(self):
         mission = self.changed_mission()

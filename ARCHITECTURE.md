@@ -114,7 +114,13 @@ helpers for both worker and critic calls.
 `dashboard/delivery.py` guards review → test → commit → push for completed
 missions. Gate fingerprints are scoped to the reviewed path set: unrelated
 worktree churn (logs, caches, sync noise) can neither invalidate a review nor
-ride into a commit, because commit stages exactly the reviewed paths. A review
+ride into a commit. Attribution is by path set, not by a clean-repo
+requirement: the mission baseline records which paths were already dirty at
+start, the review lists them as pre-existing operator changes, and commit
+stages exactly the reviewed paths minus that set — so a work-in-progress
+repository does not block delivery. Automatic commit is disabled only for
+legacy runs (no captured baseline) and missions without a recorded working
+directory, which must never fall back to the server's own repository. A review
 whose files changed underneath it persists as `stale` with a durable reason
 instead of dead-ending in a transient error.
 

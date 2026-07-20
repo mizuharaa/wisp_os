@@ -1936,7 +1936,7 @@ function deliveryStep(delivery,name,cid=""){
   if(local&&["","idle","pending"].includes(serverStatus))raw={...raw,...local};
   else if(local&&!["","idle","pending"].includes(serverStatus))DELIVERY.stepErrors.delete(errorKey);
   const status=String(pick(raw.status,serverStatus,"pending")).toLowerCase(),good=DELIVERY_GOOD.has(status),live=DELIVERY_LIVE.has(status),bad=DELIVERY_BAD.has(status),unavailable=["unavailable","unsupported"].includes(status);
-  const blockedReason=String(pick(raw.blocked_reason,raw.blockedReason,"")),blocked=unavailable||status==="blocked"||!!blockedReason,blockedHint=name==="commit"&&blockedReason?"Mission attribution unavailable.":blockedReason;
+  const blockedReason=String(pick(raw.blocked_reason,raw.blockedReason,"")),blocked=unavailable||status==="blocked"||!!blockedReason,blockedHint=blockedReason;
   const fallback=status==="not_needed"?"No action needed.":good?(name==="review"?"Code review passed.":name==="tests"?"Checks passed.":name==="commit"?"Commit created.":"Pushed successfully."):
     live?(name==="review"?"Reviewing changes…":name==="tests"?"Running project checks…":name==="commit"?"Creating commit…":"Pushing commit…"):
     unavailable?"No safe project test command is available.":status==="awaiting_confirmation"?"Ready to push; confirmation is required.":bad?`${name==="tests"?"Tests":name[0].toUpperCase()+name.slice(1)} did not complete.`:"Not run yet.";

@@ -105,7 +105,11 @@ def _require_raw(result, label):
 
 
 def _repo_root(workdir):
-    run_dir = os.path.normpath(os.path.realpath(str(workdir or "")))
+    if not str(workdir or "").strip():
+        # realpath("") is the server's own cwd — delivery must never silently
+        # attribute a mission without a workdir against an unrelated repo.
+        raise DeliveryError("mission has no recorded working directory")
+    run_dir = os.path.normpath(os.path.realpath(str(workdir)))
     if not os.path.isdir(run_dir):
         raise DeliveryError("mission working directory is unavailable")
     root = _require(_git(run_dir, "rev-parse", "--show-toplevel"),
@@ -255,15 +259,16 @@ def capture_git_baseline(workdir):
 
 
 def _blocked_reason(baseline):
+    """Reasons automatic commit is impossible. A dirty start is NOT one of
+    them: the baseline records which paths were already dirty, so the
+    mission's own work is attributable — pre-existing paths are simply
+    excluded from the commit set."""
     if not baseline or not baseline.get("available"):
         return ("This mission predates Git attribution or is not in a Git repository; "
                 "review and tests are available, but automatic commit is disabled.")
     if baseline.get("legacy"):
         return ("This mission finished before Git attribution was captured. Review and "
                 "tests are available, but Rune cannot safely choose files to commit.")
-    if not baseline.get("clean"):
-        return ("The repository was already dirty when this mission started. Rune will "
-                "not mix pre-existing user work into an automatic commit.")
     if not baseline.get("head"):
         return "The mission started without a Git HEAD; automatic commit is disabled."
     return ""
@@ -333,13 +338,14 @@ def initialize_completed_delivery(mission):
         baseline["legacy"] = True
         mission["git_baseline"] = baseline
     available = bool(baseline.get("available"))
-    current, repo = None, None
+    current, repo, unavailable_reason = None, None, ""
     if available:
         try:
             repo = _repo_root(mission.get("workdir"))
             current = _snapshot(repo)
-        except DeliveryError:
+        except DeliveryError as exc:
             available = False
+            unavailable_reason = str(exc)[:500]
     same_clean_head = bool(available and current and current["clean"] and
                            current["head"] == baseline.get("head"))
     no_change = bool(same_clean_head and not legacy)
@@ -367,7 +373,7 @@ def initialize_completed_delivery(mission):
                                "changed_paths": current["paths"],
                                "fingerprint": current["fingerprint"]}
     if not available:
-        delivery["reason"] = str(baseline.get("reason") or
+        delivery["reason"] = str(baseline.get("reason") or unavailable_reason or
                                  "Git delivery is unavailable")[:500]
     elif delivery["commit"].get("blocked_reason"):
         delivery["blocked_reason"] = delivery["commit"]["blocked_reason"]
@@ -521,9 +527,14 @@ def _review(mission):
         patch_parts.append(untracked)
     working = _git(repo, "diff", "--no-ext-diff", "--unified=3", "HEAD", timeout=120)
     patch_parts.append("WORKTREE DIFF\n" + working.get("stdout", ""))
+    preexisting = sorted(set(snap["paths"]) &
+                         set(baseline.get("dirty_paths") or []))
     report = "\n\n".join(part.strip() for part in (
         "STATUS\n" + (status.get("stdout") or "clean"),
         "STAT\n" + (stat.get("stdout") or "no tracked diff"),
+        ("PRE-EXISTING OPERATOR CHANGES (already dirty before the mission "
+         "started; excluded from automatic commit)\n" + "\n".join(preexisting))
+        if preexisting else "",
         "\n\n".join(patch_parts)) if part.strip())
     ai = _ai_review(mission, report)
     if ai:
@@ -537,6 +548,7 @@ def _review(mission):
     review = {"status": "reviewed" if not check["returncode"] else "failed",
               "checked_at": _now(), "fingerprint": snap["fingerprint"],
               "head": snap["head"], "changed_paths": snap["paths"],
+              "preexisting_paths": preexisting,
               "report": _redact(report, REPORT_LIMIT)}
     if ai:
         review["ai"] = ai
@@ -901,11 +913,18 @@ def _commit(mission, message, peer_active=False):
         return {"delivery": public_delivery(delivery)}
     if snap["head"] != baseline.get("head"):
         raise DeliveryError("Git HEAD changed during the mission while changes remain dirty")
-    # Commit exactly what was reviewed — never the whole current status, so
-    # unrelated files that appeared since review cannot ride into the commit.
-    paths = list(reviewed)
+    # Commit exactly the reviewed, mission-attributed paths: never files that
+    # appeared after review, and never paths that were already dirty before
+    # the mission started (that is the operator's own work in progress).
+    preexisting = set(baseline.get("dirty_paths") or [])
+    paths = [path for path in reviewed if path not in preexisting]
     if not paths:
-        raise DeliveryError("there are no attributable changes to commit")
+        reason = ("every reviewed change overlaps files that were already dirty "
+                  "before the mission started; commit the operator's work "
+                  "manually in Git" if reviewed else
+                  "there are no attributable changes to commit")
+        delivery.setdefault("commit", {})["blocked_reason"] = reason
+        raise DeliveryError(reason)
     add = _git(repo, "add", "-A", "--", *paths, timeout=120)
     if add["returncode"]:
         raise DeliveryError("git add failed: %s" %
@@ -936,6 +955,9 @@ def _commit(mission, message, peer_active=False):
                           "short_head": new_snap["head"][:10],
                           "committed_at": _now(), "message": commit_message,
                           "paths": staged, "input_fingerprint": snap["fingerprint"]}
+    excluded = sorted(set(reviewed) & preexisting)
+    if excluded:
+        delivery["commit"]["excluded_preexisting"] = excluded
     delivery["push"] = {"status": "pending"}
     delivery["status"] = "committed"
     delivery["current"] = {"head": new_snap["head"], "branch": new_snap["branch"],

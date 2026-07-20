@@ -216,9 +216,9 @@ Delivery is intentionally sequential:
    run that changes the *reviewed* files fails the gate; unrelated churn (logs,
    caches, sync noise) neither fails tests nor invalidates the review.
 3. **Commit** is enabled only when review and tests still match the reviewed
-   files and the repository was clean at mission start. Git hooks remain
-   enabled, and exactly the reviewed path set is committed — files that
-   appeared after the review can never ride along.
+   files. Git hooks remain enabled, and exactly the reviewed, mission-attributed
+   path set is committed — files that appeared after the review, and files that
+   were already dirty before the mission started, can never ride along.
 4. **Push** first shows the server-resolved remote, branch, and HEAD. Confirming
    consumes a short-lived one-use token and sends an explicit non-force refspec.
 
@@ -228,9 +228,14 @@ failed step offers **Fix with agent**: one solo mission is started in the
 mission's repository with the persisted failure evidence; it diagnoses,
 repairs, and re-runs the failing check itself, but never commits or pushes.
 
-Older runs and runs that began in an already-dirty repository can still be
-reviewed and tested, but automatic commit stays blocked. This protects operator
-changes that Rune cannot safely attribute to one mission.
+A repository that was already dirty at mission start no longer blocks delivery.
+The review lists those files under **Pre-existing operator changes**, and
+commit stages only the mission-attributed paths — your work in progress is
+never mixed into the mission's commit. If *every* reviewed change overlaps
+pre-existing work, commit stays blocked with that exact reason; commit the
+operator work manually in Git. Only legacy runs (finished before Git
+attribution was captured) and runs without a recorded working directory keep
+automatic commit disabled.
 
 ## Failure behavior
 
