@@ -374,6 +374,28 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn("already dirty",
                       mission["delivery"]["commit"]["blocked_reason"])
 
+    def test_stale_persisted_attribution_block_clears_on_review(self):
+        self.write("preexisting.txt", "user work\n")
+        dirty = delivery.capture_git_baseline(self.repo)
+        self.write("app.py", "VALUE = 5\n")
+        mission = self.mission(dirty)
+        stale_text = "The repository was already dirty when this mission started."
+        mission["delivery"] = {
+            "version": 1, "available": True, "changed": True,
+            "status": "needs_review", "blocked_reason": stale_text,
+            "review": {"status": "pending"}, "tests": {"status": "pending"},
+            "commit": {"status": "pending", "blocked_reason": stale_text},
+            "push": {"status": "pending"},
+        }
+        self.review_and_test(mission)
+        lane = mission["delivery"]
+        self.assertNotIn("blocked_reason", lane)
+        self.assertFalse(lane["commit"].get("blocked_reason"))
+        committed = delivery.perform(
+            mission, "commit", message="fix: migrated record")["delivery"]
+        self.assertEqual(committed["commit"]["status"], "committed")
+        self.assertEqual(committed["commit"]["paths"], ["app.py"])
+
     def test_legacy_baseline_blocks_automatic_commit(self):
         legacy = self.mission(dict(self.baseline, legacy=True), cid="legacy")
         delivery.initialize_completed_delivery(legacy)

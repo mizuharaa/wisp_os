@@ -395,15 +395,21 @@ def _state(mission):
     return delivery, baseline, repo, _snapshot(repo)
 
 
-def _invalidate_after_review(delivery):
+def _invalidate_after_review(delivery, baseline):
     delivery["tests"] = {"status": "pending"}
     if delivery.get("changed") is False:
         delivery["commit"] = {"status": "not_needed"}
         delivery["push"] = {"status": "not_needed"}
     else:
-        blocked = (delivery.get("commit") or {}).get("blocked_reason", "")
+        # Recompute from the baseline instead of carrying persisted text
+        # forward — records blocked under retired rules must unblock here.
+        blocked = _blocked_reason(baseline)
         delivery["commit"] = {"status": "pending", "blocked_reason": blocked}
         delivery["push"] = {"status": "pending"}
+    if _blocked_reason(baseline):
+        delivery["blocked_reason"] = _blocked_reason(baseline)
+    else:
+        delivery.pop("blocked_reason", None)
 
 
 def _untracked_review(repo):
@@ -559,7 +565,7 @@ def _review(mission):
         review["error"] = _redact(check.get("stdout") or check.get("stderr") or
                                   "git diff --check failed", 2000)
     delivery["review"] = review
-    _invalidate_after_review(delivery)
+    _invalidate_after_review(delivery, baseline)
     delivery["review"] = review
     delivery["status"] = "reviewed" if review["status"] == "reviewed" else "review_failed"
     delivery["current"] = {"head": snap["head"], "branch": snap["branch"],
@@ -820,9 +826,8 @@ def _test(mission):
             delivery["commit"] = {"status": "not_needed"}
             delivery["push"] = {"status": "not_needed"}
         else:
-            blocked = (delivery.get("commit") or {}).get("blocked_reason", "")
             delivery["commit"] = {"status": "pending",
-                                  "blocked_reason": blocked}
+                                  "blocked_reason": _blocked_reason(_baseline)}
             delivery["push"] = {"status": "pending"}
         delivery["status"] = "tests_unavailable"
         delivery["current"] = {
@@ -864,8 +869,8 @@ def _test(mission):
         delivery["commit"] = {"status": "not_needed"}
         delivery["push"] = {"status": "not_needed"}
     else:
-        blocked = (delivery.get("commit") or {}).get("blocked_reason", "")
-        delivery["commit"] = {"status": "pending", "blocked_reason": blocked}
+        delivery["commit"] = {"status": "pending",
+                              "blocked_reason": _blocked_reason(_baseline)}
         delivery["push"] = {"status": "pending"}
     delivery["status"] = "tested" if tests["status"] == "passed" else "tests_failed"
     delivery["current"] = {"head": after["head"], "branch": after["branch"],
