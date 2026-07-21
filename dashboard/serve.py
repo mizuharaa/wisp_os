@@ -67,6 +67,10 @@ LOGS = os.path.join(ROOT, "state", "spawn-logs")
 WORKFLOW_ANALYZER = os.path.join(
     ROOT, "skills", "workflow-coach", "scripts", "analyze.py")
 _WORKFLOW_CACHE = {"mtime_ns": None, "payload": None}
+# The React/shadcn rebuild (Phase 1). DIST_INDEX wins over LEGACY_INDEX for
+# /dashboard/ the moment a build exists on disk — see do_GET.
+DIST_INDEX = os.path.join(ROOT, "dashboard", "web", "dist", "index.html")
+LEGACY_INDEX = os.path.join(ROOT, "dashboard", "index.html")
 CREATE_NEW_CONSOLE = 0x00000010
 IS_WIN = sys.platform == "win32"
 _AUTO_SCHEDULER_LOCK = threading.Lock()
@@ -368,6 +372,18 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Location", location)
         self.end_headers()
 
+    def _serve_file(self, fs_path, content_type):
+        try:
+            with open(fs_path, "rb") as handle:
+                body = handle.read()
+        except OSError:
+            return self._json(404, {"error": "not found"})
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _request_path(self):
         """Decoded URL path used for routing and static-file security checks."""
         path = urllib.parse.urlparse(self.path).path
@@ -396,8 +412,15 @@ class Handler(SimpleHTTPRequestHandler):
         clean = "/" + "/".join(parts)
         if clean.startswith("/api/") or clean == "/api":
             return False
+        # Deliberate, narrow exception: dashboard/web/dist/ only ever holds
+        # Vite build artifacts (hashed JS/CSS), never secrets. Everything
+        # else under dashboard/web/ (node_modules, src) stays denied by the
+        # exact-match allowlist below.
+        if clean.startswith("/dashboard/web/dist/"):
+            return False
         public = {
             "/dashboard", "/dashboard/index.html", "/dashboard/lofi.jpg",
+            "/dashboard/legacy.html",  # permanent link to the pre-migration UI
             "/tokens.css",
             "/state/events.jsonl", "/state/inbox.jsonl",
             "/state/approvals.json", "/skills/registry.json",
@@ -424,6 +447,11 @@ class Handler(SimpleHTTPRequestHandler):
         path = self._request_path()
         if self._static_denied(path):
             return self._json(404, {"error": "not found"})
+        if path in ("/dashboard", "/dashboard/", "/dashboard/index.html"):
+            src = DIST_INDEX if os.path.isfile(DIST_INDEX) else LEGACY_INDEX
+            return self._serve_file(src, "text/html; charset=utf-8")
+        if path == "/dashboard/legacy.html":
+            return self._serve_file(LEGACY_INDEX, "text/html; charset=utf-8")
         if self.path == "/api/spotify/login":
             # FIXED redirect URI (not Host-derived): Spotify requires the exact
             # string to be pre-registered, and loopback must be 127.0.0.1 (not
@@ -501,14 +529,17 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(
                 200, daily_briefing.calendar_payload(day0=day0, days=min(days, 184)))
         if self.path == "/api/version":
-            # index.html mtime — an open window polls this to notice when Rune
-            # has rewritten its own UI and offer a reload instead of going stale.
-            try:
-                mt = int(max(
-                    os.path.getmtime(os.path.join(ROOT, "dashboard", "index.html")),
-                    os.path.getmtime(os.path.join(ROOT, "tokens.css"))))
-            except OSError:
-                mt = 0
+            # index.html/tokens.css/dist mtime — an open window polls this to
+            # notice when Rune has rewritten its own UI and offer a reload
+            # instead of going stale. Guarded individually: a missing dist
+            # build (Phase 1 not yet built) must not zero out the others.
+            mtimes = []
+            for f in (LEGACY_INDEX, os.path.join(ROOT, "tokens.css"), DIST_INDEX):
+                try:
+                    mtimes.append(os.path.getmtime(f))
+                except OSError:
+                    pass
+            mt = int(max(mtimes)) if mtimes else 0
             # boot: this process's start time, so desktop.py can tell a route
             # was added/changed in a .py file *after* the running server started
             # (backend code doesn't hot-reload like index.html does) and knows

@@ -42,3 +42,5 @@ state/desktop-debug.log
 state/events.jsonl
 state/inbox.jsonl
 state/windows.json
+dashboard/web/node_modules/
+dashboard/web/dist/

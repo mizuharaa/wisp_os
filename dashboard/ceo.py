@@ -938,7 +938,13 @@ def plan_and_start(text, opts=None, source=None, workdir=None,
             recall_context={"cid": answer_cid, "route": "answer"})
         if ans.get("error"):
             return None, ans["error"]
-        return {"kind": "answer", "reply": ans.get("reply") or "(no reply)",
+        os.makedirs(CDIR, exist_ok=True)
+        _save({"cid": answer_cid, "name": text[:40], "goal": text[:1000],
+               "route": "answer", "roles": [], "status": "done", "cost": 0,
+               "reply": ans.get("reply") or "(no reply)",
+               "started": datetime.datetime.now().isoformat(timespec="seconds")})
+        return {"kind": "answer", "cid": answer_cid,
+                "reply": ans.get("reply") or "(no reply)",
                 "model": ans.get("model"), "goal": text[:1000],
                 "recall_receipt": ans.get("recall_receipt")}, None
     os.makedirs(CDIR, exist_ok=True)

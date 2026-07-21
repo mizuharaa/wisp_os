@@ -102,6 +102,8 @@ def list_all():
                     o = _load_json(os.path.join(ODIR, fn))
                 except (OSError, json.JSONDecodeError):
                     continue
+                if o.get("dismissed"):
+                    continue
                 with LOCK:
                     live = o["oid"] in LIVE and LIVE[o["oid"]]["thread"].is_alive()
                 o["live"] = live
@@ -459,7 +461,29 @@ def start(mission, name="", model="default", critic="opus", turns=40, rounds=3,
     return oid, None
 
 
+def dismiss(oid):
+    """Hide a finished loop without deleting its record. Refuses a live run."""
+    with LOCK:
+        st = LIVE.get(oid)
+        if st and st["thread"].is_alive():
+            return "can't dismiss a running loop — stop it first"
+    try:
+        o = _load_json(_path(oid))
+    except (OSError, json.JSONDecodeError):
+        return "no such loop"
+    if not o.get("dismissed"):
+        o["dismissed"] = True
+        _save(o)
+    return None
+
+
 def action(oid, act, feedback=""):
+    # A finished loop is popped from LIVE the moment _run()'s finally block
+    # runs, so dismiss must be checked before the LIVE gate below -- routed
+    # through it, dismiss would always fail with "not running" for exactly
+    # the loops it needs to dismiss.
+    if act == "dismiss":
+        return dismiss(oid)
     proc = None
     with LOCK:
         st = LIVE.get(oid)
