@@ -954,11 +954,37 @@ class CeoRecoveryTests(unittest.TestCase):
         ceo._save(recent)
 
         self.assertIsNone(ceo.archive("old"))
-        self.assertIsNone(ceo.archive("old"))
+        self.assertIsNone(ceo.archive("old"))  # idempotent: second call is a no-op
         history = ceo.list_history(limit=1)
         self.assertEqual([item["cid"] for item in history], ["recent"])
         self.assertFalse(history[0]["archived"])
-        self.assertEqual(len(ceo.list_history(limit=ceo.HISTORY_MAX + 500)), 2)
+        # A manually archived (dismissed) record drops out of history entirely --
+        # that's the whole point of the Archive button -- but its file is kept,
+        # not deleted.
+        self.assertEqual(len(ceo.list_history(limit=ceo.HISTORY_MAX + 500)), 1)
+        self.assertTrue(os.path.isfile(os.path.join(ceo.ADIR, "old.json")))
+
+    def test_archive_button_dismisses_an_already_auto_archived_mission(self):
+        # A successful mission is auto-archived into ADIR the instant it
+        # finishes (the run() completion path), before the operator ever sees
+        # the card. Reported bug: clicking Archive on it in Completed &
+        # delivery did nothing observable because _archive_file() was already
+        # a no-op (the file was already at its destination) and list_history()
+        # unconditionally kept showing every archived record forever.
+        os.makedirs(ceo.ADIR, exist_ok=True)
+        done = mission(cid="done1", status="done", roles=[role(status="done")])
+        done["finished_at"] = "2026-07-15T10:00:00"
+        with open(os.path.join(ceo.ADIR, "done1.json"), "w", encoding="utf-8") as handle:
+            json.dump(done, handle)
+
+        self.assertIn("done1", [item["cid"] for item in ceo.list_history()])
+        self.assertIsNone(ceo.archive("done1"))
+        self.assertNotIn("done1", [item["cid"] for item in ceo.list_history()])
+        # Idempotent and still not a "no such mission" error the second time.
+        self.assertIsNone(ceo.archive("done1"))
+        self.assertTrue(os.path.isfile(os.path.join(ceo.ADIR, "done1.json")))
+        with open(os.path.join(ceo.ADIR, "done1.json"), encoding="utf-8") as handle:
+            self.assertTrue(json.load(handle)["dismissed"])
 
     def test_stop_wins_when_worker_returns_after_cancellation(self):
         self.save(mission())

@@ -742,11 +742,28 @@ def _archive_file(cid):
 
 
 def archive(cid):
-    """Manual archive (the mission card's Archive button). Refuses a live run."""
+    """Manual archive (the mission card's Archive button). Refuses a live run.
+
+    A successful mission is already auto-archived into ADIR the instant it
+    finishes (see run()'s completion path), so for anything already there
+    this was previously a no-op that left the card sitting in Completed &
+    delivery forever -- the button appeared broken. Mark the record
+    `dismissed` so list_history() stops showing it. find_source_run()
+    deliberately ignores this flag: a dismissed card must never let the
+    same briefing task silently relaunch as a duplicate."""
     with LOCK:
         st = LIVE.get(cid)
         if st and st["thread"].is_alive():
             return "can't archive a running mission — stop it first"
+    path = _record_path(cid)
+    if path:
+        try:
+            record = _load_json(path)
+        except (OSError, json.JSONDecodeError):
+            record = None
+        if isinstance(record, dict) and not record.get("dismissed"):
+            record["dismissed"] = True
+            _save_record(record, path)
     return None if _archive_file(cid) else "no such mission"
 
 
@@ -810,6 +827,8 @@ def list_history(limit=HISTORY_LIMIT):
                 continue
             status = str(run.get("status") or "").lower()
             if not archived and status not in SUCCESSFUL:
+                continue
+            if archived and run.get("dismissed"):
                 continue
             cid = str(run.get("cid") or name[:-5])
             live = False
