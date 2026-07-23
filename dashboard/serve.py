@@ -61,6 +61,7 @@ import pulse                     # outside world: claude/codex usage, github, gm
 import chat                      # dashboard assistant (Haiku/Sonnet over the Anthropic API)
 import ceo                       # command bar: prompt -> Haiku refine -> CEO plan -> roles
 import uia                       # structured, verified Windows UI Automation
+import browser                   # CDP control of a real Edge/Chrome (Wisp profile)
 import daily_briefing            # offline: where you left off + what to continue
 MIRROR = os.path.join(ROOT, ".claude", "hooks", "mirror.py")
 INBOX = os.path.join(ROOT, "state", "inbox.jsonl")
@@ -537,6 +538,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"orchestrations": orchestrator.list_all()})
         if self.path == "/api/activity":
             return self._json(200, activity_payload())
+        if self.path == "/api/browser/tabs":
+            try:
+                return self._json(200, {"tabs": browser.tabs()})
+            except browser.BrowserError as e:
+                return self._json(400, {"error": str(e)})
         if self.path == "/api/uia/windows":
             try:
                 return self._json(200, {"windows": uia.windows()})
@@ -633,6 +639,8 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/spotify/ctl": self.api_spotify_ctl,
             "/api/stop-all": self.api_stop_all,
             "/api/voice": self.api_voice,
+            "/api/browser/open": self.api_browser_open,
+            "/api/browser/act": self.api_browser_act,
             "/api/uia/tree": self.api_uia_tree,
             "/api/uia/act": self.api_uia_act,
             "/api/uia/read": self.api_uia_read,
@@ -697,6 +705,30 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(500, {"error": "transcription failed: %s" % str(e)[:150]})
         return self._json(200, {"ok": True, "text": text})
+
+    def api_browser_open(self, data):
+        try:
+            out = browser.open_url(str(data.get("url") or "about:blank"))
+        except browser.BrowserError as e:
+            return self._json(400, {"error": str(e)})
+        emit(session="operator", event="browser-open",
+             detail=str(data.get("url"))[:200])
+        return self._json(200, out)
+
+    def api_browser_act(self, data):
+        try:
+            out = browser.act(tab_id=data.get("tab_id"),
+                              action=str(data.get("action") or "read"),
+                              selector=data.get("selector"),
+                              value=data.get("value"), js=data.get("js"),
+                              url=data.get("url"))
+        except browser.BrowserError as e:
+            code = 501 if "not installed" in str(e) else 400
+            return self._json(code, {"error": str(e)})
+        emit(session="operator", event="browser-act",
+             detail=("%s %s" % (data.get("action"),
+                                data.get("selector") or data.get("url") or ""))[:200])
+        return self._json(200, out)
 
     def _uia(self, fn, **kw):
         try:

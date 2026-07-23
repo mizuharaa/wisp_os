@@ -64,6 +64,35 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": dict(TARGET, **{
          "locator": LOCATOR}), "required": ["locator"]},
      "route": ("POST", "/api/uia/read")},
+    {"name": "browser_tabs",
+     "description": "List open tabs (id, title, url) in the Wisp-profile "
+                    "browser — a real Edge/Chrome with persistent signed-in "
+                    "sessions (GitHub, Figma, shops...).",
+     "inputSchema": {"type": "object", "properties": {}},
+     "route": ("GET", "/api/browser/tabs")},
+    {"name": "browser_open",
+     "description": "Open a URL in the Wisp-profile browser (starts it if "
+                    "needed) and return the new tab id.",
+     "inputSchema": {"type": "object",
+                     "properties": {"url": {"type": "string"}},
+                     "required": ["url"]},
+     "route": ("POST", "/api/browser/open")},
+    {"name": "browser_act",
+     "description": "One structured page action with observed-state "
+                    "readback: read (title/url/text), goto, click "
+                    "(CSS selector, verified found), fill (verified value), "
+                    "eval (JS expression). Targets tab_id or the first tab. "
+                    "Purchases/sends must still go through mission approval.",
+     "inputSchema": {"type": "object", "properties": {
+         "tab_id": {"type": "string"},
+         "action": {"type": "string",
+                    "enum": ["read", "goto", "click", "fill", "eval"]},
+         "selector": {"type": "string", "description": "CSS selector"},
+         "value": {"type": "string", "description": "Text for fill"},
+         "url": {"type": "string", "description": "For goto"},
+         "js": {"type": "string", "description": "For eval"}},
+      "required": ["action"]},
+     "route": ("POST", "/api/browser/act")},
     {"name": "agent_activity",
      "description": "Wisp control-plane snapshot: running loops/missions, "
                     "recent endings, and the pending operator approval queue.",

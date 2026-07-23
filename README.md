@@ -52,6 +52,9 @@ follows you to whatever you're doing:
   completion and daily-brief toasts as native Windows notifications.
 - **Stop and undo** — one press (or saying "stop") panic-stops every live
   loop and mission, process-tree deep; undo queues a revert directive.
+- **Reaches into the browser** — island prompts can drive the Wisp browser
+  (below): "check my open GitHub PRs", "reorder last night's Uber Eats" —
+  same engine, same approval gates.
 
 <div align="center">
 
@@ -105,9 +108,24 @@ and returns before/after state plus a `verified` flag. Success is never
 claimed unobserved. All UIA work runs on one COM-owning worker thread, so
 two agents can never fight over your desktop.
 
-Agents get all of it over **MCP** — six tools (`desktop_windows`,
-`window_tree`, `ui_act`, `ui_read`, `agent_activity`, `stop_all`) served by
-a thin stdio bridge to the engine, so one instance keeps owning COM,
+## The browser runtime
+
+Dev tools don't all live locally — GitHub, Figma, CI dashboards, and every
+consumer flow (yes, an Uber Eats order) live behind a browser session. Wisp
+drives a **real Edge/Chrome over CDP** with a persistent profile: sign in
+to a site once and every later mission acts inside that session. Actions
+are DOM operations with the same verified-readback contract as UIA — click
+reports whether the element was found, fill reports the value the field
+actually holds, and absence is reported honestly instead of guessed
+around. Purchases and sends still stop at the mission approval gate; the
+runtime gives capability, the guard decides.
+
+## Agent tools over MCP
+
+Agents get all of it through **nine MCP tools** — `desktop_windows`,
+`window_tree`, `ui_act`, `ui_read`, `browser_tabs`, `browser_open`,
+`browser_act`, `agent_activity`, `stop_all` — served by a thin stdio
+bridge to the engine, so one instance keeps owning COM, browser sessions,
 approvals, and the wire:
 
 ```bash
@@ -138,8 +156,9 @@ flowchart TB
         claude["Claude Code"] ~~~ codex["Codex CLI"]
         mcptools["MCP: Wisp tools for any agent"]
     end
-    subgraph win["Windows"]
+    subgraph win["Windows + web"]
         uia["UIA runtime — structured, verified, COM-serialized"]
+        cdp["Browser runtime — real Edge/Chrome over CDP, signed-in profile"]
         proc["Processes · consoles · WSL"]
     end
     shell --> engine
@@ -177,8 +196,9 @@ cd app && npm install && npm start
 # prove the UIA runtime (drives Calculator via automation ids, asserts the display)
 pip install pywinauto && python test_uia_runtime.py
 
-# prove the scheduler and the MCP bridge (no model spend)
+# prove the scheduler, the MCP bridge, and the browser runtime (no model spend)
 python test_parallel_roles.py && python test_mcp_server.py
+pip install websocket-client && python test_browser_runtime.py
 ```
 
 ## Status
