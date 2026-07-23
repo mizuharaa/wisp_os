@@ -32,6 +32,7 @@ permission-skipping agents. Never bind 0.0.0.0.
 
 Usage: python dashboard/serve.py [port]     (default 8817)
 """
+import base64
 import collections
 import ctypes
 import datetime
@@ -248,6 +249,30 @@ def vault_note(rel):
         return None
 
 
+_WHISPER = None
+_WHISPER_LOCK = threading.Lock()
+
+LOOP_ACTIVE = ("running", "retrying", "waiting")
+MISSION_ACTIVE = ("planning", "running", "retrying", "repairing",
+                  "waiting_permission", "review")
+
+
+def activity_payload():
+    """Small stable feed for the mini bar: what runs now, what just finished."""
+    running, recent = [], []
+    for o in orchestrator.list_all():
+        item = {"kind": "loop", "id": o.get("oid") or "",
+                "title": (o.get("name") or o.get("mission") or "loop")[:80],
+                "status": o.get("status") or ""}
+        (running if o.get("status") in LOOP_ACTIVE and o.get("live") else recent).append(item)
+    for r in ceo.list_all():
+        item = {"kind": "mission", "id": r.get("cid") or "",
+                "title": (r.get("name") or r.get("mission") or "mission")[:80],
+                "status": r.get("status") or ""}
+        (running if r.get("status") in MISSION_ACTIVE else recent).append(item)
+    return {"running": running, "recent": recent[:8]}
+
+
 def brain_payload(limit=100):
     """Return bounded retrieval receipts and storage health without overclaiming.
 
@@ -461,6 +486,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"content": body})
         if self.path == "/api/orchestrations":
             return self._json(200, {"orchestrations": orchestrator.list_all()})
+        if self.path == "/api/activity":
+            return self._json(200, activity_payload())
         if self.path == "/api/brain":
             return self._json(200, brain_payload())
         if self.path == "/api/ceo":
@@ -546,6 +573,8 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/briefing/run": self.api_briefing_run,
             "/api/briefing/settings": self.api_briefing_settings,
             "/api/spotify/ctl": self.api_spotify_ctl,
+            "/api/stop-all": self.api_stop_all,
+            "/api/voice": self.api_voice,
         }.get(self.path)
         if not route:
             return self._json(404, {"error": "unknown endpoint"})
@@ -564,6 +593,49 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(500, {"error": ((r.stderr or r.stdout) or "engine error")[:200]})
         emit(session="operator", event="skill", detail="added skill '%s' (%s, /%s)" % (name, branch, trig))
         return self._json(200, {"ok": True, "name": name, "branch": branch})
+
+    def api_stop_all(self, data):
+        """Panic button: stop every live loop and active mission."""
+        stopped, errors = [], []
+        for o in orchestrator.list_all():
+            if o.get("status") in LOOP_ACTIVE and o.get("live"):
+                err = orchestrator.action(o.get("oid") or "", "stop", "")
+                (errors if err else stopped).append("loop:%s" % o.get("oid"))
+        for r in ceo.list_all():
+            if r.get("status") in MISSION_ACTIVE:
+                err = ceo.action(r.get("cid") or "", "", "stop", "")
+                (errors if err else stopped).append("mission:%s" % r.get("cid"))
+        emit(session="operator", event="stop-all",
+             detail="stopped %d (%s)" % (len(stopped), ", ".join(stopped)[:150]))
+        return self._json(200, {"ok": True, "stopped": stopped, "errors": errors})
+
+    def api_voice(self, data):
+        """Transcribe one mini-bar voice clip with local Whisper."""
+        try:
+            raw = base64.b64decode(str(data.get("audio_b64") or ""), validate=True)
+        except (ValueError, TypeError):
+            return self._json(400, {"error": "audio_b64 must be valid base64"})
+        if not raw:
+            return self._json(400, {"error": "empty audio"})
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            return self._json(501, {"error": "faster-whisper not installed",
+                                    "hint": "pip install faster-whisper"})
+        clip = os.path.join(ROOT, "state", "voice-last.webm")
+        with open(clip, "wb") as f:
+            f.write(raw)
+        global _WHISPER
+        with _WHISPER_LOCK:
+            if _WHISPER is None:
+                # ponytail: base/int8 on CPU; bump to small or GPU if accuracy hurts
+                _WHISPER = WhisperModel("base", device="cpu", compute_type="int8")
+            try:
+                segments, _info = _WHISPER.transcribe(clip, vad_filter=True)
+                text = " ".join(s.text.strip() for s in segments).strip()
+            except Exception as e:
+                return self._json(500, {"error": "transcription failed: %s" % str(e)[:150]})
+        return self._json(200, {"ok": True, "text": text})
 
     def api_spotify_ctl(self, data):
         out = pulse.spotify_ctl(str(data.get("action") or ""), data.get("pos_ms"))

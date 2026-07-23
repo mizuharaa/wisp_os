@@ -4,48 +4,297 @@
 <meta charset="utf-8">
 <title>Wisp bar</title>
 <style>
-  /* ponytail: placeholder chrome — full glass UI pass replaces this later */
-  html, body { margin: 0; background: transparent; font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
-  .bar {
-    display: flex; align-items: center; gap: 10px;
-    margin: 8px; padding: 10px 14px; border-radius: 16px;
-    background: rgba(20, 18, 24, 0.72);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    backdrop-filter: blur(18px);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  :root {
+    --paper: 250, 248, 244;
+    --ink: #201a26;
+    --ink-soft: rgba(32, 26, 38, 0.55);
+    --plum: #6a2e8a;
+    --hue-a: #8b5cf6;
+    --hue-b: #ec4899;
+    --hue-c: #f59e0b;
+    --radius: 22px;
   }
-  input {
-    flex: 1; background: transparent; border: 0; outline: 0;
-    color: #f4f1f7; font-size: 14px;
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: transparent; overflow: hidden;
+    font: 14px/1.45 Inter, "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
   }
-  input::placeholder { color: rgba(244, 241, 247, 0.45); }
-  .status { color: rgba(244, 241, 247, 0.55); font-size: 12px; white-space: nowrap; }
+
+  /* ── the island ──────────────────────────────────────────── */
+  #island {
+    position: relative;
+    margin: 10px 12px;
+    border-radius: var(--radius);
+    background: rgba(var(--paper), 0.92);
+    backdrop-filter: blur(24px) saturate(1.35);
+    box-shadow:
+      0 1px 2px rgba(20, 14, 28, 0.06),
+      0 10px 34px rgba(20, 14, 28, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    transition: box-shadow 220ms ease;
+  }
+  /* gradient hairline that hue-shifts with state */
+  #island::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    padding: 1.5px; pointer-events: none;
+    background: linear-gradient(115deg, var(--hue-a), var(--hue-b) 55%, var(--hue-c));
+    opacity: 0.35;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    transition: opacity 250ms ease;
+  }
+  body[data-state="listening"] #island::before,
+  body[data-state="working"] #island::before {
+    opacity: 0.9;
+    animation: hue 4s linear infinite;
+  }
+  @keyframes hue { to { filter: hue-rotate(360deg); } }
+
+  .row { display: flex; align-items: center; gap: 6px; padding: 12px 14px; }
+
+  input#q {
+    flex: 1; min-width: 0; background: transparent; border: 0; outline: 0;
+    color: var(--ink); font-size: 14px; font-family: inherit;
+  }
+  input#q::placeholder { color: var(--ink-soft); }
+
+  /* ── buttons: SVG only, magnetic hover ───────────────────── */
+  button {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    width: 34px; height: 34px; border-radius: 12px; padding: 0;
+    display: grid; place-items: center; color: var(--ink);
+    transition: background 180ms ease, transform 180ms cubic-bezier(.2,.8,.3,1.2), color 180ms ease;
+    will-change: transform;
+  }
+  button:hover { background: rgba(106, 46, 138, 0.10); }
+  button:active { transform: scale(0.92); }
+  button:focus-visible { outline: 2px solid var(--plum); outline-offset: 2px; }
+  button svg { width: 17px; height: 17px; stroke: currentColor; fill: none;
+               stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+  #mic.live { color: #fff; background: var(--plum); }
+  #mic.live::after {
+    content: ""; position: absolute; width: 34px; height: 34px; border-radius: 12px;
+    border: 1.5px solid var(--plum); animation: ring 1.4s ease-out infinite;
+  }
+  @keyframes ring { from { transform: scale(1); opacity: .7; } to { transform: scale(1.65); opacity: 0; } }
+
+  #stop { display: none; }
+  body[data-state="working"] #stop { display: grid; color: #a11f3c; }
+  #stop:hover { background: rgba(161, 31, 60, 0.10); }
+
+  /* ── status line (working / listening) ───────────────────── */
+  #status {
+    display: none; align-items: center; gap: 10px;
+    padding: 0 18px 12px; color: var(--ink-soft); font-size: 12.5px;
+    white-space: nowrap; overflow: hidden;
+  }
+  body[data-state="working"] #status, body[data-state="listening"] #status { display: flex; }
+  #status .wave { display: flex; gap: 2.5px; align-items: flex-end; height: 12px; }
+  #status .wave i {
+    width: 2.5px; height: 4px; border-radius: 2px;
+    background: linear-gradient(var(--hue-a), var(--hue-b));
+    animation: wave 900ms ease-in-out infinite;
+  }
+  #status .wave i:nth-child(2) { animation-delay: 120ms; }
+  #status .wave i:nth-child(3) { animation-delay: 240ms; }
+  #status .wave i:nth-child(4) { animation-delay: 360ms; }
+  @keyframes wave { 50% { height: 12px; } }
+  #status #stext { overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── notification card ───────────────────────────────────── */
+  #note {
+    display: none; margin: 0 18px 14px; padding: 10px 14px;
+    border-radius: 14px; background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(106, 46, 138, 0.14);
+    font-size: 13px; line-height: 1.4;
+    animation: rise 260ms cubic-bezier(.2,.8,.3,1.1);
+  }
+  #note.show { display: block; }
+  #note b { font-weight: 600; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #island::before, #status .wave i, #mic.live::after { animation: none !important; }
+    button { transition: background 180ms ease; }
+  }
 </style>
 </head>
-<body>
-  <div class="bar">
-    <input id="q" placeholder="Ask Wisp…" autofocus>
-    <span class="status" id="s"></span>
+<body data-state="idle">
+  <div id="island">
+    <div class="row">
+      <input id="q" placeholder="Ask Wisp…" aria-label="Ask Wisp" autofocus>
+      <button id="mic" aria-label="Talk to Wisp" title="Talk to Wisp">
+        <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      </button>
+      <button id="undo" aria-label="Undo last action" title="Ask Wisp to undo its last action">
+        <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button>
+      <button id="stop" aria-label="Stop all running work" title="Stop everything">
+        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      </button>
+      <button id="open" aria-label="Open Wisp dashboard" title="Open dashboard">
+        <svg viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+      </button>
+    </div>
+    <div id="status"><span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="stext"></span></div>
+    <div id="note" role="status"></div>
   </div>
-  <script>
-    const q = document.getElementById("q");
-    const s = document.getElementById("s");
-    q.addEventListener("keydown", async (e) => {
-      if (e.key !== "Enter" || !q.value.trim()) return;
-      s.textContent = "sending…";
-      try {
-        const r = await fetch("/api/message", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: q.value.trim(), source: "minibar" }),
-        });
-        s.textContent = r.ok ? "queued" : "error " + r.status;
-        if (r.ok) q.value = "";
-      } catch (err) {
-        s.textContent = "engine offline";
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const island = $("island"), q = $("q"), stext = $("stext"), note = $("note");
+  const state = (s) => { document.body.dataset.state = s; fit(); };
+
+  // window height follows content (dynamic island)
+  const fit = () => requestAnimationFrame(() =>
+    window.wisp && window.wisp.resize(Math.ceil(island.getBoundingClientRect().height) + 20));
+
+  // ── magnetic buttons (Phantom-style, skipped under reduced motion) ──
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.addEventListener("mousemove", (e) => {
+      for (const b of document.querySelectorAll("button")) {
+        const r = b.getBoundingClientRect();
+        const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+        const d = Math.hypot(dx, dy);
+        b.style.transform = d < 60 ? `translate(${dx * 0.18}px, ${dy * 0.18}px)` : "";
       }
-      setTimeout(() => (s.textContent = ""), 2500);
     });
-  </script>
+    document.addEventListener("mouseleave", () =>
+      document.querySelectorAll("button").forEach((b) => (b.style.transform = "")));
+  }
+
+  const speak = (t) => { try { speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(t)); } catch (_) {} };
+
+  function toast(html, say) {
+    note.innerHTML = html;
+    note.classList.add("show"); fit();
+    if (say) speak(say);
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => { note.classList.remove("show"); fit(); }, 6000);
+    if (Notification.permission === "granted") {
+      new Notification("Wisp", { body: note.textContent, silent: true });
+    }
+  }
+
+  async function api(path, body) {
+    const r = await fetch(path, body === undefined ? {} : {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body) });
+    return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+  }
+
+  async function send(text) {
+    const t = text.trim();
+    if (!t) return;
+    if (/^(stop|cancel|abort)\b/i.test(t)) return stopAll();
+    if (/^undo\b/i.test(t)) return undo();
+    const r = await api("/api/message", { text: t, source: "minibar" });
+    toast(r.ok ? "<b>Queued.</b> Wisp will pick this up." : "Engine error " + r.status,
+          r.ok ? "Queued." : "Engine error");
+    if (r.ok) q.value = "";
+  }
+
+  async function stopAll() {
+    const r = await api("/api/stop-all", {});
+    const n = (r.data.stopped || []).length;
+    toast("<b>Stopped.</b> " + n + " task" + (n === 1 ? "" : "s") + " halted.", "Stopped.");
+  }
+
+  async function undo() {
+    const r = await api("/api/message",
+      { text: "Undo the last action you performed and report what was reverted.",
+        source: "minibar-undo" });
+    toast(r.ok ? "<b>Undo requested.</b> Wisp will revert its last action."
+               : "Engine error " + r.status, r.ok ? "Undoing." : "Engine error");
+  }
+
+  // ── voice: click to talk, click again to finish ──
+  let rec = null, chunks = [];
+  $("mic").addEventListener("click", async () => {
+    if (rec) { rec.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      rec = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      rec.ondataavailable = (e) => chunks.push(e.data);
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        $("mic").classList.remove("live");
+        state("idle"); stext.textContent = "";
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        rec = null;
+        if (blob.size < 2000) return;
+        stext.textContent = "transcribing…"; state("listening");
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < buf.length; i += 0x8000) {
+          bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+        }
+        const r = await api("/api/voice", { audio_b64: btoa(bin) });
+        state("idle"); stext.textContent = "";
+        if (r.status === 501) return toast("<b>Whisper missing.</b> pip install faster-whisper", "");
+        if (!r.ok || !r.data.text) return toast("Didn't catch that.", "");
+        q.value = r.data.text;
+        send(r.data.text);
+      };
+      rec.start();
+      $("mic").classList.add("live");
+      stext.textContent = "listening — click the mic to finish";
+      state("listening");
+    } catch (_) { toast("<b>Microphone unavailable.</b>", ""); }
+  });
+
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") send(q.value); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") window.wisp && window.wisp.hide();
+  });
+  $("stop").addEventListener("click", stopAll);
+  $("undo").addEventListener("click", undo);
+  $("open").addEventListener("click", () => window.wisp && window.wisp.openMain());
+
+  // ── activity: live agent tracker + completion notifications ──
+  let wasRunning = new Map();
+  async function poll() {
+    try {
+      const { data } = await api("/api/activity");
+      const run = data.running || [];
+      if (run.length) {
+        if (!rec) state("working");
+        stext.textContent = run.length + " running — " + run.map((x) => x.title).join(" · ");
+      } else if (!rec) { state("idle"); stext.textContent = ""; }
+      for (const item of data.recent || []) {
+        if (wasRunning.has(item.id)) {
+          wasRunning.delete(item.id);
+          const good = /done|accept/.test(item.status);
+          toast("<b>" + (good ? "Finished" : "Ended (" + item.status + ")") + ":</b> " +
+                item.title, good ? "Task finished." : "");
+        }
+      }
+      run.forEach((x) => wasRunning.set(x.id, 1));
+    } catch (_) { /* engine offline; island stays idle */ }
+  }
+  setInterval(poll, 4000); poll();
+
+  // ── daily briefing notification (new briefing id → one toast) ──
+  async function brief() {
+    try {
+      const { data } = await api("/api/briefing");
+      const id = data && data.batch && data.batch.id;
+      if (id && localStorage.getItem("wisp-brief") !== id) {
+        localStorage.setItem("wisp-brief", id);
+        toast("<b>Daily brief is ready.</b> Open the dashboard to read it.", "Your daily brief is ready.");
+      }
+    } catch (_) {}
+  }
+  setInterval(brief, 10 * 60 * 1000); brief();
+
+  if (Notification.permission === "default") Notification.requestPermission();
+  fit();
+</script>
 </body>
 </html>
