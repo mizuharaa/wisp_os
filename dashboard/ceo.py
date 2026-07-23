@@ -469,9 +469,20 @@ def _save(o):
         if str(o.get("status") or "").lower() in SUCCESSFUL:
             o.setdefault("finished_at", now)
         o["updated"] = now
+        # Serialize before touching disk. Parallel wave roles mutate their own
+        # role dicts outside this lock; adding a key mid-serialize raises
+        # RuntimeError, so retry briefly — the write itself stays atomic.
+        for attempt in range(5):
+            try:
+                blob = json.dumps(o, ensure_ascii=False, indent=1)
+                break
+            except RuntimeError:
+                time.sleep(0.02 * (attempt + 1))
+        else:
+            blob = json.dumps(o, ensure_ascii=False, indent=1)
         tmp = _path(o["cid"]) + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(o, f, ensure_ascii=False, indent=1)
+            f.write(blob)
         os.replace(tmp, _path(o["cid"]))
 
 
@@ -1781,6 +1792,337 @@ def _wait_gate(cid, o, role):
         time.sleep(0.5)
 
 
+def _parallel_cap():
+    """ponytail: same-worktree roles CAN collide on files; the planner keeps
+    independent roles disjoint in depends_on, and the cap keeps the blast
+    radius (and concurrent account spend) small."""
+    try:
+        return max(1, int(os.environ.get("RUNE_PARALLEL_ROLES") or 3))
+    except ValueError:
+        return 3
+
+
+def _run_one_role(cid, o, roles, role, cfg_dir, workdir):
+    """One role's full worker/retry/recovery/verify lifecycle, safe to run
+    in a thread alongside its wave siblings. Returns "stopped" when the
+    mission stopped mid-role (caller abandons the loop) or "handled" when
+    the role reached a terminal or parked state."""
+    # Resolve per role so an operator can grant one blocked role without
+    # silently widening permission policy for the rest of the mission.
+    safe_permissions = _permission_mode_for(o, role) == "safe"
+    transient_retries = 0
+    recovery_cycles = len(role.get("recovery_history") or [])
+    recovery_context = ""
+    while True:  # worker retry / recovery / human-redo loop
+        if _stopped(cid):
+            _stop_state(o)
+            return "stopped"
+        role["status"] = "working"
+        role["attempt"] = (role.get("attempt") or 0) + 1
+        role["detail"] = "attempt %d is running" % role["attempt"]
+        role["next_action"] = "Wait for the role report."
+        if (isinstance(role.get("provider_fallback"), dict) and
+                _provider_for_model(role.get("model")) == "codex"):
+            role["provider_fallback"]["status"] = "running"
+            role["provider_fallback"]["summary"] = (
+                "Codex is continuing the unfinished role.")
+        o["status"] = "running"
+        o["next_action"] = "%s is working." % role["title"]
+        _save(o)
+        if _stopped(cid):
+            _stop_state(o)
+            return "stopped"
+        emit(cid, "role %s attempt %d working (%s, %dt): %s"
+             % (role["id"], role["attempt"], role["model"],
+                role["turns"], role["title"]))
+        contexts = ["### %s (%s)\n%s" % (roles[d]["title"], d,
+                                          roles[d]["result"][:1500])
+                    for d in role["depends_on"] if roles[d].get("result")]
+        if recovery_context:
+            contexts.append("### Bounded recovery report\n" + recovery_context[:2000])
+        ctx = "\n\n".join(contexts)
+        t0 = time.time()
+        # A Continue on an exhausted role resumes its prior provider session
+        # (context intact) instead of re-running the mission from zero
+        sid = role.pop("continue_from", "")
+        if not sid and o.get("route") in ("solo", "direct"):
+            _record_recall_exposure(o, 1)
+            _save(o)
+        w = _worker(cid, role, "" if sid else ctx, cfg_dir, resume_sid=sid,
+                    workdir=workdir, safe_permissions=safe_permissions)
+        _consume_operator_authorization(o, role)
+        spend = w.get("total_cost_usd") or 0
+        sid = w.get("session_id") or sid
+        # ran out of turns => cut off mid-task, NOT finished. Continue the
+        # same session until it lands or the continue budget runs out.
+        cont = role.get("continues") or 0
+        while (w.get("subtype") == "error_max_turns" and sid
+               and cont < MAX_CONTINUES):
+            with LOCK:
+                if LIVE.get(cid, {}).get("stop"):
+                    break
+            cont += 1
+            role["continues"] = cont
+            role["session"] = sid
+            _save(o)
+            emit(cid, "role %s ran out of %d turns — auto-continuing the "
+                 "same session (%d/%d)" % (role["id"], role["turns"],
+                                           cont, MAX_CONTINUES))
+            w = _worker(cid, role, "", cfg_dir, resume_sid=sid,
+                        workdir=workdir, safe_permissions=safe_permissions)
+            spend += w.get("total_cost_usd") or 0
+            sid = w.get("session_id") or sid
+        # A one-request provider grant covers the original invocation
+        # and its same-session turn continuations only. Any separate
+        # fallback, retry, or recovery worker re-resolves mission policy.
+        safe_permissions = _permission_mode_for(o, role) == "safe"
+        role["session"] = sid
+        role["continues"] = cont
+        elapsed = time.time() - t0
+        role["secs"] = round((role.get("secs") or 0) + elapsed)
+        role["cost"] = round((role.get("cost") or 0) + spend, 4)
+        o["cost"] = round(sum(r.get("cost") or 0 for r in o["roles"]), 4)
+        ran_out = w.get("subtype") == "error_max_turns"
+        role["result"] = str(w.get("result") or "")[:6000] or (
+            "(no final message — used all %d turns)" % role["turns"])
+        classification = agent_runtime.classify_failure(
+            role["result"], bool(w.get("is_error")), w.get("subtype") or "")
+        _record_attempt(role, w, classification, elapsed)
+        if _stopped(cid):
+            _stop_state(o)
+            return "stopped"
+        # A Claude capacity limit is an account/provider outage, not a
+        # repository failure. If the local Codex CLI is connected and
+        # has headroom, persist one provider switch before launching it
+        # synchronously. The old Claude session is retained as evidence
+        # but is never resumed through the incompatible Codex CLI.
+        if (not ran_out and w.get("is_error") and
+                classification == "transient_limit" and
+                _provider_for_model(role.get("model")) == "claude"):
+            ready, readiness = _codex_fallback_status()
+            if ready:
+                claude_failure = role["result"]
+                fallback = _switch_role_to_codex(role, claude_failure)
+                role["attempt"] = (role.get("attempt") or 0) + 1
+                role["status"] = "retrying"
+                role["detail"] = (
+                    "Claude capacity limit detected; continuing this role "
+                    "once through Codex.")
+                role["next_action"] = "Codex is continuing the unfinished role."
+                o["providers"] = sorted({_provider_for_model(
+                    item.get("model")) for item in o.get("roles") or []})
+                o["next_action"] = role["next_action"]
+                _save(o)
+                emit(cid, "role %s hit a Claude capacity limit — switching "
+                     "to Codex (%s)" % (role["id"], CODEX_FALLBACK_MODEL))
+                if _stopped(cid):
+                    _stop_state(o)
+                    return "stopped"
+                failover_context = "\n\n".join(filter(None, (
+                    ctx,
+                    "### Provider failover\nClaude stopped at a usage/capacity "
+                    "limit. Continue the same assignment with Codex. Inspect "
+                    "the current repository state first, keep any valid prior "
+                    "work, and do not repeat completed changes.",
+                )))
+                fallback_started = time.time()
+                w = _worker(cid, role, failover_context, cfg_dir,
+                            workdir=workdir,
+                            safe_permissions=safe_permissions)
+                fallback_elapsed = time.time() - fallback_started
+                fallback_spend = w.get("total_cost_usd") or 0
+                role["secs"] = round((role.get("secs") or 0) +
+                                     fallback_elapsed)
+                role["cost"] = round((role.get("cost") or 0) +
+                                     fallback_spend, 4)
+                o["cost"] = round(sum(item.get("cost") or 0
+                                      for item in o["roles"]), 4)
+                role["session"] = str(w.get("session_id") or "")
+                role["result"] = str(w.get("result") or "")[:6000] or (
+                    "Codex fallback returned no final message")
+                classification = agent_runtime.classify_failure(
+                    role["result"], bool(w.get("is_error")),
+                    w.get("subtype") or "")
+                ran_out = w.get("subtype") == "error_max_turns"
+                _record_attempt(role, w, classification,
+                                fallback_elapsed, kind="provider_fallback")
+                fallback["status"] = (
+                    "waiting_permission" if classification == "permission" else
+                    "failed" if w.get("is_error") else "succeeded")
+                fallback["summary"] = (
+                    "Codex fallback reached an operator permission boundary."
+                    if classification == "permission" else
+                    "Codex fallback attempt failed; bounded recovery remains visible."
+                    if w.get("is_error") else
+                    "Codex completed the role after Claude hit its capacity limit.")
+                fallback["finished_at"] = datetime.datetime.now().isoformat(
+                    timespec="seconds")
+                fallback["result"] = agent_runtime.safe_excerpt(
+                    role["result"], 300)
+                _save(o)
+                if _stopped(cid):
+                    _stop_state(o)
+                    return "stopped"
+            else:
+                role["fallback_unavailable"] = {
+                    "provider": "codex", "reason": readiness,
+                    "checked_at": datetime.datetime.now().isoformat(
+                        timespec="seconds"),
+                }
+        if ran_out:
+            # STILL unfinished after the continue budget. Park it with a
+            # stated reason — never report half-done work as success.
+            role["status"] = "exhausted"
+            role["detail"] = (
+                "ran out of turns: %d turn budget × %d run(s). The task was "
+                 "cut off, not finished. Continue resumes this same session."
+                 % (role["turns"], cont + 1))
+            role["next_action"] = "Continue resumes this exact worker session."
+            _save(o)
+            emit(cid, "role %s EXHAUSTED: %s" % (role["id"], role["detail"]))
+            break
+        if classification == "permission":
+            role["last_failure_class"] = "permission"
+            role["last_failure"] = agent_runtime.safe_excerpt(role["result"], 500)
+            _set_permission_wait(o, role["result"], role)
+            _save(o)
+            emit(cid, "role %s waiting for operator permission" % role["id"])
+            break
+        if w.get("is_error"):
+            role["last_failure_class"] = classification
+            role["last_failure"] = agent_runtime.safe_excerpt(role["result"], 500)
+            role["limit"] = classification == "transient_limit"
+            if classification == "task" and role.get("recovery_history"):
+                latest = role["recovery_history"][-1]
+                if latest.get("verification") == "pending-original-rerun":
+                    latest["verification"] = "failed-original-rerun"
+                    latest["status"] = "verification-failed"
+            if classification in ("transient", "transient_limit") \
+                    and transient_retries < MAX_TRANSIENT_RETRIES:
+                transient_retries += 1
+                role["status"] = "retrying"
+                role["detail"] = "%s failure; bounded retry %d/%d" % (
+                    classification, transient_retries, MAX_TRANSIENT_RETRIES)
+                role["next_action"] = "Retrying automatically after a short backoff."
+                o["next_action"] = role["next_action"]
+                _save(o)
+                emit(cid, "role %s %s — retry %d/%d" %
+                     (role["id"], classification, transient_retries,
+                      MAX_TRANSIENT_RETRIES))
+                if not _wait_retry(cid, transient_retries):
+                    _stop_state(o)
+                    return "stopped"
+                recovery_context = ""
+                continue
+            if classification == "task" and recovery_cycles < MAX_RECOVERY_CYCLES:
+                recovery_cycles += 1
+                state, report = _run_recovery(
+                    cid, o, role, role["result"], cfg_dir, recovery_cycles,
+                    workdir=workdir, safe_permissions=safe_permissions)
+                o["cost"] = round(sum(r.get("cost") or 0 for r in o["roles"]), 4)
+                if state == "stopped":
+                    return "stopped"
+                if state == "blocked":
+                    break
+                recovery_context = report
+                # Whether the fixer landed or itself failed, the original
+                # role is the verifier. It inspects existing work and either
+                # completes or produces evidence for the next bounded cycle.
+                continue
+            role["status"] = "failed"
+            role["detail"] = (
+                "transient retry budget exhausted: " + role["last_failure"]
+                if classification in ("transient", "transient_limit") else
+                "recovery budget exhausted: " + role["last_failure"])
+            role["next_action"] = "Inspect attempt/recovery history, then Resume or archive."
+            if isinstance(role.get("provider_fallback"), dict):
+                role["provider_fallback"]["status"] = "failed"
+                role["provider_fallback"]["summary"] = (
+                    "Codex could not complete the role; inspect the attempt history.")
+            _save(o)
+            emit(cid, "role %s %s: %s" % (role["id"],
+                 "retry budget exhausted" if role["limit"] else "FAILED",
+                 role["detail"][:120]))
+            break
+        # Closed loop: a cheap verifier judges the report against the
+        # mission before "done". One bounded redo — never an open loop.
+        verdict, veto = _verify_role(role)
+        role["verification"] = {
+            "verdict": verdict, "feedback": veto[:500],
+            "model": VERIFY_MODEL,
+            "at": datetime.datetime.now().isoformat(timespec="seconds")}
+        if _stopped(cid):
+            _stop_state(o)
+            return "stopped"
+        if (verdict == "revise" and veto and
+                int(role.get("verifies") or 0) < MAX_VERIFY_REDOS):
+            role["verifies"] = int(role.get("verifies") or 0) + 1
+            role["status"] = "retrying"
+            role["detail"] = "verifier sent it back: " + veto[:160]
+            role["next_action"] = "Re-running the role to close the verifier's gap."
+            role["mission"] += (
+                "\n\nVERIFIER FEEDBACK (a completion check found this gap — "
+                "inspect the existing work first and finish only what is "
+                "missing, do not redo completed steps): " + veto)
+            o["next_action"] = role["next_action"]
+            _save(o)
+            emit(cid, "role %s verifier revise (%d/%d): %s" %
+                 (role["id"], role["verifies"], MAX_VERIFY_REDOS, veto[:100]))
+            recovery_context = ""
+            continue
+        # A successful original rerun is the verification step for the
+        # latest recovery cycle. Keep only compact, secret-safe evidence.
+        if role.get("recovery_history"):
+            latest = role["recovery_history"][-1]
+            if latest.get("verification") == "pending-original-rerun":
+                latest["verification"] = "passed-original-rerun"
+                latest["status"] = "verified"
+                # A brain note is a reusable recipe, not a process log.
+                # Require a successful fixer, actual original-role
+                # verification, and enough concrete evidence to be more
+                # useful than "fixed it" before marking it learnable.
+                repair = latest.get("repair_summary") or ""
+                latest["learnable"] = bool(
+                    latest.get("repair_class") == "success" and
+                    len(repair) >= 40 and len(repair.split()) >= 6)
+                role["recovery_summary"] = agent_runtime.compact_recovery_evidence(role)
+                emit(cid, "role %s recovery verified: %s" %
+                     (role["id"], role["recovery_summary"][:120]))
+        role.pop("limit", None)
+        if isinstance(role.get("provider_fallback"), dict):
+            role["provider_fallback"]["status"] = "succeeded"
+            role["provider_fallback"]["summary"] = (
+                "Codex completed the role after Claude hit its capacity limit.")
+        role["detail"] = ("" if verdict == "accept" else
+                          "completed with a verifier reservation: " + veto[:160])
+        role["next_action"] = ("Awaiting operator approval." if role.get("review")
+                               else "Role complete.")
+        if not role.get("review"):
+            role["status"] = "done"
+            _save(o)
+            emit(cid, "role %s done ($%s, %ss)" % (role["id"], role["cost"], role["secs"]))
+            break
+        verdict, feedback = _wait_gate(cid, o, role)
+        if verdict == "stop":
+            _stop_state(o)
+            return "stopped"
+        if verdict == "approve":
+            role["status"] = "done"
+            _save(o)
+            emit(cid, "role %s approved by operator" % role["id"])
+            break
+        if verdict == "skip":
+            role["status"] = "skipped"
+            _save(o)
+            break
+        # redo: feedback becomes an addendum to the mission
+        role["mission"] += "\n\nOPERATOR FEEDBACK (address this): " + (feedback or "revise")
+        transient_retries = 0
+        recovery_context = ""
+        emit(cid, "role %s redo: %s" % (role["id"], (feedback or "")[:100]))
+    return "handled"
+
+
 def _run(cid):
     o = _load_json(_path(cid))
     workdir = os.path.normpath(os.path.realpath(o.get("workdir") or ROOT))
@@ -1797,9 +2139,11 @@ def _run(cid):
         emit(cid, "delegating to account: " + acct)
     roles = {r["id"]: r for r in o["roles"]}
     try:
-        # dependency-ordered pass; repeats until no runnable role remains.
-        # ponytail: sequential execution — parallel threads per role when a
-        # real mission is actually bottlenecked by it.
+        # dependency-ordered passes: each pass gathers EVERY pending role
+        # whose dependencies are satisfied and runs that wave in parallel
+        # threads (bounded by RUNE_PARALLEL_ROLES, default 3). Roles the
+        # planner left independent in depends_on are declared safe to overlap;
+        # sequential work stays sequential through its dependency edges.
         while True:
             if _stopped(cid):
                 _stop_state(o)
@@ -1810,16 +2154,15 @@ def _run(cid):
             if any(role.get("status") == "waiting_permission"
                    for role in o.get("roles") or []):
                 break
-            runnable = next(
-                (r for r in o["roles"] if r["status"] == "pending"
-                 and all(roles[d]["status"] in ("done", "skipped")
-                         for d in r["depends_on"] if d in roles)), None)
-            if not runnable:
+            wave = [r for r in o["roles"] if r["status"] == "pending"
+                    and all(roles[d]["status"] in ("done", "skipped")
+                            for d in r["depends_on"] if d in roles)]
+            if not wave:
                 if _replan_if_stuck(cid, o):
                     roles = {r["id"]: r for r in o["roles"]}
                     continue
-                # anything still pending has a failed/blocked dependency — name it,
-                # so a blocked role never sits there without a reason
+                # anything still pending has a failed/blocked dependency — name
+                # it, so a blocked role never sits there without a reason
                 for r in o["roles"]:
                     if r["status"] == "pending":
                         r["status"] = "blocked"
@@ -1829,320 +2172,25 @@ def _run(cid):
                             ", ".join(bad) or "a dependency",
                             ", ".join(roles[d]["status"] for d in bad) or "unfinished")
                 break
-            role = runnable
-            # Resolve per role so an operator can grant one blocked role without
-            # silently widening permission policy for the rest of the mission.
-            safe_permissions = _permission_mode_for(o, role) == "safe"
-            transient_retries = 0
-            recovery_cycles = len(role.get("recovery_history") or [])
-            recovery_context = ""
-            while True:  # worker retry / recovery / human-redo loop
-                if _stopped(cid):
-                    _stop_state(o)
+            wave = wave[:_parallel_cap()]
+            if len(wave) == 1:
+                if _run_one_role(cid, o, roles, wave[0], cfg_dir,
+                                 workdir) == "stopped":
                     return
-                role["status"] = "working"
-                role["attempt"] = (role.get("attempt") or 0) + 1
-                role["detail"] = "attempt %d is running" % role["attempt"]
-                role["next_action"] = "Wait for the role report."
-                if (isinstance(role.get("provider_fallback"), dict) and
-                        _provider_for_model(role.get("model")) == "codex"):
-                    role["provider_fallback"]["status"] = "running"
-                    role["provider_fallback"]["summary"] = (
-                        "Codex is continuing the unfinished role.")
-                o["status"] = "running"
-                o["next_action"] = "%s is working." % role["title"]
-                _save(o)
-                if _stopped(cid):
-                    _stop_state(o)
-                    return
-                emit(cid, "role %s attempt %d working (%s, %dt): %s"
-                     % (role["id"], role["attempt"], role["model"],
-                        role["turns"], role["title"]))
-                contexts = ["### %s (%s)\n%s" % (roles[d]["title"], d,
-                                                  roles[d]["result"][:1500])
-                            for d in role["depends_on"] if roles[d].get("result")]
-                if recovery_context:
-                    contexts.append("### Bounded recovery report\n" + recovery_context[:2000])
-                ctx = "\n\n".join(contexts)
-                t0 = time.time()
-                # A Continue on an exhausted role resumes its prior provider session
-                # (context intact) instead of re-running the mission from zero
-                sid = role.pop("continue_from", "")
-                if not sid and o.get("route") in ("solo", "direct"):
-                    _record_recall_exposure(o, 1)
-                    _save(o)
-                w = _worker(cid, role, "" if sid else ctx, cfg_dir, resume_sid=sid,
-                            workdir=workdir, safe_permissions=safe_permissions)
-                _consume_operator_authorization(o, role)
-                spend = w.get("total_cost_usd") or 0
-                sid = w.get("session_id") or sid
-                # ran out of turns => cut off mid-task, NOT finished. Continue the
-                # same session until it lands or the continue budget runs out.
-                cont = role.get("continues") or 0
-                while (w.get("subtype") == "error_max_turns" and sid
-                       and cont < MAX_CONTINUES):
-                    with LOCK:
-                        if LIVE.get(cid, {}).get("stop"):
-                            break
-                    cont += 1
-                    role["continues"] = cont
-                    role["session"] = sid
-                    _save(o)
-                    emit(cid, "role %s ran out of %d turns — auto-continuing the "
-                         "same session (%d/%d)" % (role["id"], role["turns"],
-                                                   cont, MAX_CONTINUES))
-                    w = _worker(cid, role, "", cfg_dir, resume_sid=sid,
-                                workdir=workdir, safe_permissions=safe_permissions)
-                    spend += w.get("total_cost_usd") or 0
-                    sid = w.get("session_id") or sid
-                # A one-request provider grant covers the original invocation
-                # and its same-session turn continuations only. Any separate
-                # fallback, retry, or recovery worker re-resolves mission policy.
-                safe_permissions = _permission_mode_for(o, role) == "safe"
-                role["session"] = sid
-                role["continues"] = cont
-                elapsed = time.time() - t0
-                role["secs"] = round((role.get("secs") or 0) + elapsed)
-                role["cost"] = round((role.get("cost") or 0) + spend, 4)
-                o["cost"] = round(sum(r.get("cost") or 0 for r in o["roles"]), 4)
-                ran_out = w.get("subtype") == "error_max_turns"
-                role["result"] = str(w.get("result") or "")[:6000] or (
-                    "(no final message — used all %d turns)" % role["turns"])
-                classification = agent_runtime.classify_failure(
-                    role["result"], bool(w.get("is_error")), w.get("subtype") or "")
-                _record_attempt(role, w, classification, elapsed)
-                if _stopped(cid):
-                    _stop_state(o)
-                    return
-                # A Claude capacity limit is an account/provider outage, not a
-                # repository failure. If the local Codex CLI is connected and
-                # has headroom, persist one provider switch before launching it
-                # synchronously. The old Claude session is retained as evidence
-                # but is never resumed through the incompatible Codex CLI.
-                if (not ran_out and w.get("is_error") and
-                        classification == "transient_limit" and
-                        _provider_for_model(role.get("model")) == "claude"):
-                    ready, readiness = _codex_fallback_status()
-                    if ready:
-                        claude_failure = role["result"]
-                        fallback = _switch_role_to_codex(role, claude_failure)
-                        role["attempt"] = (role.get("attempt") or 0) + 1
-                        role["status"] = "retrying"
-                        role["detail"] = (
-                            "Claude capacity limit detected; continuing this role "
-                            "once through Codex.")
-                        role["next_action"] = "Codex is continuing the unfinished role."
-                        o["providers"] = sorted({_provider_for_model(
-                            item.get("model")) for item in o.get("roles") or []})
-                        o["next_action"] = role["next_action"]
-                        _save(o)
-                        emit(cid, "role %s hit a Claude capacity limit — switching "
-                             "to Codex (%s)" % (role["id"], CODEX_FALLBACK_MODEL))
-                        if _stopped(cid):
-                            _stop_state(o)
-                            return
-                        failover_context = "\n\n".join(filter(None, (
-                            ctx,
-                            "### Provider failover\nClaude stopped at a usage/capacity "
-                            "limit. Continue the same assignment with Codex. Inspect "
-                            "the current repository state first, keep any valid prior "
-                            "work, and do not repeat completed changes.",
-                        )))
-                        fallback_started = time.time()
-                        w = _worker(cid, role, failover_context, cfg_dir,
-                                    workdir=workdir,
-                                    safe_permissions=safe_permissions)
-                        fallback_elapsed = time.time() - fallback_started
-                        fallback_spend = w.get("total_cost_usd") or 0
-                        role["secs"] = round((role.get("secs") or 0) +
-                                             fallback_elapsed)
-                        role["cost"] = round((role.get("cost") or 0) +
-                                             fallback_spend, 4)
-                        o["cost"] = round(sum(item.get("cost") or 0
-                                              for item in o["roles"]), 4)
-                        role["session"] = str(w.get("session_id") or "")
-                        role["result"] = str(w.get("result") or "")[:6000] or (
-                            "Codex fallback returned no final message")
-                        classification = agent_runtime.classify_failure(
-                            role["result"], bool(w.get("is_error")),
-                            w.get("subtype") or "")
-                        ran_out = w.get("subtype") == "error_max_turns"
-                        _record_attempt(role, w, classification,
-                                        fallback_elapsed, kind="provider_fallback")
-                        fallback["status"] = (
-                            "waiting_permission" if classification == "permission" else
-                            "failed" if w.get("is_error") else "succeeded")
-                        fallback["summary"] = (
-                            "Codex fallback reached an operator permission boundary."
-                            if classification == "permission" else
-                            "Codex fallback attempt failed; bounded recovery remains visible."
-                            if w.get("is_error") else
-                            "Codex completed the role after Claude hit its capacity limit.")
-                        fallback["finished_at"] = datetime.datetime.now().isoformat(
-                            timespec="seconds")
-                        fallback["result"] = agent_runtime.safe_excerpt(
-                            role["result"], 300)
-                        _save(o)
-                        if _stopped(cid):
-                            _stop_state(o)
-                            return
-                    else:
-                        role["fallback_unavailable"] = {
-                            "provider": "codex", "reason": readiness,
-                            "checked_at": datetime.datetime.now().isoformat(
-                                timespec="seconds"),
-                        }
-                if ran_out:
-                    # STILL unfinished after the continue budget. Park it with a
-                    # stated reason — never report half-done work as success.
-                    role["status"] = "exhausted"
-                    role["detail"] = (
-                        "ran out of turns: %d turn budget × %d run(s). The task was "
-                         "cut off, not finished. Continue resumes this same session."
-                         % (role["turns"], cont + 1))
-                    role["next_action"] = "Continue resumes this exact worker session."
-                    _save(o)
-                    emit(cid, "role %s EXHAUSTED: %s" % (role["id"], role["detail"]))
-                    break
-                if classification == "permission":
-                    role["last_failure_class"] = "permission"
-                    role["last_failure"] = agent_runtime.safe_excerpt(role["result"], 500)
-                    _set_permission_wait(o, role["result"], role)
-                    _save(o)
-                    emit(cid, "role %s waiting for operator permission" % role["id"])
-                    break
-                if w.get("is_error"):
-                    role["last_failure_class"] = classification
-                    role["last_failure"] = agent_runtime.safe_excerpt(role["result"], 500)
-                    role["limit"] = classification == "transient_limit"
-                    if classification == "task" and role.get("recovery_history"):
-                        latest = role["recovery_history"][-1]
-                        if latest.get("verification") == "pending-original-rerun":
-                            latest["verification"] = "failed-original-rerun"
-                            latest["status"] = "verification-failed"
-                    if classification in ("transient", "transient_limit") \
-                            and transient_retries < MAX_TRANSIENT_RETRIES:
-                        transient_retries += 1
-                        role["status"] = "retrying"
-                        role["detail"] = "%s failure; bounded retry %d/%d" % (
-                            classification, transient_retries, MAX_TRANSIENT_RETRIES)
-                        role["next_action"] = "Retrying automatically after a short backoff."
-                        o["next_action"] = role["next_action"]
-                        _save(o)
-                        emit(cid, "role %s %s — retry %d/%d" %
-                             (role["id"], classification, transient_retries,
-                              MAX_TRANSIENT_RETRIES))
-                        if not _wait_retry(cid, transient_retries):
-                            _stop_state(o)
-                            return
-                        recovery_context = ""
-                        continue
-                    if classification == "task" and recovery_cycles < MAX_RECOVERY_CYCLES:
-                        recovery_cycles += 1
-                        state, report = _run_recovery(
-                            cid, o, role, role["result"], cfg_dir, recovery_cycles,
-                            workdir=workdir, safe_permissions=safe_permissions)
-                        o["cost"] = round(sum(r.get("cost") or 0 for r in o["roles"]), 4)
-                        if state == "stopped":
-                            return
-                        if state == "blocked":
-                            break
-                        recovery_context = report
-                        # Whether the fixer landed or itself failed, the original
-                        # role is the verifier. It inspects existing work and either
-                        # completes or produces evidence for the next bounded cycle.
-                        continue
-                    role["status"] = "failed"
-                    role["detail"] = (
-                        "transient retry budget exhausted: " + role["last_failure"]
-                        if classification in ("transient", "transient_limit") else
-                        "recovery budget exhausted: " + role["last_failure"])
-                    role["next_action"] = "Inspect attempt/recovery history, then Resume or archive."
-                    if isinstance(role.get("provider_fallback"), dict):
-                        role["provider_fallback"]["status"] = "failed"
-                        role["provider_fallback"]["summary"] = (
-                            "Codex could not complete the role; inspect the attempt history.")
-                    _save(o)
-                    emit(cid, "role %s %s: %s" % (role["id"],
-                         "retry budget exhausted" if role["limit"] else "FAILED",
-                         role["detail"][:120]))
-                    break
-                # Closed loop: a cheap verifier judges the report against the
-                # mission before "done". One bounded redo — never an open loop.
-                verdict, veto = _verify_role(role)
-                role["verification"] = {
-                    "verdict": verdict, "feedback": veto[:500],
-                    "model": VERIFY_MODEL,
-                    "at": datetime.datetime.now().isoformat(timespec="seconds")}
-                if _stopped(cid):
-                    _stop_state(o)
-                    return
-                if (verdict == "revise" and veto and
-                        int(role.get("verifies") or 0) < MAX_VERIFY_REDOS):
-                    role["verifies"] = int(role.get("verifies") or 0) + 1
-                    role["status"] = "retrying"
-                    role["detail"] = "verifier sent it back: " + veto[:160]
-                    role["next_action"] = "Re-running the role to close the verifier's gap."
-                    role["mission"] += (
-                        "\n\nVERIFIER FEEDBACK (a completion check found this gap — "
-                        "inspect the existing work first and finish only what is "
-                        "missing, do not redo completed steps): " + veto)
-                    o["next_action"] = role["next_action"]
-                    _save(o)
-                    emit(cid, "role %s verifier revise (%d/%d): %s" %
-                         (role["id"], role["verifies"], MAX_VERIFY_REDOS, veto[:100]))
-                    recovery_context = ""
-                    continue
-                # A successful original rerun is the verification step for the
-                # latest recovery cycle. Keep only compact, secret-safe evidence.
-                if role.get("recovery_history"):
-                    latest = role["recovery_history"][-1]
-                    if latest.get("verification") == "pending-original-rerun":
-                        latest["verification"] = "passed-original-rerun"
-                        latest["status"] = "verified"
-                        # A brain note is a reusable recipe, not a process log.
-                        # Require a successful fixer, actual original-role
-                        # verification, and enough concrete evidence to be more
-                        # useful than "fixed it" before marking it learnable.
-                        repair = latest.get("repair_summary") or ""
-                        latest["learnable"] = bool(
-                            latest.get("repair_class") == "success" and
-                            len(repair) >= 40 and len(repair.split()) >= 6)
-                        role["recovery_summary"] = agent_runtime.compact_recovery_evidence(role)
-                        emit(cid, "role %s recovery verified: %s" %
-                             (role["id"], role["recovery_summary"][:120]))
-                role.pop("limit", None)
-                if isinstance(role.get("provider_fallback"), dict):
-                    role["provider_fallback"]["status"] = "succeeded"
-                    role["provider_fallback"]["summary"] = (
-                        "Codex completed the role after Claude hit its capacity limit.")
-                role["detail"] = ("" if verdict == "accept" else
-                                  "completed with a verifier reservation: " + veto[:160])
-                role["next_action"] = ("Awaiting operator approval." if role.get("review")
-                                       else "Role complete.")
-                if not role.get("review"):
-                    role["status"] = "done"
-                    _save(o)
-                    emit(cid, "role %s done ($%s, %ss)" % (role["id"], role["cost"], role["secs"]))
-                    break
-                verdict, feedback = _wait_gate(cid, o, role)
-                if verdict == "stop":
-                    _stop_state(o)
-                    return
-                if verdict == "approve":
-                    role["status"] = "done"
-                    _save(o)
-                    emit(cid, "role %s approved by operator" % role["id"])
-                    break
-                if verdict == "skip":
-                    role["status"] = "skipped"
-                    _save(o)
-                    break
-                # redo: feedback becomes an addendum to the mission
-                role["mission"] += "\n\nOPERATOR FEEDBACK (address this): " + (feedback or "revise")
-                transient_retries = 0
-                recovery_context = ""
-                emit(cid, "role %s redo: %s" % (role["id"], (feedback or "")[:100]))
+                continue
+            emit(cid, "parallel wave: %d independent roles (%s)"
+                 % (len(wave), ", ".join(r["id"] for r in wave)))
+            outcomes = {}
+            threads = [threading.Thread(
+                target=lambda r=r: outcomes.__setitem__(
+                    r["id"], _run_one_role(cid, o, roles, r, cfg_dir, workdir)),
+                name="role-" + str(r["id"]), daemon=True) for r in wave]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            if "stopped" in outcomes.values():
+                return
         # a mission is only "done" when every role actually finished. Exhausted
         # roles are unfinished work, not success — they get their own status so
         # the card says why and offers Continue instead of claiming completion.
