@@ -60,6 +60,7 @@ import orchestrator              # the conductor feedback loop
 import pulse                     # outside world: claude/codex usage, github, gmail, spotify
 import chat                      # dashboard assistant (Haiku/Sonnet over the Anthropic API)
 import ceo                       # command bar: prompt -> Haiku refine -> CEO plan -> roles
+import uia                       # structured, verified Windows UI Automation
 import daily_briefing            # offline: where you left off + what to continue
 MIRROR = os.path.join(ROOT, ".claude", "hooks", "mirror.py")
 INBOX = os.path.join(ROOT, "state", "inbox.jsonl")
@@ -122,7 +123,10 @@ def emit(**kv):
     args = []
     for k, v in kv.items():
         args += ["--" + k, str(v)]
-    subprocess.run([sys.executable, MIRROR] + args, capture_output=True)
+    # fire-and-forget: a wire event must never add a subprocess round-trip
+    # to request latency; mirror.py appends atomically on its own
+    subprocess.Popen([sys.executable, MIRROR] + args,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # ---------------------------------------------------------------- window mgmt
@@ -505,6 +509,12 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"orchestrations": orchestrator.list_all()})
         if self.path == "/api/activity":
             return self._json(200, activity_payload())
+        if self.path == "/api/uia/windows":
+            try:
+                return self._json(200, {"windows": uia.windows()})
+            except uia.UiaError as e:
+                return self._json(501 if "not installed" in str(e) else 400,
+                                  {"error": str(e)})
         if self.path == "/api/brain":
             return self._json(200, brain_payload())
         if self.path == "/api/ceo":
@@ -592,6 +602,9 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/spotify/ctl": self.api_spotify_ctl,
             "/api/stop-all": self.api_stop_all,
             "/api/voice": self.api_voice,
+            "/api/uia/tree": self.api_uia_tree,
+            "/api/uia/act": self.api_uia_act,
+            "/api/uia/read": self.api_uia_read,
         }.get(self.path)
         if not route:
             return self._json(404, {"error": "unknown endpoint"})
@@ -653,6 +666,33 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(500, {"error": "transcription failed: %s" % str(e)[:150]})
         return self._json(200, {"ok": True, "text": text})
+
+    def _uia(self, fn, **kw):
+        try:
+            return self._json(200, fn(**kw))
+        except uia.UiaError as e:
+            return self._json(501 if "not installed" in str(e) else 400,
+                              {"error": str(e)})
+        except Exception as e:
+            return self._json(500, {"error": ("%s: %s" % (type(e).__name__, e))[:200]})
+
+    def api_uia_tree(self, data):
+        return self._uia(uia.tree, pid=data.get("pid"), title_re=data.get("title_re"),
+                         depth=int(data.get("depth") or 3),
+                         max_nodes=int(data.get("max_nodes") or 400))
+
+    def api_uia_act(self, data):
+        out = self._uia(uia.act, pid=data.get("pid"), title_re=data.get("title_re"),
+                        locator=data.get("locator") or {},
+                        action=str(data.get("action") or "invoke"),
+                        value=data.get("value"))
+        emit(session="operator", event="uia-act",
+             detail=("%s %s" % (data.get("action"), data.get("locator")))[:200])
+        return out
+
+    def api_uia_read(self, data):
+        return self._uia(uia.read, pid=data.get("pid"), title_re=data.get("title_re"),
+                         locator=data.get("locator") or {})
 
     def api_spotify_ctl(self, data):
         out = pulse.spotify_ctl(str(data.get("action") or ""), data.get("pos_ms"))
