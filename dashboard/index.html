@@ -1201,29 +1201,40 @@
   --rune-rule-strong: oklch(72% 0.026 88);
 }
 body{
-  --glow-y: 0px; /* parallax: script slides the glows as you scroll */
+  --glow-y: 0px; /* parallax: script slides the mesh as you scroll */
+  /* a real gradient mesh — the color the glass blurs. Hue-anchored so the
+     whole atmosphere shifts per route and sweeps as you scroll. */
   background:
-    radial-gradient(1200px 780px at 8% calc(-10% + var(--glow-y)),
-      oklch(90% 0.085 var(--wisp-hue) / 0.85), transparent 60%),
-    radial-gradient(1000px 700px at 103% calc(14% + var(--glow-y) * 1.6),
-      oklch(91% 0.08 calc(var(--wisp-hue) + 80) / 0.65), transparent 58%),
-    radial-gradient(800px 560px at 45% calc(112% - var(--glow-y) * 0.8),
-      oklch(92% 0.06 calc(var(--wisp-hue) + 150) / 0.5), transparent 60%),
-    var(--rune-paper);
+    radial-gradient(1300px 850px at 4% calc(-8% + var(--glow-y)),
+      oklch(86% 0.11 var(--wisp-hue)), transparent 62%),
+    radial-gradient(1100px 760px at 104% calc(6% + var(--glow-y) * 1.5),
+      oklch(87% 0.1 calc(var(--wisp-hue) + 70)), transparent 60%),
+    radial-gradient(900px 640px at 78% calc(88% - var(--glow-y) * 0.9),
+      oklch(88% 0.09 calc(var(--wisp-hue) + 150)), transparent 58%),
+    radial-gradient(1000px 700px at 12% calc(96% - var(--glow-y) * 0.6),
+      oklch(89% 0.08 calc(var(--wisp-hue) + 230)), transparent 60%),
+    linear-gradient(160deg,
+      oklch(94% 0.035 var(--wisp-hue)),
+      oklch(95% 0.03 calc(var(--wisp-hue) + 90)));
   background-attachment: fixed;
 }
 /* glass surfaces — filled (not washed-out), blurred, hairline-lit */
-.card,.cmdbar,.inst,.intcard,.treecard,.mrun,.cmdmission,.chatpanel,.cmdmsg.a,.msg.a{
-  background: rgb(255 255 252 / 0.55);
-  -webkit-backdrop-filter: blur(22px) saturate(1.45);
-  backdrop-filter: blur(22px) saturate(1.45);
-  border-color: rgb(255 255 255 / 0.75);
-  box-shadow:
-    0 1px 2px oklch(30% 0.04 var(--wisp-hue) / 0.06),
-    0 16px 40px oklch(32% 0.05 var(--wisp-hue) / 0.14),
-    inset 0 1px 0 rgb(255 255 255 / 0.85);
+/* inset fields go translucent too, so no opaque slab breaks the glass */
+:root{
+  --rune-paper-2: rgb(255 255 255 / 0.42);
+  --rune-paper-3: rgb(255 255 255 / 0.55);
 }
-.card{ border-radius: 18px; }
+.card,.cmdbar,.inst,.intcard,.treecard,.mrun,.cmdmission,.chatpanel,.cmdmsg.a,.msg.a{
+  background: rgb(255 255 255 / 0.44);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  backdrop-filter: blur(28px) saturate(1.5);
+  border: 1px solid rgb(255 255 255 / 0.85);
+  box-shadow:
+    0 2px 4px oklch(35% 0.06 var(--wisp-hue) / 0.08),
+    0 20px 48px oklch(35% 0.07 var(--wisp-hue) / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.95);
+}
+.card{ border-radius: 20px; }
 /* sidebar active item: gradient glass pill */
 #nav a.active, #nav a[aria-current]{
   background: linear-gradient(115deg,
@@ -1233,10 +1244,10 @@ body{
     0 4px 14px oklch(30% 0.06 var(--wisp-hue) / 0.12);
 }
 aside#side{
-  background: rgb(255 255 252 / 0.55);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  backdrop-filter: blur(20px) saturate(1.3);
-  border-right: 1px solid rgb(255 255 255 / 0.6);
+  background: rgb(255 255 255 / 0.38);
+  -webkit-backdrop-filter: blur(26px) saturate(1.5);
+  backdrop-filter: blur(26px) saturate(1.5);
+  border-right: 1px solid rgb(255 255 255 / 0.7);
 }
 /* hue hairline across the top of primary cards */
 .card{ border-top: 2.5px solid transparent;
