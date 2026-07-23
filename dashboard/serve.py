@@ -469,6 +469,7 @@ class Handler(SimpleHTTPRequestHandler):
         public = {
             "/dashboard", "/dashboard/index.html", "/dashboard/lofi.jpg",
             "/dashboard/legacy.html",  # permanent link to the pre-migration UI
+            "/app/minibar.html",       # the Electron island page (static, no secrets)
             "/tokens.css",
             "/state/events.jsonl", "/state/inbox.jsonl",
             "/state/approvals.json", "/skills/registry.json",

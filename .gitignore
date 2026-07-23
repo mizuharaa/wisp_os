@@ -48,3 +48,5 @@ app/node_modules/
 state/vault.json
 state/vault-grants.json
 app/dist/
+state/.browser/
+state/voice-last.webm

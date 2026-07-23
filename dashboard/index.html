@@ -1186,12 +1186,95 @@
   @media (max-width:420px){.delivery-steps{grid-template-columns:1fr}.delivery-step,.delivery-step:nth-child(3),.delivery-step:nth-child(4){border-left:0;border-top:1px solid var(--line)}.delivery-step:first-child{border-top:0}.delivery-step{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.delivery-step-detail{grid-column:1/-1;min-height:0}.delivery-step .btn{width:auto;min-width:94px}.delivery-head{align-items:center}.mrun details.mission-brief>summary{grid-template-columns:minmax(0,1fr) auto}.mission-brief-preview{display:none}}
   @media (max-width:360px){.calendar-views button{padding-inline:5px;font-size:11px}.cmdtray-actions .btn{font-size:11px;padding-inline:7px}.brief-completed-actions{grid-template-columns:1fr}}
 </style>
+<style id="wisp-glass">
+/* ── Wisp glass skin (design v4): warm paper canvas, liquid-glass surfaces,
+   per-route hue accents that also drift on scroll, Phantom-style hover.
+   Layered AFTER the legacy styles on purpose — tokens stay authoritative for
+   ink/spacing; this layer only re-paints canvas + surfaces. ── */
+:root{
+  --wisp-hue: 316; /* set per route + scroll by the script at the end of body */
+  --rune-paper: oklch(96.6% 0.014 88);
+  --rune-paper-raised: oklch(99.2% 0.006 92);
+  --rune-paper-2: oklch(94% 0.017 88);
+  --rune-paper-3: oklch(90.8% 0.021 88);
+  --rune-rule: oklch(86% 0.02 88);
+  --rune-rule-strong: oklch(72% 0.026 88);
+}
+body{
+  background:
+    radial-gradient(1100px 720px at 6% -12%,
+      oklch(93% 0.055 var(--wisp-hue) / 0.55), transparent 62%),
+    radial-gradient(950px 640px at 104% 12%,
+      oklch(94% 0.05 calc(var(--wisp-hue) + 70) / 0.4), transparent 58%),
+    var(--rune-paper);
+  background-attachment: fixed;
+}
+/* glass surfaces — filled (not washed-out), blurred, hairline-lit */
+.card,.cmdbar,.inst,.intcard,.treecard,.mrun,.cmdmission,.chatpanel,.cmdmsg.a,.msg.a{
+  background: rgb(255 255 252 / 0.66);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  backdrop-filter: blur(16px) saturate(1.35);
+  border-color: rgb(255 255 255 / 0.72);
+  box-shadow:
+    0 1px 2px oklch(30% 0.03 var(--wisp-hue) / 0.05),
+    0 12px 32px oklch(30% 0.03 var(--wisp-hue) / 0.10),
+    inset 0 1px 0 rgb(255 255 255 / 0.75);
+}
+aside#side{
+  background: rgb(255 255 252 / 0.55);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  backdrop-filter: blur(20px) saturate(1.3);
+  border-right: 1px solid rgb(255 255 255 / 0.6);
+}
+/* hue hairline across the top of primary cards */
+.card{ border-top: 2.5px solid transparent;
+  background-clip: padding-box;
+  position: relative; }
+.card::before{
+  content:""; position:absolute; inset:-1px -1px auto -1px; height:2.5px;
+  border-radius: inherit; pointer-events:none;
+  background: linear-gradient(90deg,
+    oklch(62% 0.16 var(--wisp-hue)),
+    oklch(70% 0.14 calc(var(--wisp-hue) + 55)) 55%,
+    oklch(78% 0.12 calc(var(--wisp-hue) + 110)));
+  opacity:.55; transition: opacity .25s ease;
+}
+.card:hover::before{ opacity:.95; }
+/* topbar: quiet at rest, elevated glass once you scroll */
+.topbar{ position: sticky; top: 0; z-index: 40;
+  transition: background .25s ease, box-shadow .25s ease, padding .25s ease; }
+html[data-scrolled] .topbar{
+  background: rgb(255 255 252 / 0.7);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  backdrop-filter: blur(18px) saturate(1.35);
+  box-shadow: 0 10px 28px oklch(30% 0.03 var(--wisp-hue) / 0.10);
+  border-radius: 0 0 16px 16px; padding-left: 12px; padding-right: 12px;
+}
+/* Phantom-style motion */
+@media (hover:hover) and (prefers-reduced-motion: no-preference){
+  .card,.inst,.intcard,.treecard,.mrun{
+    transition: transform .22s cubic-bezier(.2,.8,.3,1.15), box-shadow .22s ease; }
+  .card:hover,.inst:hover,.intcard:hover,.treecard:hover,.mrun:hover{
+    transform: translateY(-3px);
+    box-shadow:
+      0 2px 4px oklch(30% 0.03 var(--wisp-hue) / 0.06),
+      0 22px 48px oklch(30% 0.04 var(--wisp-hue) / 0.16),
+      inset 0 1px 0 rgb(255 255 255 / 0.8); }
+  .btn,.tbtn,.mode{ transition: transform .18s cubic-bezier(.2,.8,.3,1.2),
+    background .18s ease, box-shadow .18s ease; }
+  .btn:hover,.tbtn:hover{ transform: translateY(-1px); }
+  .btn:active,.tbtn:active{ transform: scale(.96); }
+}
+@media (prefers-reduced-motion: reduce){
+  .topbar{ transition: none; }
+}
+</style>
 </head>
 <body>
 <div class="shell">
   <aside id="side">
     <div class="logo">
-      <b class="wordmark">Rune</b>
+      <b class="wordmark">Wisp</b>
       <small>agent operations</small>
     </div>
     <div class="navlab">Menu</div>
@@ -1389,7 +1472,7 @@
 
     <!-- ============ AGENT CONSOLE ============ -->
     <section class="page" id="p-instances">
-      <div class="titlerow"><div><h1>Agent console</h1><div class="sub">Every agent — CEO missions, loops, terminals — launched and monitored from one place.</div></div><div class="spacer"></div><button type="button" class="btn line sm instance-chat" id="instancechat" aria-expanded="false" aria-controls="chatpanel">Ask Rune</button></div>
+      <div class="titlerow"><div><h1>Agent console</h1><div class="sub">Every agent — CEO missions, loops, terminals — launched and monitored from one place.</div></div><div class="spacer"></div><button type="button" class="btn line sm instance-chat" id="instancechat" aria-expanded="false" aria-controls="chatpanel">Ask Wisp</button></div>
       <div class="card" style="margin-bottom:14px">
         <h3>CEO missions <span class="tag">active work stays above · completed work moves into review and delivery</span></h3>
         <div id="ceoruns2" style="padding-top:12px"></div>
@@ -1459,7 +1542,7 @@
         <div class="icards" id="instances"></div>
       </div>
       <div class="card">
-        <h3>Outside sessions <span class="tag">wire telemetry from sessions Rune didn't launch</span>
+        <h3>Outside sessions <span class="tag">wire telemetry from sessions Wisp didn't launch</span>
           <button class="btn line sm" id="wire-sessions-clear-all" hidden>Clear all</button></h3>
         <div class="icards" id="wire-sessions"></div>
       </div>
@@ -1564,7 +1647,7 @@
 
     <!-- ============ INTEGRATIONS ============ -->
     <section class="page" id="p-integrations">
-      <div class="titlerow"><div><h1>Integrations</h1><div class="sub">MCP servers, hooks, agents, and skills wired into Rune.</div></div></div>
+      <div class="titlerow"><div><h1>Integrations</h1><div class="sub">MCP servers, hooks, agents, and skills wired into Wisp.</div></div></div>
       <div class="card"><div class="intgrid" id="intgrid" style="padding-top:0"></div></div>
     </section>
 
@@ -1621,16 +1704,16 @@
 </section>
 <div id="toast"></div>
 
-<button id="chatfab" title="Ask Rune" aria-label="Ask Rune" aria-expanded="false" aria-controls="chatpanel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M8 12h8M8 9h5"/></svg></button>
+<button id="chatfab" title="Ask Wisp" aria-label="Ask Wisp" aria-expanded="false" aria-controls="chatpanel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M8 12h8M8 9h5"/></svg></button>
 <div id="chatpanel">
   <div class="chathead">
     <div class="av"><svg viewBox="0 0 24 24" id="chatspark"></svg></div>
-    <div><b>Ask Rune</b><small>the software · the brain · anything</small></div>
+    <div><b>Ask Wisp</b><small>the software · the brain · anything</small></div>
     <div class="headacts"><button class="clear" id="chatclear" type="button">Clear</button><button class="x" id="chatclose" aria-label="close">×</button></div>
   </div>
   <div class="chatlog" id="chatlog"></div>
   <div class="chatin">
-    <textarea id="chatinput" rows="1" placeholder="Ask about Rune, the brain, or anything…"></textarea>
+    <textarea id="chatinput" rows="1" placeholder="Ask about Wisp, the brain, or anything…"></textarea>
     <button class="chatsend" id="chatsendbtn" title="send"><svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg></button>
   </div>
 </div>
@@ -2128,7 +2211,7 @@ function chatToggle(v){const wasOpen=CHAT.open;CHAT.open=(v===undefined)?!CHAT.o
   $("chatpanel").classList.toggle("open",CHAT.open);
   $("chatfab").setAttribute("aria-expanded",String(CHAT.open));$("instancechat").setAttribute("aria-expanded",String(CHAT.open));
   if(CHAT.open){$("chatinput").focus();
-    if(!CHAT.history.length&&!$("chatlog").children.length)chatAdd("a","Hi — I'm your Rune assistant. Ask me about the software, the brain, or anything else.");}
+    if(!CHAT.history.length&&!$("chatlog").children.length)chatAdd("a","Hi — I'm your Wisp assistant. Ask me about the software, the brain, or anything else.");}
   else if(wasOpen){const inline=$("instancechat"),target=inline.getClientRects().length?inline:$("chatfab");target.focus({preventScroll:true})}}
 function chatClear(){
   if(CHAT.busy){toast("Wait for the current reply before clearing chat.",true);return}
@@ -2617,7 +2700,7 @@ function renderSkills(){
   genres+=LOCKED_GENRES.filter(g=>!branches[g]).map(g=>treeGenre(g,[],true)).join("");
   // root on top, genres stacked down a spine — reads vertically, never scrolls sideways
   $("sktree").innerHTML=`<div class="gtree">
-    <div class="groot"><b>Rune</b><small>${esc(reg.goal||"–")}</small></div>
+    <div class="groot"><b>Wisp</b><small>${esc(reg.goal||"–")}</small></div>
     ${genres}</div>`;
   if(!$("sdetail").dataset.sel)skDetailHint();
   if($("p-skills").classList.contains("show"))requestAnimationFrame(growTree);
@@ -2834,7 +2917,7 @@ function render(){
 
   Graph.sync();
   syncMotion();
-  document.title=`Rune — ${live.length} live · ${S.events.length} ev`;
+  document.title=`Wisp — ${live.length} live · ${S.events.length} ev`;
 }
 
 /* ---------- hermes search ---------- */
@@ -4481,6 +4564,33 @@ setInterval(()=>{$("clock").textContent=new Date().toLocaleTimeString("en-GB");
     if(el.textContent===txt)return;                 // no change -> no reflow, no flash
     el.textContent=txt;el.classList.remove("roll");void el.offsetWidth;el.classList.add("roll");});},1000);
 route();poll();loadCalendarRange();setInterval(poll,2500);
+</script>
+<script>
+/* wisp-glass: per-route hue + scroll drift + topbar elevation */
+(function(){
+  const HUES = { overview:316, calendar:255, instances:286, skills:150,
+                 brain:210, graph:210, integrations:80, audit:35, guard:10 };
+  let base = 316;
+  function routeHue(){
+    const r = (location.hash.match(/#\/([a-z]+)/) || [])[1] || "overview";
+    base = HUES[r] !== undefined ? HUES[r] : 316;
+    document.documentElement.dataset.route = r;
+    apply();
+  }
+  function apply(){
+    const drift = Math.min(40, (window.scrollY || 0) / 24);
+    document.documentElement.style.setProperty("--wisp-hue",
+      String(base + drift));
+    if (window.scrollY > 8) document.documentElement.dataset.scrolled = "1";
+    else delete document.documentElement.dataset.scrolled;
+  }
+  let raf = 0;
+  addEventListener("scroll", () => {
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; apply(); });
+  }, { passive: true });
+  addEventListener("hashchange", routeHue);
+  routeHue();
+})();
 </script>
 </body>
 </html>
