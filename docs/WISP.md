@@ -1,131 +1,120 @@
-# Wisp — Product Spec v1
+# Wisp — Product Spec v2 (dev pivot, 2026-07-23)
 
-A local AI that lives on your desktop, sees what you see, and gets your work
-done. Windows-first. Formerly Rune; Sentient OS (macOS) is the inspiration,
-not the ceiling.
+**A local control plane for agentic development on Windows and WSL.**
 
-## One-line story
+Run many long-lived coding agents on your own machine with real operational
+hygiene: spawn, watch, approve, stop, resume, audit, roll back. Wisp is the
+thing everyone running Claude Code or Codex in a loop is currently improvising
+with tmux and hope.
 
-> Your computer already has everything — your files, your email, your
-> calendar, your browser, your accounts. Wisp is the intelligence layer that
-> finally uses them for you, locally.
+v1 of this spec chased a consumer assistant. That was two products sharing one
+engine, and the consumer half was the unproven one. The dev half is what this
+codebase has actually been doing in production since the Rune era. This spec
+cuts the consumer surface from the roadmap — not from ambition, from the
+roadmap.
 
-## Decisions (locked 2026-07-23)
+## The person
 
-| Decision | Choice |
+A developer who runs agentic coding sessions daily — Claude Code, Codex, or
+both — often several at once, on Windows or WSL. Their pain today:
+
+- agents die silently mid-mission and nobody notices for an hour
+- no approval gate between an agent and `git push --force`, spending, deletes
+- no durable record of what an agent actually did
+- crash/reboot means archaeology, not resume
+- credentials are one global soup shared by every agent
+- GUI automation (when agents must touch apps) is screenshot-and-pray
+
+Success metric for the next six weeks: **fifteen people in this group who
+would be annoyed if Wisp disappeared.**
+
+## Positioning
+
+- **Not** an orchestration framework (crowded) and **not** hosted
+  observability (crowded). A *local* control plane with operational teeth,
+  on the platform where tooling is weakest (Windows + WSL).
+- **Not** privacy-and-local as the headline. On Windows there is no unified-
+  memory floor; continuous local inference on a median laptop is a bad
+  experience. Local models stay an *option* (routing cheap classification),
+  never the pitch. The pitch is **structured control and honest reliability**:
+  works 95% of the time and tells you truthfully when it didn't.
+- The moat: a **UIA-native action runtime**. Windows UI Automation exposes a
+  real accessibility tree — controls, values, invocations — as structured
+  data. Acting on that tree instead of pixels is faster, cheaper, more
+  deterministic, works unfocused, and is *verifiable*: assert the button was
+  invoked and the field holds the value. Nobody has built an excellent
+  UIA-native agent runtime. That attacks the weakest part of every
+  screenshot-driven competitor.
+
+## What already exists (the Rune inheritance)
+
+| Control-plane need | Status in this repo |
 |---|---|
-| Name | **Wisp** |
-| Shell | **Electron** (tray, always-on-top mini bar, installer via electron-builder) |
-| Engine | Existing **Python stdlib backend** (`dashboard/serve.py`, 127.0.0.1:8817) as sidecar |
-| LLM | **Hybrid**: local via Ollama for text work; user's own cloud key (Claude/GPT) for vision + computer-use. Model selector in UI, start/stop controls as in Rune. |
-| Platform | Windows 11 first; macOS later |
-| Dev tools | Existing Rune agent console moves under a **Developer** section/subtab |
+| Spawn/monitor real agent sessions | `POST /api/spawn`, managed windows, focus/close, PID liveness |
+| Long-running missions w/ worker+critic revision | `orchestrator.py` conductor loops |
+| Mission planning, roles, delegation | `ceo.py` command bar → planner → role workers |
+| Approval queue for destructive actions | guard hooks + `waiting_permission` + allow/retry/deny (request-id bound, stale clicks can't approve newer requests) |
+| Resumability after crash/restart | recovery runtime: classified failures, bounded retries, `--resume`, stalled-state detection |
+| Durable audit log | `state/events.jsonl` append-only wire + mission records |
+| Rollback / safe delivery | delivery pipeline: scoped review → test → commit gates |
+| Per-agent accounts | `CLAUDE_CONFIG_DIR` per spawn + usage tracking |
+| Panic stop | `POST /api/stop-all` (process-tree kill) |
 
-Not Swift: Swift is macOS-native. The Windows equivalent of Sentient's stack
-is Python engine + Electron shell + Windows UI Automation + browser CDP.
+This is the product. The work is sharpening it, not building it.
 
 ## Architecture
 
 ```text
-┌─ Electron shell (app/) ─────────────────────────────┐
-│  tray icon · main window · mini bar (alwaysOnTop)   │
-│  global hotkey Ctrl+Shift+Space                     │
-└──────────────┬──────────────────────────────────────┘
-               │ http 127.0.0.1:8817 (same-origin)
-┌──────────────▼──────────────────────────────────────┐
-│  Python engine (dashboard/serve.py + friends)       │
-│  missions · memory/recall · hermes · guard · skills │
-│  calendar (MS Graph) · briefing · orchestrator      │
-│  NEW: llm router (ollama ⇄ cloud) · action runner   │
-└───────┬───────────────┬───────────────┬─────────────┘
-        │               │               │
-   Ollama (local)   Cloud API      Windows actions
-   text: drafts,    vision +       UIA click/type,
-   proofread,       computer-use   browser via CDP,
-   file Q&A         multi-pass     file ops, shell
+┌─ Electron shell (app/) ────────────────────────────────┐
+│  dashboard window · tray · mini bar = approval island   │
+└──────────────┬─────────────────────────────────────────┘
+               │ 127.0.0.1:8817
+┌──────────────▼─────────────────────────────────────────┐
+│  Python engine (stdlib)                                │
+│  missions · loops · recovery · guard/approvals · wire  │
+│  spawn (Windows console / WSL) · delivery · accounts   │
+│  UIA action runtime (structured, verified)             │
+└───────┬──────────────────┬─────────────────────────────┘
+        │                  │
+   agent CLIs          Windows
+   claude / codex      UIA tree · processes · win32
+   (per-agent creds)   (no screenshots on the hot path)
 ```
 
-Multi-pass revision (draft → critique → revise) already exists in
-`dashboard/orchestrator.py` (worker/critic rounds) — reuse it for the
-LLM router rather than building a new loop.
+## Roadmap (six weeks)
 
-## v1 pillars (all four selected)
+1. **Now** — reposition (this spec, README), approval queue surfaced in the
+   mini bar island, UIA runtime slice with verified actions.
+2. **Operational hygiene deepening** — per-agent credential scoping beyond
+   accounts (scoped env, secret vault via DPAPI); WSL-side spawn parity;
+   resumable-after-reboot audit trail viewer in the dashboard.
+3. **UIA runtime maturing** — tree query language, action + assertion
+   pairs agents can call as tools (MCP server exposing UIA), recorded
+   traces for replay/debugging.
+4. **Fifteen users** — ship a zip/installer, onboard people running
+   Claude Code/Codex loops, iterate on what they scream about.
+5. **UI pass** — glass design language (see design notes) applied to the
+   control-plane surfaces: missions, approvals, audit, agents.
 
-1. **Mini bar + overlay** — the identity. Tray app, close-to-tray,
-   `Ctrl+Shift+Space` toggles between the full dashboard and a floating
-   prompt bar. Scaffolded in `app/`.
-2. **Browser control** — drive the user's real Edge/Chrome over CDP
-   (`--remote-debugging-port`): read the page, select elements, fill carts,
-   click. Hybrid model: cloud vision plans, engine executes. Every
-   irreversible step (checkout, send, delete) gates on a confirm in the
-   mini bar — this is the trust story, not a limitation.
-3. **Life dashboard** — calendar (exists) + email + writing surface
-   (proofread / draft / rewrite) in one place. Gmail/Outlook via Graph +
-   Gmail API using the user's own account.
-4. **Developer subtab** — current mission tray / agent console / spawn
-   tooling relocated under a Developer section with start/stop + model
-   selection preserved.
+## Cut from the roadmap (parked, not deleted)
 
-## Feature map (beyond Sentient OS)
+Consumer surface: calendar/life dashboard, email triage, daily-brief-as-
+consumer-ritual, voice-first minibar, file concierge, watchers, form filler,
+WhatsApp/Notes readers. The code that exists stays; nothing new gets built
+here until the dev wedge has its fifteen users.
 
-Near-term, high leverage:
-- **Inbox triage**: overnight pass over email → morning digest folded into
-  the existing daily briefing (reuse briefing pipeline).
-- **File concierge**: "find the invoice from March", auto-organize Downloads,
-  summarize any document from the mini bar. Local index + local model —
-  the privacy story earns its keep here.
-- **Clipboard intelligence**: copy anything → mini bar offers rewrite,
-  reply-to, translate, extract-table.
-- **Meeting prep**: 15 min before each calendar event, a card with the
-  attendees, the last emails exchanged, and open threads.
-- **Form filler**: profile vault (local, encrypted) + browser control =
-  fills any signup/checkout/government form.
-- **Watchers**: standing instructions — "when the visa appointment page
-  changes, tell me"; "when this price drops, add to cart and ask me."
+## Naming note
 
-Later, differentiating:
-- **Routine recorder**: user does a task once while Wisp watches (screen +
-  DOM), Wisp replays it on demand — automation without prompt engineering.
-- **Cross-app memory**: hermes memory already exists; extend it to remember
-  everything Wisp saw/did so "what was that restaurant Sam mentioned?" works.
-- **Overnight machine**: Sentient's "3 AM machine" equivalent — scheduled
-  missions run while idle: triage, file organization, briefing prep.
-- **Skill store**: `skills/` registry already exists — third-party skills
-  are the ecosystem play.
+"Agent OS" framing is retired — OS signals undecided scope. It's **Wisp**:
+a small, sharp tool that runs your agents. Repo rename
+(`rune_agent_os` → `wisp`) worth doing while stars are near zero.
 
-## Startup story
+## Trust model (unchanged, now the headline)
 
-- **Wedge**: "Copilot lives in a chat box. Wisp lives on your computer."
-  Microsoft's assistant can't click your PC, read your files without
-  uploading them, or act in your logged-in browser sessions. Wisp can,
-  because it's local.
-- **Privacy as product**: local model for anything touching raw personal
-  data; cloud only for planning/vision, with redaction. "Raw data never
-  leaves" is the headline, hybrid is the fine print.
-- **Trust as UX**: every action previewed and confirmable from the mini
-  bar; a full audit log (missions tray already does this). Competitors
-  hide the agent; Wisp shows its hands.
-- **Monetization**: free local tier → paid tier for cloud-powered
-  computer-use, watchers, and overnight runs. Skills marketplace later.
-
-## Roadmap
-
-1. **Now** — repo moved + renamed, Electron shell scaffolded (done).
-2. **Backend revamp** — `engine/llm.py` router (Ollama + cloud, model
-   registry, multi-pass via orchestrator); `engine/actions.py` (UIA +
-   CDP browser control, confirm gates); email integration.
-3. **Features** — triage, file concierge, clipboard, meeting prep.
-4. **UI/UX revamp** — full glass redesign (separate pass, spec to come:
-   resizable glass panels, scroll-triggered hue shifts per feature,
-   Phantom-style hover motion, no status dots / emoji slop).
-5. **Ship** — electron-builder NSIS installer, auto-update, onboarding
-   (pick models, connect accounts), landing page.
-
-## Consent + safety model
-
-- Engine stays bound to 127.0.0.1.
-- Purchases, sends, deletes, and credential use always confirm-gate.
-- Account credentials in Windows Credential Manager (DPAPI), never in repo
-  state files.
-- Browser control uses the user's own logged-in profile — Wisp never
-  stores passwords for sites, it acts where you're already signed in.
+- Engine binds 127.0.0.1 only; that is the security boundary.
+- Destructive/outward/spending/credential actions require explicit approval,
+  bound to a request id; automation can never self-approve.
+- Every observable action lands on the append-only wire; if it's not on the
+  wire, it didn't happen.
+- Honest failure: classified errors, bounded retries, and stalled states are
+  surfaced as stalled — never silently rewritten as success.
