@@ -4,14 +4,14 @@
 
 # Wisp
 
-**A local AI that lives on your desktop, sees what you see, and gets your work done.**
+**A local control plane for agentic development on Windows and WSL.**
 
-*It knows your files, your calendar, your browser — and it acts, right on your screen.*
+*Run many long-lived coding agents on your own machine — spawn, watch, approve, stop, resume, audit, roll back.*
 
-[![Windows](https://img.shields.io/badge/Windows_11-first-0078D4?logo=windows11&logoColor=white)](docs/WISP.md)
-[![Engine](https://img.shields.io/badge/engine-Python_stdlib-3776AB?logo=python&logoColor=white)](dashboard/serve.py)
+[![Windows](https://img.shields.io/badge/Windows_+_WSL-first-0078D4?logo=windows11&logoColor=white)](docs/WISP.md)
+[![Engine](https://img.shields.io/badge/engine-Python_stdlib,_zero_deps-3776AB?logo=python&logoColor=white)](dashboard/serve.py)
 [![Shell](https://img.shields.io/badge/shell-Electron-47848F?logo=electron&logoColor=white)](app/)
-[![LLM](https://img.shields.io/badge/LLM-local_+_cloud_hybrid-6A2E8A)](docs/WISP.md)
+[![Agents](https://img.shields.io/badge/agents-Claude_Code_·_Codex-6A2E8A)](docs/WISP.md)
 [![License](https://img.shields.io/badge/license-MIT-1a1a1a)](LICENSE)
 
 <br/>
@@ -25,35 +25,45 @@
 
 ---
 
-## What is Wisp
+## The problem
 
-Copilot lives in a chat box. **Wisp lives on your computer.**
+Everyone running Claude Code or Codex in a loop is improvising operational
+hygiene with tmux and hope. Agents die silently mid-mission. Nothing stands
+between an agent and `git push --force`. There's no durable record of what an
+agent actually did, no resume after a crash, and every agent shares one
+credential soup.
 
-Wisp is a desktop AI assistant with a real body on your machine: a tray app,
-a full dashboard, and an always-on-top **mini bar** — a dynamic island for
-Windows. Ask it by typing or by voice. It reads your real life (files,
-calendar, mail), drives your real browser, and every risky action stops for
-your confirmation first.
+Wisp is the missing control plane — local, on the platform where the tooling
+is weakest.
 
-The raw personal data stays on your machine: a local model handles anything
-touching it, and the cloud is only consulted for planning and vision — with
-your own API key, under your control.
-
-<div align="center">
-
-<!-- demo video: minibar voice + browser control clip -->
-<img src="docs/media/minibar.gif" width="640" alt="Mini bar demo — coming soon" />
-
-</div>
-
-## The pillars
+## What it does
 
 | | |
 |---|---|
-| **Mini bar** | Always-on-top glass bar. Global hotkey, mic with Whisper, live agent activity, popup briefs — the dynamic island for Windows. |
-| **Browser control** | Drives your signed-in Edge/Chrome over CDP: reads pages, selects, fills carts, clicks. Irreversible steps confirm-gate in the bar. |
-| **Life dashboard** | Calendar, mail, briefing, and a writing surface in one place — with add-your-own widget rows. |
-| **Developer console** | The full agent orchestration workbench — spawn, monitor, intervene, recover — one tab over. |
+| **Spawn + watch** | Launch real Claude Code / Codex sessions (console or headless), track liveness by PID, focus or kill any of them from one surface. |
+| **Missions** | Long-running worker/critic revision loops with per-round logs, honest failure classification, bounded retries, and resume via `--resume`. |
+| **Approval queue** | Destructive, outward, spending, and credential actions pause as `waiting_permission`. Allow/retry/deny is bound to a request id — a stale click can never approve a newer request. Approvals reachable from the always-on-top mini bar. |
+| **Audit wire** | Every observable action lands on an append-only event log. If it's not on the wire, it didn't happen. |
+| **Safe delivery** | Scoped review → test → commit gates between an agent's work and your branch. |
+| **Panic stop** | One call stops every live loop and mission, process-tree deep. |
+| **UIA actions** | When agents must touch Windows apps: structured UI Automation — read the accessibility tree, invoke controls, then *verify* the click landed and the field holds the value. No screenshots on the hot path. |
+
+<div align="center">
+
+<!-- demo video: approval-island clip -->
+<img src="docs/media/minibar.gif" width="640" alt="Approval island demo — coming soon" />
+
+</div>
+
+## Why UIA and not screenshots
+
+Screenshot-driven computer use is slow, expensive per action, and brittle.
+Windows exposes a real accessibility tree — controls, values, invocations —
+as structured data. Acting on that tree is faster, cheaper, deterministic,
+works when the window isn't focused, and is **verifiable**: Wisp asserts the
+action actually took effect and reports honestly when it didn't. Reliability
+is the unsolved problem in agents; *works and admits failure* beats *reads
+your whole life*.
 
 ## Quickstart
 
@@ -61,7 +71,7 @@ your own API key, under your control.
 # engine only (browser dashboard)
 python dashboard/serve.py        # -> http://127.0.0.1:8817/dashboard/
 
-# the real thing (desktop app)
+# desktop app (tray + approval island)
 cd app && npm install && npm start
 ```
 
@@ -72,42 +82,39 @@ cd app && npm install && npm start
 ```mermaid
 flowchart TB
     subgraph shell["Electron shell — app/"]
-        tray["Tray"] ~~~ main["Dashboard window"] ~~~ bar["Mini bar"]
+        main["Control-plane dashboard"] ~~~ bar["Mini bar / approval island"]
     end
-    subgraph engine["Python engine — 127.0.0.1 only"]
-        missions["Missions + orchestrator"] ~~~ memory["Memory + recall"]
-        calendar["Calendar + briefing"] ~~~ guard["Guard + approvals"]
+    subgraph engine["Python engine — 127.0.0.1 only, zero deps"]
+        missions["Missions + conductor loops"] ~~~ guard["Guard + approval queue"]
+        wire["Append-only audit wire"] ~~~ delivery["Safe delivery gates"]
     end
-    subgraph intelligence["Intelligence"]
-        local["Local model (Ollama)"] ~~~ cloud["Cloud (your key)"]
+    subgraph agents["Your agents"]
+        claude["Claude Code"] ~~~ codex["Codex CLI"]
     end
-    subgraph world["Your computer"]
-        files["Files"] ~~~ browser["Browser (CDP)"] ~~~ apps["Apps (UIA)"]
+    subgraph windows["Windows"]
+        uia["UIA tree (structured, verified)"] ~~~ proc["Processes / consoles / WSL"]
     end
     shell --> engine
-    engine --> intelligence
-    engine --> world
+    engine --> agents
+    engine --> windows
 ```
 
-The engine is dependency-free Python stdlib, binds to localhost only, and
-runs fine without the shell. The shell makes it a citizen of your desktop.
-Full spec: [`docs/WISP.md`](docs/WISP.md).
+The engine is dependency-free Python stdlib and binds to localhost only —
+that is the security boundary. Full spec: [`docs/WISP.md`](docs/WISP.md).
 
-## Trust model
+## Honest reliability, as policy
 
-- **Local-first**: raw personal data is processed by the local model.
-- **Confirm gates**: purchases, sends, deletes, and credential use always
-  pause for you — in the mini bar, one keypress away.
-- **Shown hands**: every mission, every action, in an auditable activity
-  tray. Wisp never works behind your back.
-- **Localhost boundary**: the engine never listens beyond 127.0.0.1.
+- Classified failures, bounded retries, interruptible backoff — transient
+  errors retry, everything else surfaces.
+- A server restart mid-loop shows as `stalled`, never silently rewritten.
+- Automation can never self-approve; permission states are operator-only.
+- Late worker output cannot overwrite a stopped state.
 
 ## Status
 
-Wisp is mid-metamorphosis from [Rune](docs/WISP.md), an agent-orchestration
-workbench that ran real multi-agent coding missions daily. The orchestration
-core is battle-tested; the desktop body is new. Windows 11 first, macOS
-after.
+The orchestration core ran real multi-agent coding missions daily in its
+previous life as Rune. The control-plane surface and UIA runtime are being
+sharpened in the open. Windows + WSL first.
 
 <div align="center">
 
