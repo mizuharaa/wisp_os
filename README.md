@@ -1,229 +1,116 @@
-# Rune — Agentic OS
+<div align="center">
 
-Rune is a local control surface for memory, guarded automation, specialist
-agents, account health, Microsoft Calendar, and an executive daily briefing.
-It uses Python 3's standard library and binds its dashboard to `127.0.0.1`.
-MIT licensed.
+<img src="app/icon.png" width="72" alt="Wisp" />
+
+# Wisp
+
+**A local AI that lives on your desktop, sees what you see, and gets your work done.**
+
+*It knows your files, your calendar, your browser — and it acts, right on your screen.*
+
+[![Windows](https://img.shields.io/badge/Windows_11-first-0078D4?logo=windows11&logoColor=white)](docs/WISP.md)
+[![Engine](https://img.shields.io/badge/engine-Python_stdlib-3776AB?logo=python&logoColor=white)](dashboard/serve.py)
+[![Shell](https://img.shields.io/badge/shell-Electron-47848F?logo=electron&logoColor=white)](app/)
+[![LLM](https://img.shields.io/badge/LLM-local_+_cloud_hybrid-6A2E8A)](docs/WISP.md)
+[![License](https://img.shields.io/badge/license-MIT-1a1a1a)](LICENSE)
+
+<br/>
+
+<!-- demo video: drop docs/media/hero.gif (or an mp4 link) here -->
+<img src="docs/media/hero.gif" width="820" alt="Wisp demo — coming soon" />
+
+*Demo videos landing here soon.*
+
+</div>
+
+---
+
+## What is Wisp
+
+Copilot lives in a chat box. **Wisp lives on your computer.**
+
+Wisp is a desktop AI assistant with a real body on your machine: a tray app,
+a full dashboard, and an always-on-top **mini bar** — a dynamic island for
+Windows. Ask it by typing or by voice. It reads your real life (files,
+calendar, mail), drives your real browser, and every risky action stops for
+your confirmation first.
+
+The raw personal data stays on your machine: a local model handles anything
+touching it, and the cloud is only consulted for planning and vision — with
+your own API key, under your control.
+
+<div align="center">
+
+<!-- demo video: minibar voice + browser control clip -->
+<img src="docs/media/minibar.gif" width="640" alt="Mini bar demo — coming soon" />
+
+</div>
+
+## The pillars
+
+| | |
+|---|---|
+| **Mini bar** | Always-on-top glass bar. Global hotkey, mic with Whisper, live agent activity, popup briefs — the dynamic island for Windows. |
+| **Browser control** | Drives your signed-in Edge/Chrome over CDP: reads pages, selects, fills carts, clicks. Irreversible steps confirm-gate in the bar. |
+| **Life dashboard** | Calendar, mail, briefing, and a writing surface in one place — with add-your-own widget rows. |
+| **Developer console** | The full agent orchestration workbench — spawn, monitor, intervene, recover — one tab over. |
 
 ## Quickstart
 
-```text
-python bootstrap.py
-python bootstrap.py boot
-python desktop.py
-# or: python dashboard/serve.py
+```bash
+# engine only (browser dashboard)
+python dashboard/serve.py        # -> http://127.0.0.1:8817/dashboard/
+
+# the real thing (desktop app)
+cd app && npm install && npm start
 ```
 
-Open `http://127.0.0.1:8817/dashboard/` when running the server directly.
+`Ctrl+Shift+Space` summons the mini bar from anywhere.
 
-The dashboard starts with an operator overview:
+## Architecture
 
-- **Mission activity** is a bounded, collapsible tray. Running work always
-  exposes Stop/Open; recoverable work exposes Continue; finished work can be
-  dismissed without moving the rest of the page. **Open** routes to the exact
-  mission, expands completed history when needed, and focuses the matching
-  record even when Agent console is already open.
-- **Microsoft Calendar** shows the next Outlook event on Overview and provides
-  full Month, Week, Day, and Agenda views on the Calendar route.
-- **Daily briefing** shows three specific, high-impact changes selected from
-  three different repositories.
-- **Automation radar** ranks review-first workflow suggestions from the same
-  deterministic coach available at `/api/workflows`.
-
-## Operator workbench
-
-Rune is organized around four operator verbs: launch, monitor, intervene, and
-recover. Mission state is never color-only, every overlay closes with Escape,
-and the global mission tray is internally scrollable instead of appending an
-unbounded conversation to the document. **Stop active** terminates running
-process trees; **Clear completed** only clears presentation state.
-
-The interface tokens and interaction contract live in `tokens.css` and
-`design.md`. The palette uses warm paper surfaces with high-contrast royal
-plum actions and separate success, retry, permission, and failure treatments.
-
-## Microsoft Calendar
-
-Rune uses Microsoft Graph device-code authentication with the delegated
-`Calendars.Read` scope. Add the public-client application id to the gitignored
-`state/pulse.json`:
-
-```json
-{
-  "outlook": {
-    "client_id": "<Azure application id>",
-    "tenant": "common",
-    "timezone": "SE Asia Standard Time"
-  }
-}
+```mermaid
+flowchart TB
+    subgraph shell["Electron shell — app/"]
+        tray["Tray"] ~~~ main["Dashboard window"] ~~~ bar["Mini bar"]
+    end
+    subgraph engine["Python engine — 127.0.0.1 only"]
+        missions["Missions + orchestrator"] ~~~ memory["Memory + recall"]
+        calendar["Calendar + briefing"] ~~~ guard["Guard + approvals"]
+    end
+    subgraph intelligence["Intelligence"]
+        local["Local model (Ollama)"] ~~~ cloud["Cloud (your key)"]
+    end
+    subgraph world["Your computer"]
+        files["Files"] ~~~ browser["Browser (CDP)"] ~~~ apps["Apps (UIA)"]
+    end
+    shell --> engine
+    engine --> intelligence
+    engine --> world
 ```
 
-Then sign in once and restart the dashboard:
+The engine is dependency-free Python stdlib, binds to localhost only, and
+runs fine without the shell. The shell makes it a citizen of your desktop.
+Full spec: [`docs/WISP.md`](docs/WISP.md).
 
-```text
-python dashboard/pulse.py --outlook-login
-python dashboard/serve.py
-```
+## Trust model
 
-The pulse refreshes Outlook in the background and atomically retains the last
-good calendar snapshot when a refresh fails. It keeps 35 days behind and 92
-days ahead, including event end times and source links. The same data powers
-the overview card, all four Calendar views, `/api/pulse`, and the range-aware
-`/api/calendar?start=YYYY-MM-DD&days=N` endpoint. Navigation outside the
-synced window stays honest: the UI shows a coverage notice rather than
-inventing empty availability.
+- **Local-first**: raw personal data is processed by the local model.
+- **Confirm gates**: purchases, sends, deletes, and credential use always
+  pause for you — in the mini bar, one keypress away.
+- **Shown hands**: every mission, every action, in an auditable activity
+  tray. Wisp never works behind your back.
+- **Localhost boundary**: the engine never listens beyond 127.0.0.1.
 
-## Recovery and workflow learning
+## Status
 
-CEO planning and workers classify failures before acting. Transient transport
-or capacity failures retry with bounded, interruptible backoff. Missing
-credentials and explicit operator requests pause as `waiting_permission`, even
-when a provider exits normally instead of returning an error. Mission Activity
-persists the exact request and offers **Allow & resume**, **Retry after fixing**,
-or **Deny & skip** after the worker exits. Allow is bound to the displayed
-request, mission, and role; stale clicks cannot approve a newer request.
-Credential/login requests cannot be authorized in Rune and remain Retry-only.
-Ordinary task failures may receive
-at most two local, reversible fixer cycles, after which the original role must
-pass again as verification. Stops terminate the whole process tree on Windows
-and POSIX, and a late worker response cannot overwrite a stopped state.
+Wisp is mid-metamorphosis from [Rune](docs/WISP.md), an agent-orchestration
+workbench that ran real multi-agent coding missions daily. The orchestration
+core is battle-tested; the desktop body is new. Windows 11 first, macOS
+after.
 
-When a Claude worker returns an actual weekly/capacity-limit error, Rune can
-switch that unfinished role to the local Codex CLI once. The fallback requires
-an installed, authenticated Codex CLI with available 5-hour and weekly
-capacity, uses GPT-5.6 Sol, preserves the mission worktree and safe/skip
-permission mode, and never reuses the incompatible Claude session id. The role
-shows the Claude → Codex handoff and result in Agent console. If Codex is not
-ready, Rune records why and keeps the normal retry budget bounded.
+<div align="center">
 
-Automatic recovery never approves destructive, outward-facing, credential, or
-spending decisions. Completed roles and resumable worker sessions are retained
-across recovery and server restart. Only verified, nontrivial, secret-redacted
-repair evidence is eligible for a Hermes note.
+MIT · built in the open
 
-Two candidate skills support this loop:
-
-- `recovery-supervisor` explains and performs bounded mission recovery.
-- `workflow-coach` analyzes repeated actions, short sequences, and
-  failure/recovery patterns. Suggestions require at least three observations,
-  include evidence/confidence, and are always advisory-only.
-
-Run the coach directly with:
-
-```text
-python skills/workflow-coach/scripts/analyze.py
-python skills/workflow-coach/scripts/analyze.py --json
-```
-
-## Brain proof and retention
-
-Rune now queries Hermes deterministically before CEO planning, direct workers,
-dashboard chat, and ordinary Claude prompts. The model does not decide whether
-to search. Every attempt writes a bounded, secret-safe receipt containing the
-query and corpus fingerprints, ranked card IDs and scores, ranking guards,
-prompt destination, and estimated context inserted. Mission outcomes are linked
-later as correlation only. Receipts prove retrieval and prompt insertion; they
-cannot prove that a model followed a card or measure counterfactual tokens saved.
-
-The Brain page exposes those receipts and has **Verify retrieval**, which runs
-the production ranker without calling a model or counting the check as reuse.
-`GET /api/brain` returns the same proof plus storage health, and
-`POST /api/brain/query` performs the no-model verification.
-
-Hermes admits reusable evidence rather than every transcript. Verified root
-causes, recipes, mechanisms, and guardrails score positively; raw logs, one-off
-status, vague fixes, unresolved failures, and dumps are quarantined. Trusted
-near-duplicates reinforce one card, while low-quality duplicates cannot inflate
-retention. Hit count is telemetry and has zero ranking weight. Active cards,
-quarantine, usage, receipt, and compressed archive stores all have explicit
-count/byte limits; once preservation space is exhausted, new candidates are
-rejected explicitly instead of growing the SSD indefinitely.
-
-Inspect the policy from the CLI:
-
-```text
-python hermes/hermes.py stats --json
-python hermes/hermes.py query --json "a problem to reproduce"
-python hermes/hermes.py note "problem" "verified reusable solution" --tags debugging,reusable --source manual --json
-```
-
-## Daily briefing
-
-The briefing analyzes the previous **local calendar day**. Git history from all
-branches, changed paths and stats, recent working-tree signals, and bounded
-TODO/README context are private evidence for planning. Raw evidence and commit
-messages are not persisted or rendered.
-
-Each generated batch contains exactly three priorities, one per repository.
-Every collapsed card shows the outcome and first move. **View more** reveals a
-short CEO plan, definition of done, and two to four animated role cards with a
-clear mission and deliverable. Agent cards are plans only; generation never
-executes or edits the selected repositories.
-
-Use Fable 5 or GPT-5.6 Sol for the brainstorm and choose an effort from `low`,
-`medium`, `high`, `xhigh`, or `max`. Each planned agent can then have its own
-model and effort changed from the card. **Generate 3 more** appends another
-validated batch without repeating an existing repository/title pair.
-
-An expanded priority has two deliberately separate execution controls.
-**Run this plan** keeps native permission handling and lets the CEO restaff the
-saved suggestions. **Run · skip permissions** asks for confirmation on every
-click, then runs the saved cards headlessly with their selected providers:
-Claude models receive `--dangerously-skip-permissions`, while GPT-5.6 Sol uses
-Codex with `--yolo`. This bypass applies to that run only. The server derives
-the provider, model, working directory, and command from the saved plan; the
-browser cannot submit them. Progress and Stop remain available in Mission
-Activity. The selected provider policy remains authoritative for initial,
-resumed, and recovery workers. Rune's independent Maestro guard still pauses
-protected outward, destructive, spending, and soul-write actions; Mission
-Activity can grant a short-lived approval scoped to that exact mission, role,
-and recorded action.
-
-Successful CEO runs leave the active queue automatically and remain in
-**Completed & delivery** history; failed, stopped, exhausted, and
-permission-blocked runs stay active so they can be resumed. Completed briefing
-priorities likewise move into **Completed plans**, where they can be reopened or
-run again. Each completed mission has an explicit **Review → Tests → Commit →
-Push** lane. Review shows a redacted tracked/untracked change report, tests use a
-server-detected project command, commit includes only server-attributed paths,
-and push requires a fresh second confirmation and never force-pushes. If a
-repository was already dirty when the mission started, review and tests remain
-available but automatic commit is disabled to avoid mixing unrelated work.
-
-Run it on demand:
-
-```text
-briefing.cmd
-python daily_briefing.py scheduled
-python daily_briefing.py generate --date yesterday
-python daily_briefing.py generate --date yesterday --model gpt-5.6-sol --effort max
-python daily_briefing.py generate --date yesterday --more
-```
-
-The production schedule is **09:30 local time every day**, using Windows Task
-Scheduler to run `briefing.cmd`. The shared `scheduled` command freezes the
-source date belonging to the latest 09:30 cycle, so a delayed run cannot drift
-across midnight. The dashboard server also checks on boot and every minute for
-a missed cycle. Attempts are durable, failures keep the last good plan visible,
-and automatic retries wait 15 minutes. The dashboard's **Ensure current** action
-uses that same deduplicated catch-up path: it queues one background model run
-only when the current cycle is missing or overdue, and otherwise reports the
-fresh, running, or retry-wait state without starting a duplicate. See
-`OPERATOR.md` for setup and verification.
-
-## Core layers
-
-| Layer | Location | Purpose |
-|---|---|---|
-| Identity | `soul/` | Hand-maintained mission and operating character. Automated writes are guarded. |
-| Rules | `.claude/hooks/` | Approval guard plus the append-only event wire. |
-| Skills | `skills/` | Earned capabilities, recovery guidance, and advisory workflow coaching. |
-| Agents | `.claude/agents/` | Specialist roster used only when work is deliberately delegated. |
-| Memory | `memory/`, `hermes/` | Obsidian pipeline and reusable solved-problem notes. |
-| Morning data | `dashboard/pulse.py`, `daily_briefing.py` | Calendar sync and the plan-only, cross-repository briefing. |
-| Console | `dashboard/` | High-contrast vanilla workbench with a Python stdlib API server and shared recovery runtime. |
-
-Operational execution events still flow through `state/events.jsonl`. Briefing
-generation is intentionally separate: it persists its validated plan in
-`state/briefing.json` and does not manufacture execution events. An explicit
-Run action creates a normal tracked CEO mission and emits its usual activity.
+</div>
