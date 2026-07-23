@@ -77,6 +77,12 @@ cd app && npm install && npm start
 
 `Ctrl+Shift+Space` summons the mini bar from anywhere.
 
+```bash
+# see the UIA runtime prove itself (drives Calculator via automation ids,
+# asserts the display — no pixels involved)
+pip install pywinauto && python test_uia_runtime.py
+```
+
 ## Architecture
 
 ```mermaid
@@ -113,8 +119,14 @@ that is the security boundary. Full spec: [`docs/WISP.md`](docs/WISP.md).
 ## Status
 
 The orchestration core ran real multi-agent coding missions daily in its
-previous life as Rune. The control-plane surface and UIA runtime are being
-sharpened in the open. Windows + WSL first.
+previous life as Rune. The UIA runtime is live — `/api/uia/windows`,
+`/api/uia/tree`, `/api/uia/act`, `/api/uia/read`, every action verified by
+readback — with a green self-check driving Calculator end to end. The
+approval island and control-plane surface are being sharpened in the open.
+Windows + WSL first.
+
+Near-term: per-agent credential scoping (DPAPI), WSL spawn parity, UIA
+act/assert pairs exposed as agent tools over MCP, installer.
 
 <div align="center">
 
