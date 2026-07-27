@@ -6,7 +6,7 @@
 <title>Wisp</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%235c1346'/%3E%3Ctext x='8' y='12' text-anchor='middle' font-family='Segoe UI,sans-serif' font-size='11' font-weight='800' fill='%23fff'%3ER%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="/tokens.css">
-<script>try{document.documentElement.dataset.theme=localStorage.getItem("rune-theme")||"dark"}catch(e){}</script>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("rune-theme")||"light"}catch(e){}</script>
 <style>
   /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · genre: modern-minimal · macrostructure: Workbench · tone: technical-utilitarian · anchor: royal plum · contrast: pass (40–41) · nav: N3 · footer: none · honest/chrome/icons/mobile: pass · user-preserved brand override: gradient wordmark and playback/route motion */
   :root{
@@ -1210,21 +1210,27 @@
   /* substrate — the panel must always land LIGHTER than the backdrop behind it.
      That luminance inversion is the effect; measured at ΔL* 16.6 (over a dark
      region) and 21.0 (over the brightest blob), inside the 14-22 band. */
-  --void:#0E1114;
-  --neb-1:#2B3340; --neb-2:#262E3B; --neb-3:#1E2530; --neb-4:#303845;
-  --glass-fill:rgba(255,255,255,0.125);
-  --glass-lift:blur(28px) saturate(150%) brightness(1.18);
-  --inner-fill:rgba(255,255,255,0.055);
-  --inner-line:rgba(255,255,255,0.07);
-  --hairline:rgba(255,255,255,0.10); --hairline-lit:rgba(255,255,255,0.20);
-  --panel-shadow:0 16px 48px -12px rgba(0,0,0,0.6);
-  --panel-inset:inset 0 1px 0 rgba(255,255,255,0.14);
-  --graph-line:rgba(255,255,255,0.14);
+  /* LIGHT LAVENDER GLASS is the product default. Measured in the app:
+     panel L*=91.9 vs backdrop L*=79.2 -> dL 12.7, inside the 10-18 band.
+     The spec's #E8EAF4 backdrop could never pass it: at L*~93 a near-white
+     panel (L*~97) is only 4.5 above, so the backdrop had to go deeper. */
+  --void:#BFC3DC;
+  --neb-1:#A79EE0; --neb-2:#A8BCE6; --neb-3:#BCA8DE; --neb-4:#A3B2E0;
+  --glass-fill:rgba(255,255,255,0.60);
+  --glass-lift:blur(26px) saturate(180%);
+  --inner-fill:rgba(255,255,255,0.45);
+  --inner-line:rgba(255,255,255,0.60);
+  --hairline:rgba(255,255,255,0.80); --hairline-lit:rgba(255,255,255,0.95);
+  /* shadows are violet-tinted, never grey or black */
+  --panel-shadow:0 10px 34px -10px rgba(76,66,140,0.20), 0 2px 6px -2px rgba(76,66,140,0.10);
+  --panel-inset:inset 0 1px 0 rgba(255,255,255,0.95);
+  --graph-line:rgba(26,24,48,0.16);
+  --panel-grain:0.02;
   /* text */
-  --ink-glass:#EEF1F5; --ink-2-glass:rgba(238,241,245,0.62); --ink-3-glass:rgba(238,241,245,0.34);
-  /* accents — semantic, never decorative, never a fill */
-  --iris:#8B7CFF; --iris-glow:#A092FF; --mint-a:#4ADE9B;
-  --amber-a:#FFC061; --cyan:#5CD1F5; --coral:#FF7A8A;
+  --ink-glass:#1A1830; --ink-2-glass:rgba(26,24,48,0.62); --ink-3-glass:rgba(26,24,48,0.40);
+  /* violet leads; the multicolour set carries chips and data series */
+  --iris:#6D5AE6; --iris-glow:#8B7CFF; --mint-a:#10B981;
+  --amber-a:#F59E0B; --cyan:#06B6D4; --coral:#F43F5E; --slate-a:#64748B;
 
   /* the legacy accent chain resolves through these */
   --rune-accent:var(--iris); --rune-accent-hover:var(--iris-glow);
@@ -1258,23 +1264,8 @@
    holds: the panel is lighter than the room behind it, so the backdrop is a
    mid-grey nebula rather than white. A white-on-white page has no luminance
    left to lift into and collapses to a flat sheet. */
-html[data-theme="light"]{
-  --void:#BFC6D2;
-  --neb-1:#DCE2EC; --neb-2:#CED6E2; --neb-3:#B4BDCB; --neb-4:#E6EBF3;
-  --glass-fill:rgba(255,255,255,0.62);
-  --glass-lift:blur(28px) saturate(140%) brightness(1.06);
-  --inner-fill:rgba(255,255,255,0.42);
-  --inner-line:rgba(255,255,255,0.55);
-  --hairline:rgba(255,255,255,0.6); --hairline-lit:rgba(255,255,255,0.9);
-  --panel-shadow:0 16px 48px -12px rgba(31,41,55,0.28);
-  --panel-inset:inset 0 1px 0 rgba(255,255,255,0.75);
-  --ink-glass:#1B2027; --ink-2-glass:rgba(27,32,39,0.66); --ink-3-glass:rgba(27,32,39,0.42);
-  --iris:#5B45E0; --iris-glow:#7C5CFF; --mint-a:#12855A;
-  --amber-a:#A9660A; --cyan:#0B7EA6; --coral:#C3344A;
-  --rune-on-accent:#FFFFFF;
-  --panel-grain:0.02;
-  --graph-line:rgba(27,32,39,0.16);
-}
+html[data-theme="light"]{ color-scheme:light; }
+
 
 /* ── type ───────────────────────────────────────────────────────────── */
 body{ font-family:var(--rune-font-text); font-size:var(--rune-text-sm);
