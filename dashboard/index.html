@@ -1649,6 +1649,29 @@ img[src=""],img:not([src]){ display:none; }
   padding:10px 0; }
 hr{ display:none; }
 
+/* ── agent console: one chat box, everything else behind Expand ─────── */
+.chatwrap{ margin-bottom:24px; }
+.chatsug{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.chatsug button{ height:30px; padding:0 12px; border-radius:999px; font-size:12px;
+  background:var(--inner-fill); border:1px solid var(--inner-line); color:var(--ink-2-glass); }
+.chatsug button:hover{ color:var(--ink-glass); border-color:var(--hairline-lit); }
+.composer{ display:flex; align-items:flex-end; gap:10px; padding:12px 12px 12px 18px;
+  border-radius:20px; background:var(--glass-fill);
+  -webkit-backdrop-filter:var(--glass-lift); backdrop-filter:var(--glass-lift);
+  border:1px solid var(--hairline); border-top-color:var(--hairline-lit);
+  box-shadow:var(--panel-inset), var(--panel-shadow); }
+.composer textarea{ flex:1; min-width:0; background:none; border:0; outline:0; resize:none;
+  color:var(--ink-glass); font:inherit; font-size:15px; line-height:1.5;
+  max-height:180px; padding:7px 0; }
+.composer-actions{ display:flex; align-items:center; gap:8px; flex:none; }
+.orchsheet{ position:fixed; inset:0; z-index:90; overflow:auto; padding:60px 24px 24px;
+  background:color-mix(in srgb,var(--void) 62%,transparent);
+  -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); }
+.orchsheet[hidden]{ display:none; }
+.orchsheet-head{ display:flex; align-items:center; gap:12px; max-width:1120px; margin:0 auto 16px; }
+.orchsheet-head h3{ flex:1; margin:0; }
+.orchsheet>.grid,.orchsheet>.card{ max-width:1120px; margin-inline:auto; }
+
 /* ── controls ───────────────────────────────────────────────────────── */
 /* every button carries the same surface; only the primary is filled */
 .btn,.tbtn,.mode,.cal-arrow,.cbtn,.cnavb,.graph-tool,#burger,button.topstat{
@@ -1930,10 +1953,27 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
     <!-- ============ AGENT CONSOLE ============ -->
     <section class="page" id="p-instances">
       <div class="titlerow"><div><h1>Agent console</h1><div class="sub">Every agent — CEO missions, loops, terminals — launched and monitored from one place.</div></div><div class="spacer"></div><button type="button" class="btn line sm instance-chat" id="instancechat" aria-expanded="false" aria-controls="chatpanel">Ask Wisp</button></div>
+            <!-- chat-first console: one box, suggestions, and everything advanced
+           behind Expand. The old multi-field launcher moved into the sheet. -->
+      <div class="chatwrap">
+        <div class="chatsug" id="chatsug"></div>
+        <div class="composer" id="composer">
+          <textarea id="chatinput" rows="1" placeholder="Ask Wisp to do something…"></textarea>
+          <div class="composer-actions">
+            <button type="button" class="tbtn" id="chatopts" title="Model, effort and account" aria-label="Options">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></button>
+            <button type="button" class="tbtn" id="chatexpand" title="Advanced orchestration" aria-label="Expand">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
+            <button type="button" class="btn solid" id="chatsend">Send</button>
+          </div>
+        </div>
+      </div>
       <div class="card" style="margin-bottom:14px">
         <h3>CEO missions <span class="tag">active work stays above · completed work moves into review and delivery</span></h3>
         <div id="ceoruns2" style="padding-top:12px"></div>
       </div>
+      <div class="orchsheet" id="orchsheet" hidden>
+        <div class="orchsheet-head"><h3>Advanced orchestration</h3><button type="button" class="tbtn" id="orchclose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="grid cols-2" style="margin-bottom:14px">
         <div class="card deck">
           <h3>Launch <span class="tag">runs on this repo with hooks live</span></h3>
@@ -2002,6 +2042,7 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
         <h3>Outside sessions <span class="tag">wire telemetry from sessions Wisp didn't launch</span>
           <button class="btn line sm" id="wire-sessions-clear-all" hidden>Clear all</button></h3>
         <div class="icards" id="wire-sessions"></div>
+      </div>
       </div>
     </section>
 
@@ -5105,6 +5146,66 @@ route();poll();loadCalendarRange();setInterval(poll,2500);
       setTimeout(()=>{ shell.style.cssText = ""; }, 60);   // restore plays on the way back in
     });
   }
+
+  /* ---------- agent console: chat composer ──────────────────────────────
+     One submit path: the composer hands off to the command bar's cmdSend, so
+     the CEO route, the option set and the mission tray all stay single-source. */
+  (function(){
+    const input = document.getElementById("chatinput");
+    if (!input) return;
+    const sugWrap = document.getElementById("chatsug");
+    const SUGGESTIONS = [
+      "Write a report about what changed this week",
+      "Audit the wire for repeated manual work",
+      "Find every TODO and rank them by impact",
+      "Review the delivery pipeline for stuck missions",
+    ];
+    sugWrap.innerHTML = SUGGESTIONS.map(s =>
+      `<button type="button">${s}</button>`).join("");
+    sugWrap.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      input.value = b.textContent; input.focus(); grow(); typing = false;
+    });
+
+    // typewriter placeholder, paused the moment the operator starts typing
+    let ti = 0, tp = 0, del = false, typing = true;
+    (function type(){
+      if (!typing || document.activeElement === input){ setTimeout(type, 900); return; }
+      const ex = SUGGESTIONS[ti % SUGGESTIONS.length];
+      tp += del ? -1 : 1;
+      input.setAttribute("placeholder", ex.slice(0, tp) || "Ask Wisp to do something…");
+      let wait = del ? 16 : 42;
+      if (!del && tp >= ex.length){ del = true; wait = 1800; }
+      else if (del && tp <= 0){ del = false; ti++; wait = 500; }
+      setTimeout(type, wait);
+    })();
+
+    function grow(){ input.style.height = "auto";
+      input.style.height = Math.min(input.scrollHeight, 180) + "px"; }
+    input.addEventListener("input", grow);
+    input.addEventListener("focus", ()=>{ typing = false;
+      input.setAttribute("placeholder", "Ask Wisp to do something…"); });
+
+    function send(){
+      const text = input.value.trim();
+      if (!text) return;
+      const bar = document.getElementById("cmdinput");
+      if (bar && typeof cmdSend === "function"){ bar.value = text; cmdSend(); }
+      input.value = ""; grow();
+    }
+    document.getElementById("chatsend").onclick = send;
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); }
+    });
+
+    const sheet = document.getElementById("orchsheet");
+    const openSheet = ()=>{ sheet.hidden = false; };
+    document.getElementById("chatexpand").onclick = openSheet;
+    document.getElementById("chatopts").onclick = openSheet;
+    document.getElementById("orchclose").onclick = ()=>{ sheet.hidden = true; };
+    sheet.addEventListener("click", e => { if (e.target === sheet) sheet.hidden = true; });
+    addEventListener("keydown", e => { if (e.key === "Escape") sheet.hidden = true; });
+  })();
 
   /* ---------- the rail: opening it displaces the content column ---------- */
   (function(){
