@@ -49,7 +49,9 @@ function createMainWindow() {
     show: false,
     autoHideMenuBar: true,
     icon: path.join(__dirname, "icon.png"),
-    backgroundColor: "#111013",
+    backgroundColor: "#08090C",
+    frame: false,                 // the Island floats where the titlebar was
+    webPreferences: { preload: path.join(__dirname, "preload.js") },
   });
   mainWin.loadURL(BASE + "/dashboard/");
   mainWin.once("ready-to-show", () => {
@@ -113,6 +115,12 @@ ipcMain.on("minibar:resize", (_e, height) => {
   const h = Math.max(56, Math.min(560, Math.round(Number(height) || 56)));
   const b = miniBar.getBounds();
   if (b.height !== h) miniBar.setBounds({ ...b, height: h });
+});
+ipcMain.on("win:close", () => mainWin && mainWin.close());       // close-to-tray, see the close handler
+ipcMain.on("win:minimize", () => mainWin && mainWin.minimize());
+ipcMain.on("win:maximize", () => {
+  if (!mainWin) return;
+  mainWin.isMaximized() ? mainWin.unmaximize() : mainWin.maximize();
 });
 ipcMain.on("minibar:hide", () => hideMiniBar());
 ipcMain.on("minibar:open-main", () => restoreMain());
