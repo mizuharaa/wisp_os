@@ -8,10 +8,10 @@
     --paper: 252, 250, 246;
     --ink: #201a26;
     --ink-soft: rgba(32, 26, 38, 0.55);
-    --plum: #2e5aac;
-    --hue-a: #5b8def;
-    --hue-b: #7c6cf0;
-    --hue-c: #4cc3e8;
+    --plum: #0a84ff;
+    --hue-a: #3aa0ff;
+    --hue-b: #0a84ff;
+    --hue-c: #5ac8fa;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -77,7 +77,7 @@
     display: grid; place-items: center; color: var(--ink);
     -webkit-app-region: no-drag;
     transition: background .18s ease, transform .18s cubic-bezier(.2,.8,.3,1.2); }
-  button:hover { background: rgba(46, 90, 172, 0.10); transform: translateY(-1px); }
+  button:hover { background: rgba(10, 132, 255, 0.10); transform: translateY(-1px); }
   button:active { transform: scale(.94); }
   button:focus-visible { outline: 2px solid var(--plum); outline-offset: 2px; }
   button svg { width: 16px; height: 16px; stroke: currentColor; fill: none;
@@ -89,14 +89,14 @@
   /* answer card */
   #answer { display: none; margin: 0 12px 10px; padding: 11px 13px;
     border-radius: 14px; background: rgba(255,255,255,.72);
-    border: 1px solid rgba(46,90,172,.14); font-size: 13px; line-height: 1.5;
+    border: 1px solid rgba(10,132,255,.14); font-size: 13px; line-height: 1.5;
     max-height: 300px; overflow-y: auto; white-space: pre-wrap; user-select: text;
     -webkit-app-region: no-drag; animation: rise .25s cubic-bezier(.2,.8,.3,1.1); }
   #answer.show { display: block; }
   @keyframes rise { from { opacity: 0; transform: translateY(6px) scale(.985); } }
 
   .appr { margin: 0 12px 10px; padding: 10px 13px; border-radius: 14px;
-    background: rgba(255,255,255,.78); border: 1px solid rgba(46,90,172,.22);
+    background: rgba(255,255,255,.78); border: 1px solid rgba(10,132,255,.22);
     font-size: 13px; -webkit-app-region: no-drag; animation: rise .25s ease; }
   .appr .who { color: var(--ink-soft); font-size: 11px; letter-spacing: .03em;
                text-transform: uppercase; margin-bottom: 2px; }
@@ -109,7 +109,7 @@
   .appr .deny { color: #a11f3c; border: 1px solid rgba(161,31,60,.3); }
 
   #note { display: none; margin: 0 12px 10px; padding: 9px 13px; border-radius: 13px;
-    background: rgba(255,255,255,.7); border: 1px solid rgba(46,90,172,.12);
+    background: rgba(255,255,255,.7); border: 1px solid rgba(10,132,255,.12);
     font-size: 12.5px; -webkit-app-region: no-drag; animation: rise .25s ease; }
   #note.show { display: block; }
 

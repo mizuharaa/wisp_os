@@ -75,7 +75,7 @@
   .wordmark{
     font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
     font-size:24px; font-weight:800; letter-spacing:-.045em; line-height:1; display:inline-block;
-    background:linear-gradient(105deg,var(--green-deep) 0%,var(--green) 32%,#b35496 50%,var(--green) 68%,var(--green-deep) 100%);
+    background:linear-gradient(100deg,var(--green-deep),var(--green));
     background-size:240% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
     animation:sheen 6s ease-in-out infinite;
   }
@@ -250,7 +250,7 @@
     background:#fff;
     border:1px solid var(--line);
     transition:border-color .18s, box-shadow .22s, transform .22s}
-  .ccard:hover{border-color:rgba(124,30,96,.32); box-shadow:var(--lift); transform:translateY(-2px)}
+  .ccard:hover{border-color:color-mix(in oklch,var(--green) 30%,transparent); box-shadow:var(--lift)}
   .ctop{display:flex; align-items:center; gap:11px; position:relative; z-index:1}
   .clogo{width:30px; height:30px; flex:none; stroke:var(--green); fill:none; stroke-width:1.7; stroke-linecap:round}
   .cname{font-size:16px; font-weight:800; letter-spacing:-.01em}
@@ -268,10 +268,10 @@
   /* iPhone-clock-style roll: the new countdown pans up into place, no layout jump */
   .roll{animation:rollup .32s cubic-bezier(.3,.8,.3,1)}
   @keyframes rollup{from{transform:translateY(55%);opacity:0}to{transform:translateY(0);opacity:1}}
-  .ccard .cchip.setup{cursor:pointer; border:1px solid rgba(124,30,96,.22); background:#fff; transition:.13s}
-  .ccard .cchip.setup:hover{background:var(--mint-soft); border-color:rgba(124,30,96,.38)}
+  .ccard .cchip.setup{cursor:pointer; border:1px solid color-mix(in oklch,var(--green) 22%,transparent); background:#fff; transition:.13s}
+  .ccard .cchip.setup:hover{background:var(--mint-soft); border-color:color-mix(in oklch,var(--green) 38%,transparent)}
   .ctrk{height:5px; border-radius:99px; background:var(--canvas); overflow:hidden; margin-top:12px; position:relative; z-index:1}
-  .ctrk i{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--green),var(--green-mid),#c46aa8)}
+  .ctrk i{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--green),var(--green-mid))}
   .cnone{color:var(--ink3); font-size:13px; padding:14px 2px}
   /* ============ capsule bar chart ============ */
   .caps{display:flex; align-items:flex-end; gap:14px; height:190px; padding:18px 6px 4px}
@@ -785,16 +785,29 @@
     white-space:nowrap; transform:translate(-50%,-130%); z-index:2}
   .lgtip.show{opacity:1}
   /* ============ chat assistant ============ */
-  #chatfab{position:fixed; right:22px; bottom:22px; width:56px; height:56px; border-radius:50%;
-    background:linear-gradient(140deg,var(--green-mid),var(--green)); color:#fff; display:grid; place-items:center;
-    box-shadow:0 10px 26px -6px rgba(92,19,70,.55); z-index:40; transition:transform .15s}
-  #chatfab:hover{transform:scale(1.07)}
-  #chatfab svg{width:24px; height:24px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  #chatfab{position:fixed; right:22px; bottom:22px; height:56px; border:none; border-radius:999px; padding:0 16px;
+    background:linear-gradient(140deg,var(--green-mid),var(--green)); color:#fff;
+    display:inline-flex; align-items:center; cursor:pointer;
+    box-shadow:0 12px 30px -8px color-mix(in oklch,var(--green) 55%,transparent); z-index:90;
+    transition:transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s;
+    animation:fabpulse 2.8s ease-in-out infinite}
+  #chatfab svg{width:24px; height:24px; flex:none; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  #chatfab .fab-label{max-width:0; opacity:0; overflow:hidden; white-space:nowrap; margin-left:0;
+    font-weight:750; font-size:14px; letter-spacing:-.01em;
+    transition:max-width .24s cubic-bezier(.2,.8,.2,1), opacity .18s, margin-left .24s}
+  #chatfab:hover,#chatfab:focus-visible{transform:translateY(-2px); animation:none;
+    box-shadow:0 16px 42px -8px color-mix(in oklch,var(--green) 62%,transparent); outline:none}
+  #chatfab:hover .fab-label,#chatfab:focus-visible .fab-label{max-width:130px; opacity:1; margin-left:10px}
+  @keyframes fabpulse{0%,100%{box-shadow:0 12px 30px -8px color-mix(in oklch,var(--green) 55%,transparent)}
+    50%{box-shadow:0 12px 30px -8px color-mix(in oklch,var(--green) 55%,transparent),0 0 0 9px color-mix(in oklch,var(--green) 13%,transparent)}}
+  @media (prefers-reduced-motion: reduce){#chatfab{animation:none}}
   .instance-chat{display:none}
   #chatpanel{position:fixed; right:22px; bottom:88px; width:382px; max-width:calc(100vw - 32px); height:524px;
     max-height:calc(100vh - 120px); background:var(--card); border:1px solid var(--line); border-radius:18px;
-    box-shadow:var(--lift); z-index:41; display:none; flex-direction:column; overflow:hidden}
-  #chatpanel.open{display:flex; animation:slidein .2s cubic-bezier(.2,.7,.2,1)}
+    box-shadow:var(--lift); z-index:95; display:none; flex-direction:column; overflow:hidden;
+    transform-origin:bottom right}
+  #chatpanel.open{display:flex; animation:fabopen .26s cubic-bezier(.2,.8,.2,1)}
+  @keyframes fabopen{from{opacity:0; transform:translateY(14px) scale(.94)} to{opacity:1; transform:none}}
   .chathead{background:linear-gradient(140deg,var(--green-deep),var(--green)); color:#fff; padding:14px 16px; display:flex; align-items:center; gap:11px}
   .chathead .av{width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,.18); display:grid; place-items:center; flex:none}
   .chathead .av svg{width:19px; height:19px; stroke:#fff; fill:none; stroke-width:1.8; stroke-linecap:round}
@@ -827,7 +840,7 @@
     border-radius:99px; padding:4px 8px}
   .taskbar{height:6px; border-radius:99px; background:var(--canvas); overflow:hidden; margin:10px 0 8px}
   .taskbar i{display:block; height:100%; border-radius:inherit;
-    background:linear-gradient(90deg,var(--green),var(--green-mid),#c46aa8); transition:width .45s cubic-bezier(.2,.8,.2,1)}
+    background:linear-gradient(90deg,var(--green),var(--green-mid)); transition:width .45s cubic-bezier(.2,.8,.2,1)}
   .navtask{display:grid; grid-template-columns:22px minmax(0,1fr); gap:8px; align-items:start;
     padding:8px 0; border-top:1px solid var(--line); min-width:0}
   .navtask:first-of-type{border-top:0}
@@ -1187,104 +1200,113 @@
   @media (max-width:360px){.calendar-views button{padding-inline:5px;font-size:11px}.cmdtray-actions .btn{font-size:11px;padding-inline:7px}.brief-completed-actions{grid-template-columns:1fr}}
 </style>
 <style id="wisp-glass">
-/* ── Wisp glass skin (design v4): warm paper canvas, liquid-glass surfaces,
-   per-route hue accents that also drift on scroll, Phantom-style hover.
-   Layered AFTER the legacy styles on purpose — tokens stay authoritative for
-   ink/spacing; this layer only re-paints canvas + surfaces. ── */
+/* ── Wisp · iOS liquid glass (design v5) ──────────────────────────────
+   Minimal system: ONE bright blue accent, white frosted glass, ink text.
+   No per-route hue, no gradient mesh, no scroll color motion. Layered after
+   the legacy styles; recolours the accent chain and re-skins surfaces. */
 :root{
-  --wisp-hue: 245; /* sapphire; set per route by the script at the end of body */
-  --rune-paper: oklch(96.6% 0.014 88);
-  --rune-paper-raised: oklch(99.2% 0.006 92);
-  --rune-rule: oklch(86% 0.02 88);
-  --rune-rule-strong: oklch(72% 0.026 88);
+  /* the whole legacy accent chain (--green/--mint/etc) derives from these */
+  --rune-accent:        #0a84ff;              /* bright iOS "lighting" blue */
+  --rune-accent-hover:  #0071e6;
+  --rune-accent-active: #005fca;
+  --rune-accent-soft:   rgb(10 132 255 / 0.12);
+  --rune-on-accent:     #ffffff;
+  --rune-focus:         #0a84ff;
+  --rune-paper:         #eef2f8;              /* cool off-white app canvas */
+  --rune-paper-raised:  rgb(255 255 255 / 0.72);
+  --rune-paper-2:       rgb(255 255 255 / 0.55);
+  --rune-paper-3:       rgb(255 255 255 / 0.7);
+  --rune-rule:          rgb(255 255 255 / 0.7);
+  --rune-rule-strong:   rgb(10 30 60 / 0.1);
+  --glass:              rgb(255 255 255 / 0.6);
+  --glass-hi:           rgb(255 255 255 / 0.9);
+  --glass-blur:         saturate(1.8) blur(30px);
 }
+/* the canvas the glass refracts: soft, static, single blue family */
 body{
-  /* vivid two-glow atmosphere in one hue family — static; only the route
-     changes it. The saturation here is what the frosted cards blur, so it
-     stays strong on purpose. */
   background:
-    radial-gradient(1200px 800px at 22% 8%,
-      oklch(80% 0.14 var(--wisp-hue)), transparent 62%),
-    radial-gradient(1000px 750px at 80% 55%,
-      oklch(82% 0.13 calc(var(--wisp-hue) + 45)), transparent 60%),
-    radial-gradient(900px 650px at 45% 105%,
-      oklch(83% 0.11 calc(var(--wisp-hue) - 30)), transparent 60%),
-    linear-gradient(165deg,
-      oklch(87% 0.08 var(--wisp-hue)),
-      oklch(89% 0.065 calc(var(--wisp-hue) + 45)));
+    radial-gradient(1200px 780px at 82% -8%, rgb(10 132 255 / 0.14), transparent 60%),
+    radial-gradient(900px 700px at 0% 108%, rgb(80 160 255 / 0.12), transparent 58%),
+    linear-gradient(180deg, #eaf1fb, #eef1f6 55%, #f2f0f6);
   background-attachment: fixed;
 }
-/* glass surfaces — filled (not washed-out), blurred, hairline-lit */
-/* inset fields stay lightly translucent so cards don't hold opaque slabs */
-:root{
-  --rune-paper-2: rgb(255 255 255 / 0.6);
-  --rune-paper-3: rgb(255 255 255 / 0.72);
-}
+
+/* ── the glass material (shared) ── */
 .card,.cmdbar,.inst,.intcard,.treecard,.mrun,.cmdmission,.chatpanel,.cmdmsg.a,.msg.a{
-  background: rgb(255 255 255 / 0.8);
-  -webkit-backdrop-filter: blur(32px) saturate(1.7);
-  backdrop-filter: blur(32px) saturate(1.7);
-  border: 1px solid rgb(255 255 255 / 0.95);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-hi);
+  border-radius: 22px;
   box-shadow:
-    0 2px 4px oklch(35% 0.06 var(--wisp-hue) / 0.08),
-    0 20px 50px oklch(35% 0.08 var(--wisp-hue) / 0.17),
-    inset 0 1.5px 0 rgb(255 255 255 / 1);
+    0 1px 1px rgb(10 30 60 / 0.04),
+    0 14px 40px rgb(10 30 60 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.85),          /* top specular edge */
+    inset 0 -1px 1px rgb(10 30 60 / 0.03);          /* bottom refraction */
+  position: relative;
 }
-.card{ border-radius: 20px; }
-/* sidebar active item: gradient glass pill */
-#nav a.active, #nav a[aria-current]{
-  background: linear-gradient(115deg,
-    oklch(93% 0.05 var(--wisp-hue) / 0.9),
-    oklch(94% 0.045 calc(var(--wisp-hue) + 60) / 0.75)) !important;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8),
-    0 4px 14px oklch(30% 0.06 var(--wisp-hue) / 0.12);
+/* the moving highlight that reads as a liquid lens */
+.card::after{
+  content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.35), transparent 42%);
+  mix-blend-mode: screen;
 }
+
+/* ── sidebar: frosted panel ── */
 aside#side{
-  background: rgb(255 255 255 / 0.68);
-  -webkit-backdrop-filter: blur(30px) saturate(1.7);
-  backdrop-filter: blur(30px) saturate(1.7);
-  border-right: 1px solid rgb(255 255 255 / 0.9);
+  background: rgb(255 255 255 / 0.42);
+  -webkit-backdrop-filter: saturate(1.8) blur(34px);
+  backdrop-filter: saturate(1.8) blur(34px);
+  border-right: 1px solid rgb(255 255 255 / 0.6);
 }
-/* hue hairline across the top of primary cards */
-.card{ border-top: 2.5px solid transparent;
-  background-clip: padding-box;
-  position: relative; }
-.card::before{
-  content:""; position:absolute; inset:-1px -1px auto -1px; height:2px;
-  border-radius: inherit; pointer-events:none;
-  background: linear-gradient(90deg,
-    oklch(60% 0.11 var(--wisp-hue)),
-    oklch(72% 0.08 calc(var(--wisp-hue) + 40)));
-  opacity:.4;
+
+/* ── iOS liquid-glass nav: a single glass bubble slides between items ── */
+#nav{ position: relative; }
+#navpill{
+  position:absolute; left:6px; right:6px; height:40px; border-radius:13px;
+  background: rgb(255 255 255 / 0.75);
+  -webkit-backdrop-filter: saturate(1.8) blur(14px);
+  backdrop-filter: saturate(1.8) blur(14px);
+  border: 1px solid rgb(255 255 255 / 0.9);
+  box-shadow: 0 4px 14px rgb(10 90 220 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 0 0 1px rgb(10 132 255 / 0.06);
+  /* the liquid: springy slide + a tiny squash keyframe applied on move */
+  transition: transform .5s cubic-bezier(.34,1.56,.5,1), height .3s ease, opacity .2s;
+  z-index:0; opacity:0;
 }
-/* topbar: normal flow (no sticky — it collided with page titles); it gains a
-   glass chip look and a hue underline that brightens once you scroll */
-.topbar{ position: relative;
-  transition: background .3s ease, box-shadow .3s ease; border-radius: 18px; }
-html[data-scrolled] .topbar{
-  background: rgb(255 255 252 / 0.6);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
-  box-shadow: 0 8px 26px oklch(30% 0.05 var(--wisp-hue) / 0.12);
-  padding-left: 12px; padding-right: 12px;
+#nav a{ position:relative; z-index:1; transition:color .25s ease; }
+nav a.on{ background:transparent !important; color:var(--rune-accent); }
+nav a.on::before{ display:none; }           /* kill the old left mint bar */
+nav a.on svg{ stroke: var(--rune-accent); }
+nav a.on .bub{ background: rgb(10 132 255 / 0.12); color: var(--rune-accent); }
+@keyframes pillsquash{
+  0%{ transform: translateY(var(--py)) scaleY(1); }
+  45%{ transform: translateY(var(--py)) scaleY(.86); }
+  100%{ transform: translateY(var(--py)) scaleY(1); }
 }
-/* Phantom-style motion */
+#navpill.move{ animation: pillsquash .42s ease; }
+
+/* ── topbar chips & pills already glassy via tokens; unify radius ── */
+.topbar{ position: relative; }
+
+/* ── liquid hover: gentle lift, no color churn ── */
 @media (hover:hover) and (prefers-reduced-motion: no-preference){
   .card,.inst,.intcard,.treecard,.mrun{
-    transition: transform .22s cubic-bezier(.2,.8,.3,1.15), box-shadow .22s ease; }
+    transition: transform .28s cubic-bezier(.34,1.3,.5,1), box-shadow .28s ease; }
   .card:hover,.inst:hover,.intcard:hover,.treecard:hover,.mrun:hover{
-    transform: translateY(-3px);
+    transform: translateY(-2px);
     box-shadow:
-      0 2px 4px oklch(30% 0.03 var(--wisp-hue) / 0.06),
-      0 22px 48px oklch(30% 0.04 var(--wisp-hue) / 0.16),
-      inset 0 1px 0 rgb(255 255 255 / 0.8); }
-  .btn,.tbtn,.mode{ transition: transform .18s cubic-bezier(.2,.8,.3,1.2),
-    background .18s ease, box-shadow .18s ease; }
+      0 1px 1px rgb(10 30 60 / 0.04),
+      0 20px 50px rgb(10 30 60 / 0.14),
+      inset 0 1px 0 rgb(255 255 255 / 0.9); }
+  .btn,.tbtn,.mode{ transition: transform .16s cubic-bezier(.34,1.4,.5,1),
+    background .16s ease, box-shadow .16s ease; }
   .btn:hover,.tbtn:hover{ transform: translateY(-1px); }
-  .btn:active,.tbtn:active{ transform: scale(.96); }
+  .btn:active,.tbtn:active{ transform: scale(.95); }
 }
 @media (prefers-reduced-motion: reduce){
-  .topbar{ transition: none; }
+  #navpill{ transition:none; } #navpill.move{ animation:none; }
 }
 </style>
 </head>
@@ -1722,7 +1744,7 @@ html[data-scrolled] .topbar{
 </section>
 <div id="toast"></div>
 
-<button id="chatfab" title="Ask Wisp" aria-label="Ask Wisp" aria-expanded="false" aria-controls="chatpanel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M8 12h8M8 9h5"/></svg></button>
+<button id="chatfab" title="Ask Wisp" aria-label="Ask Wisp" aria-expanded="false" aria-controls="chatpanel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M8 12h8M8 9h5"/></svg><span class="fab-label">Ask Wisp</span></button>
 <div id="chatpanel">
   <div class="chathead">
     <div class="av"><svg viewBox="0 0 24 24" id="chatspark"></svg></div>
@@ -4584,29 +4606,32 @@ setInterval(()=>{$("clock").textContent=new Date().toLocaleTimeString("en-GB");
 route();poll();loadCalendarRange();setInterval(poll,2500);
 </script>
 <script>
-/* wisp-glass: per-route hue + scroll drift + topbar elevation */
+/* wisp iOS liquid-glass nav: one glass bubble that slides to the active item */
 (function(){
-  const HUES = { overview:245, calendar:215, instances:265, skills:170,
-                 brain:205, graph:205, integrations:80, audit:50, guard:25 };
-  let base = 245;
-  function routeHue(){
-    const r = (location.hash.match(/#\/([a-z]+)/) || [])[1] || "overview";
-    base = HUES[r] !== undefined ? HUES[r] : 245;
-    document.documentElement.dataset.route = r;
-    document.documentElement.style.setProperty("--wisp-hue", String(base));
-    apply();
+  const nav = document.getElementById("nav");
+  if (!nav) return;
+  const pill = document.createElement("div");
+  pill.id = "navpill";
+  nav.prepend(pill);
+  let last = -1;
+  function place(animate){
+    const a = nav.querySelector("a.on");
+    if (!a) { pill.style.opacity = "0"; return; }
+    const py = a.offsetTop;
+    pill.style.setProperty("--py", py + "px");
+    pill.style.height = a.offsetHeight + "px";
+    pill.style.transform = "translateY(" + py + "px)";
+    pill.style.opacity = "1";
+    if (animate && last !== -1 && last !== py) {   // squash only on a real move
+      pill.classList.remove("move"); void pill.offsetWidth; pill.classList.add("move");
+    }
+    last = py;
   }
-  function apply(){
-    // colors are static; scrolling only elevates the topbar
-    if ((window.scrollY || 0) > 8) document.documentElement.dataset.scrolled = "1";
-    else delete document.documentElement.dataset.scrolled;
-  }
-  let raf = 0;
-  addEventListener("scroll", () => {
-    if (!raf) raf = requestAnimationFrame(() => { raf = 0; apply(); });
-  }, { passive: true });
-  addEventListener("hashchange", routeHue);
-  routeHue();
+  // the app toggles a.on on route change; observe it and reposition
+  new MutationObserver(() => place(true)).observe(nav, {
+    subtree: true, attributes: true, attributeFilter: ["class"] });
+  addEventListener("resize", () => place(false));
+  requestAnimationFrame(() => place(false));
 })();
 </script>
 </body>
