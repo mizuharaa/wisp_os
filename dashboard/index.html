@@ -1683,6 +1683,15 @@ hr{ display:none; }
 .orchsheet-head h3{ flex:1; margin:0; }
 .orchsheet>.grid,.orchsheet>.card{ max-width:1120px; margin-inline:auto; }
 
+/* ── rebuild scaffold: layout only, no colour or material in this pass ── */
+.dashgrid{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr));
+  gap:20px; margin-bottom:24px; }
+.dashgrid>.ph{ min-width:0; overflow:hidden; display:flex; flex-direction:column; }
+.dashgrid>.ph>h3{ flex:none; }
+.phtodo{ flex:1; display:grid; place-items:center;
+  font-family:var(--rune-font-mono); font-size:12px; color:var(--ink-3-glass); }
+@media (max-width:1100px){ .dashgrid>.ph{ grid-column:span 12 !important; } }
+
 /* ── connections ────────────────────────────────────────────────────── */
 .conngrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
 .conncard{ display:flex; align-items:center; gap:12px; padding:14px;
@@ -1850,16 +1859,40 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
           </div>
         </div>
       </div>
-      <!-- hero: the visuals carry the colour, the chrome stays grey -->
-      <div class="herorow">
-        <section class="card hero-brain">
-          <h3>Brain <span class="tag" id="heromapcount">—</span></h3>
-          <button class="cbtn" data-go="#/graph" title="open the full graph"><svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg></button>
-          <svg class="heromap" id="heromap" viewBox="0 0 300 190" preserveAspectRatio="xMidYMid meet" aria-label="Brain map preview"></svg>
+      <!-- rebuild scaffold: 12-col grid, fixed heights, nothing filled in yet -->
+      <div class="dashgrid">
+        <section class="card ph ph-connector" style="grid-column:span 7;height:320px;max-height:320px">
+          <h3>Connector stack</h3><div class="phtodo">TODO</div>
         </section>
-        <section class="card hero-activity">
-          <h3>Activity <span class="tag">cumulative wire activity · last 12 hours</span></h3>
-          <div class="lgwrap"><svg class="lgsvg" id="perfsvg"></svg><div class="lgtip" id="perftip"></div></div>
+        <section class="card ph ph-mission" style="grid-column:span 5;height:320px;max-height:320px">
+          <h3>Mission stack</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-stat" style="grid-column:span 3;height:104px;max-height:104px">
+          <h3>Stat tile 1</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-stat" style="grid-column:span 3;height:104px;max-height:104px">
+          <h3>Stat tile 2</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-stat" style="grid-column:span 3;height:104px;max-height:104px">
+          <h3>Stat tile 3</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-stat" style="grid-column:span 3;height:104px;max-height:104px">
+          <h3>Stat tile 4</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-burndown" style="grid-column:span 6;height:200px;max-height:200px">
+          <h3>Usage burndown</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-heatmap" style="grid-column:span 6;height:200px;max-height:200px">
+          <h3>Action heatmap</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-recent" style="grid-column:span 8;height:240px;max-height:240px">
+          <h3>Recent actions</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-skill" style="grid-column:span 4;height:240px;max-height:240px">
+          <h3>Skill coverage</h3><div class="phtodo">TODO</div>
+        </section>
+        <section class="card ph ph-brain" style="grid-column:span 12;height:120px;max-height:120px">
+          <h3>Brain</h3><div class="phtodo">TODO</div>
         </section>
       </div>
       <div class="morning-stack">
@@ -5089,11 +5122,11 @@ $("chatsendbtn").addEventListener("click",chatSend);
 $("chatinput").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();chatSend()}});
 $("chatinput").addEventListener("input",e=>{e.target.style.height="auto";e.target.style.height=Math.min(92,e.target.scrollHeight)+"px"});
 // performance graph hover tooltip
-$("perfsvg").addEventListener("pointerover",e=>{const c=e.target.closest(".lgdot");if(!c)return;
+if($("perfsvg"))$("perfsvg").addEventListener("pointerover",e=>{const c=e.target.closest(".lgdot");if(!c)return;
   const tip=$("perftip"),wrap=$("perfsvg").parentElement.getBoundingClientRect(),r=c.getBoundingClientRect();
   tip.textContent=`${c.dataset.cum} total · +${c.dataset.delta} this hour · ${String(c.dataset.h).padStart(2,"0")}:00`;
   tip.style.left=(r.left-wrap.left+r.width/2)+"px";tip.style.top=(r.top-wrap.top)+"px";tip.classList.add("show")});
-$("perfsvg").addEventListener("pointerout",()=>$("perftip").classList.remove("show"));
+if($("perfsvg"))$("perfsvg").addEventListener("pointerout",()=>$("perftip").classList.remove("show"));
 setInterval(()=>{$("clock").textContent=new Date().toLocaleTimeString("en-GB");
   vTick();                                          // vinyl progress advances locally
   document.querySelectorAll("[data-brief-due]").forEach(el=>{
