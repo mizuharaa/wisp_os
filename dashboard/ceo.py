@@ -90,6 +90,58 @@ HISTORY_MAX = 100
 
 REFINER = "claude-haiku-4-5"   # prompt smith: cheap, fast
 PLANNER = "claude-opus-4-8"    # the CEO itself: judgment is the product
+PAYLOAD_MODEL = "claude-haiku-4-5"   # result typing: one cheap call, never blocks
+
+# Results lead with a visual, prose is the fallback. This is the contract the
+# dashboard's renderer registry reads: a type plus whatever fields that type
+# needs. "text" means there is nothing to show and the chat prose stands.
+PAYLOAD_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "type": {"type": "string",
+                 "enum": ["product", "place", "code", "data", "event", "doc", "text"]},
+        "title": {"type": "string"},
+        "caption": {"type": "string"},
+        "image": {"type": "string"},      # absolute https URL, or ""
+        "model_url": {"type": "string"},  # .glb/.gltf, only if a real one is known
+        "url": {"type": "string"},
+        "price": {"type": "string"},
+        "labels": {"type": "array", "items": {"type": "string"}},
+        "values": {"type": "array", "items": {"type": "number"}},
+    },
+    "required": ["type", "title"],
+    "additionalProperties": False,
+}
+PAYLOAD_SYSTEM = (
+    "You type an assistant's answer so a UI can render it visually instead of as "
+    "prose. Pick the ONE type that fits: product (a buyable object), place, code, "
+    "data (comparable numbers), event (dated), doc, or text.\n"
+    "Return type 'text' whenever there is no real visual — that is the honest "
+    "default and it is used often.\n"
+    "NEVER invent a URL. Only emit image/model_url/url if the answer itself "
+    "contains that exact link. Leave them empty otherwise.\n"
+    "title <=40 chars, caption <=90 chars, both plain sentence case."
+)
+
+
+def _visual_payload(question, reply):
+    """Type an answer so the UI can lead with the visual (spec: result registry).
+
+    One cheap call. Any failure, any 'text' verdict, and the caller simply keeps
+    the prose — a payload is an enhancement, never a dependency.
+    """
+    try:
+        r = chat.structured(PAYLOAD_MODEL, PAYLOAD_SYSTEM,
+                            "Question: %s\n\nAnswer: %s" % (question[:600], (reply or "")[:3000]),
+                            PAYLOAD_SCHEMA, max_tokens=700, timeout=30)
+        if not isinstance(r, dict) or r.get("error") or r.get("type") in (None, "text"):
+            return None
+        for k in ("image", "model_url", "url"):     # the model is told not to invent these
+            if r.get(k) and not str(r[k]).startswith(("http://", "https://")):
+                r.pop(k, None)
+        return r
+    except Exception:
+        return None
 ROLE_MODELS = ("haiku", "sonnet", "opus", "fable")
 CLAUDE_WORKER_MODELS = frozenset(ROLE_MODELS)
 CODEX_FALLBACK_MODEL = "gpt-5.6-sol"
