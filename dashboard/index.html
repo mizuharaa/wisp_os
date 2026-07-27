@@ -1540,7 +1540,16 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
   @keyframes staggerin{ from{ opacity:0; transform:translateY(12px); filter:blur(6px); }
     to{ opacity:1; transform:none; filter:blur(0); } }
 }
-.dragging{ z-index:70; }
+/* a panel in flight: it lifts, and its refraction WEAKENS — moving glass
+   refracts less, that drop is the physical tell that it left the surface */
+.dragging{ z-index:70; cursor:grabbing; will-change:transform;
+  -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06) !important;
+  backdrop-filter:blur(18px) saturate(180%) brightness(1.06) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.3),
+    0 34px 90px -10px rgba(0,0,0,0.72) !important;
+  border-color:var(--hairline-lit) !important; transition:none !important; }
+.dragging::before{ opacity:0 !important; }
+.card[data-moved="1"]{ cursor:grab; }
 .iris-flash{ animation:irisflash 600ms ease; }
 @keyframes irisflash{ 0%,100%{ box-shadow:inset 0 1px 0 rgba(255,255,255,0.18), 0 12px 40px -8px rgba(0,0,0,0.55); }
   40%{ box-shadow:0 0 0 1px var(--iris), 0 0 34px -4px var(--iris-glow), 0 12px 40px -8px rgba(0,0,0,0.55); } }
@@ -5178,6 +5187,94 @@ route();poll();loadCalendarRange();setInterval(poll,2500);
     requestAnimationFrame(()=>requestAnimationFrame(stagger));
   });
   requestAnimationFrame(stagger);
+
+  /* ---------- drag physics ─────────────────────────────────────────────
+     Panels drag with momentum, rubber-band past the canvas edge, and snap to
+     a 12-column grid with a 24px magnetic pull. Offsets are transforms on the
+     flow layout and persist per panel; double-click a panel's heading to send
+     it home. Neighbours do NOT displace and panels do not merge into tabs —
+     both need a real panel container model, see the note in the commit. */
+  const KEY = "wisp-panel-offsets";
+  let offsets = {};
+  try { offsets = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch(_){}
+  const panelId = el => {
+    const h = el.querySelector("h1,h2,h3,.h,strong");
+    return (h ? h.textContent : el.className).trim().slice(0,40);
+  };
+  const apply = (el,x,y) => {
+    el.style.transform = (x||y) ? `translate3d(${x}px,${y}px,0)` : "";
+    el.dataset.moved = (x||y) ? "1" : "";
+  };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(offsets)); } catch(_){} };
+
+  function restore(){
+    document.querySelectorAll(".main .card").forEach(el => {
+      const o = offsets[panelId(el)];
+      if (o) apply(el, o.x, o.y);
+    });
+  }
+  addEventListener("hashchange", ()=>setTimeout(restore, 60));
+  setTimeout(restore, 400);
+
+  const NO_DRAG = "button,a,input,textarea,select,summary,details,label,.btn,.tbtn,.mode,svg";
+  addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    const el = e.target.closest && e.target.closest(".main .card");
+    if (!el || (e.target.closest && e.target.closest(NO_DRAG))) return;
+
+    const id = panelId(el), start = offsets[id] || {x:0,y:0};
+    const x0 = e.clientX, y0 = e.clientY;
+    const canvas = document.querySelector(".main").getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    const col = canvas.width / 12;                      // the 12-col grid
+    let x = start.x, y = start.y, vx = 0, vy = 0, lastT = performance.now(), lastX = x, lastY = y, moved = false;
+
+    const band = (v, min, max) => v < min ? min + (v-min)*0.35 : v > max ? max + (v-max)*0.35 : v;
+
+    const move = ev => {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      if (!moved && Math.hypot(dx,dy) < 4) return;
+      if (!moved){ moved = true; el.classList.add("dragging"); el.setPointerCapture&&el.setPointerCapture(ev.pointerId); }
+      // rubber-band resistance instead of a hard stop at the canvas edge
+      x = band(start.x + dx, canvas.left - box.left, canvas.right - box.right);
+      y = band(start.y + dy, -box.top + 60, innerHeight - box.top - 60);
+      apply(el, x, y);
+      const now = performance.now(), dt = Math.max(now - lastT, 8);
+      vx = (x - lastX)/dt*16; vy = (y - lastY)/dt*16;   // px per frame
+      lastT = now; lastX = x; lastY = y;
+    };
+    const up = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      if (!moved) return;
+      el.classList.remove("dragging");
+      // momentum carries past the release point, then snaps to the grid
+      const projX = x + vx*6, projY = y + vy*6;
+      const nearest = Math.round((box.left - canvas.left + projX)/col)*col + canvas.left - box.left;
+      const targetX = Math.abs(nearest - projX) < 24 ? nearest : projX;   // magnetic inside 24px
+      const targetY = Math.round(projY/8)*8;
+      const fromX = x, fromY = y;
+      el.style.willChange = "transform";
+      spring(0, 1, SPRING.drag, t => {
+        apply(el, fromX + (targetX-fromX)*t, fromY + (targetY-fromY)*t);
+      }, ()=>{
+        el.style.willChange = "";                        // only while animating
+        offsets[id] = {x:Math.round(targetX), y:Math.round(targetY)};
+        if (!offsets[id].x && !offsets[id].y) delete offsets[id];
+        save();
+      });
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+  });
+  // double-click a heading sends the panel home
+  addEventListener("dblclick", e => {
+    const el = e.target.closest && e.target.closest(".main .card");
+    if (!el || !el.dataset.moved) return;
+    const id = panelId(el), from = offsets[id] || {x:0,y:0};
+    spring(0, 1, SPRING.snap, t => apply(el, from.x*(1-t), from.y*(1-t)),
+      ()=>{ delete offsets[id]; save(); apply(el,0,0); });
+  });
 
   setInterval(tick, 900);
   tick();
