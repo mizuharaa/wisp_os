@@ -1683,6 +1683,22 @@ hr{ display:none; }
 .orchsheet-head h3{ flex:1; margin:0; }
 .orchsheet>.grid,.orchsheet>.card{ max-width:1120px; margin-inline:auto; }
 
+/* ── connections ────────────────────────────────────────────────────── */
+.conngrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+.conncard{ display:flex; align-items:center; gap:12px; padding:14px;
+  border-radius:14px; background:var(--inner-fill); border:1px solid var(--inner-line); }
+.conncard .cmark{ width:34px; height:34px; border-radius:10px; flex:none; display:grid;
+  place-items:center; font:600 13px/1 var(--rune-font-display); color:#fff; }
+.conncard .cbody{ min-width:0; flex:1; }
+.conncard .cname{ font-size:13px; font-weight:600; color:var(--ink-glass); }
+.conncard .cstate{ font-family:var(--rune-font-mono); font-size:11px; color:var(--ink-3-glass);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.conncard .dot{ width:7px; height:7px; border-radius:50%; flex:none; }
+.conncard .dot.on{ background:var(--mint-a); box-shadow:0 0 7px -1px var(--mint-a); }
+.conncard .dot.off{ background:var(--ink-3-glass); }
+.conncard .dot.warn{ background:var(--amber-a); box-shadow:0 0 7px -1px var(--amber-a); }
+.conncard .btn{ flex:none; }
+
 /* ── controls ───────────────────────────────────────────────────────── */
 /* every button carries the same surface; only the primary is filled */
 .btn,.tbtn,.mode,.cal-arrow,.cbtn,.cnavb,.graph-tool,#burger,button.topstat{
@@ -1766,10 +1782,9 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
       <a href="#/overview" data-s="overview"><svg viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Dashboard</a>
       <a href="#/calendar" data-s="calendar"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>Calendar<span class="bub" id="n-cal">0</span></a>
       <a href="#/instances" data-s="instances"><svg viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>Agent console<span class="bub" id="n-inst">0</span></a>
-      <a href="#/skills" data-s="skills"><svg viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>Skill tree<span class="bub" id="n-skill">0</span></a>
       <a href="#/brain" data-s="brain"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>Brain<span class="bub" id="n-brain">0</span></a>
       <a href="#/graph" data-s="graph"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>Brain graph</a>
-      <a href="#/integrations" data-s="integrations"><svg viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>Integrations<span class="bub" id="n-int">0</span></a>
+      <a href="#/integrations" data-s="integrations"><svg viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>Connections<span class="bub" id="n-int">0</span></a>
     </nav>
     <div class="navlab">General</div>
     <nav id="nav2">
@@ -1903,15 +1918,6 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
         <div id="automationradar" aria-live="polite"></div>
       </section>
       <div class="grid cols-4" id="kpis" style="margin-bottom:14px"></div>
-      <div class="ccarousel" style="margin-bottom:14px">
-        <div class="chead"><h3>Accounts <span class="tag">Claude · Codex · mail · code</span></h3>
-          <div class="cnav" id="cnav" style="display:none">
-            <button class="cnavb" data-cscroll="-1" title="previous"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
-            <button class="cnavb" data-cscroll="1" title="next"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
-          </div>
-        </div>
-        <div class="ctrack" id="claudecards"></div>
-      </div>
       <div class="grid cols-2" style="margin-bottom:14px">
         <div class="card">
           <h3>Changes day to day <span class="tag" id="actlabel">edits · writes · commands</span></h3>
@@ -2092,7 +2098,11 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
           <section class="recall-ledger" aria-labelledby="recall-ledger-title">
             <header class="brain-panel-head"><div class="brain-panel-head-copy"><h3 id="recall-ledger-title">Recent recall attempts</h3><p id="recall-ledger-summary">Waiting for mission receipts.</p></div><span class="brain-panel-count" id="recall-ledger-count">0 receipts</span></header>
             <div class="recall-list" id="recall-receipts" aria-live="polite"></div>
-          </section>
+            <div class="card" style="margin-top:24px">
+        <h3>Skill tree <span class="tag">skills earn after 3 real uses and decay when off-goal</span></h3>
+        <div id="skilltreehost"></div>
+      </div>
+    </section>
           <aside class="memory-health" aria-labelledby="memory-health-title">
             <header class="brain-panel-head"><div class="brain-panel-head-copy"><h3 id="memory-health-title">Storage health</h3><p>Admission decisions, footprint, and retention budget.</p></div><span class="brain-panel-count" id="memory-card-count">— cards</span></header>
             <div class="memory-health-body" id="memory-health-body"><div class="brain-empty"><b>Checking storage report</b>Rune is measuring what was accepted, rejected, merged, and retained.</div></div>
@@ -2156,8 +2166,24 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
 
     <!-- ============ INTEGRATIONS ============ -->
     <section class="page" id="p-integrations">
-      <div class="titlerow"><div><h1>Integrations</h1><div class="sub">MCP servers, hooks, agents, and skills wired into Wisp.</div></div></div>
-      <div class="card"><div class="intgrid" id="intgrid" style="padding-top:0"></div></div>
+      <div class="titlerow"><div><h1>Connections</h1><div class="sub">Accounts, OAuth status, MCP servers and developer tools wired into Wisp.</div></div></div>
+      <div class="card" style="margin-bottom:24px">
+        <h3>Accounts <span class="tag">connect an account to let Wisp act on your behalf</span></h3>
+        <div class="conngrid" id="conngrid"></div>
+      </div>
+      <div class="ccarousel card" style="margin-bottom:24px">
+        <div class="chead"><h3>Usage <span class="tag">rate-limit windows per account</span></h3>
+          <div class="cnav" id="cnav" style="display:none">
+            <button class="cnavb" data-cscroll="-1" title="previous"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+            <button class="cnavb" data-cscroll="1" title="next"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+          </div>
+        </div>
+        <div class="ctrack" id="claudecards"></div>
+      </div>
+      <div class="card">
+        <h3>MCP servers &amp; tooling <span class="tag">hooks, agents and skills wired into Wisp</span></h3>
+        <div class="intgrid" id="intgrid" style="padding-top:0"></div>
+      </div>
     </section>
 
     <!-- ============ AUDIT ============ -->
@@ -5217,6 +5243,68 @@ route();poll();loadCalendarRange();setInterval(poll,2500);
     sheet.addEventListener("click", e => { if (e.target === sheet) sheet.hidden = true; });
     addEventListener("keydown", e => { if (e.key === "Escape") sheet.hidden = true; });
   })();
+
+  /* ---------- connections: accounts and their OAuth status ──────────────
+     Status comes from the real integration state the engine already polls
+     (S.integ / S.pulse). Services with a live OAuth route get Connect; the
+     rest say plainly what they still need rather than faking a button. */
+  const CONNECTORS = [
+    { id:"claude", name:"Claude",  mark:"C",  colour:"#6D5AE6", route:null,
+      probe: st => (st.pulse && st.pulse.accounts || []).length },
+    { id:"github", name:"GitHub",  mark:"GH", colour:"#1A1830", route:"/api/integrations",
+      probe: st => st.integ && st.integ.github },
+    { id:"gmail",  name:"Gmail",   mark:"M",  colour:"#F43F5E", route:"/api/integrations",
+      probe: st => st.integ && st.integ.gmail },
+    { id:"outlook",name:"Outlook", mark:"O",  colour:"#06B6D4", route:"/api/integrations",
+      probe: st => st.integ && st.integ.outlook },
+    { id:"figma",  name:"Figma",   mark:"F",  colour:"#F59E0B", route:null, needs:"an OAuth app",
+      probe: () => false },
+  ];
+  function renderConnections(){
+    const host = document.getElementById("conngrid");
+    if (!host) return;
+    const st = (typeof S !== "undefined" && S) || {};
+    host.innerHTML = CONNECTORS.map(c => {
+      let on = false;
+      try { on = !!c.probe(st); } catch(_){}
+      const state = on ? "connected"
+        : c.needs ? "needs " + c.needs
+        : "not connected";
+      const cls = on ? "on" : c.needs ? "warn" : "off";
+      const action = on ? "Manage" : c.needs ? "Set up" : "Connect";
+      return `<div class="conncard">
+        <span class="cmark" style="background:${c.colour}">${c.mark}</span>
+        <span class="cbody"><span class="cname">${c.name}</span>
+          <span class="cstate"><span class="dot ${cls}"></span> ${state}</span></span>
+        <button class="btn line sm" data-conn="${c.id}">${action}</button></div>`;
+    }).join("");
+  }
+  setInterval(renderConnections, 2500);
+  setTimeout(renderConnections, 500);
+  document.addEventListener("click", e => {
+    const b = e.target.closest && e.target.closest("[data-conn]");
+    if (!b) return;
+    location.hash = "#/integrations";
+    const c = CONNECTORS.find(x => x.id === b.dataset.conn);
+    if (c && c.needs) alert(`${c.name} needs ${c.needs} registered first — add its client id and secret to state/pulse.json, then reconnect here.`);
+  });
+
+  /* ---------- the skill tree now lives inside Brain ────────────────────── */
+  // the tree and its admin deck are plain cards inside the retired #p-skills
+  // page; relocate them under Brain and drop the now-empty page's title row
+  function hostSkillTree(){
+    const host = document.getElementById("skilltreehost");
+    const src = document.getElementById("p-skills");
+    if (!host || !src) return;
+    src.querySelectorAll(":scope > .card").forEach(card => {
+      card.style.background = "none"; card.style.border = "0";
+      card.style.boxShadow = "none"; card.style.padding = "0";
+      card.style.backdropFilter = "none";
+      host.appendChild(card);
+    });
+  }
+  setInterval(hostSkillTree, 2500);
+  setTimeout(hostSkillTree, 600);
 
   /* ---------- card headers own their corner action ──────────────────────
      The legacy markup puts .cbtn as a SIBLING after the <h3>, positioned
