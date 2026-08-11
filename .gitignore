@@ -7,6 +7,8 @@ state/orchestrations/
 state/pulse.json
 state/pulse-cache.json
 state/pulse-state.lock
+state/usage.jsonl
+state/activity-grid.json
 state/calendar.ics
 state/ceo/
 state/briefing*

@@ -496,11 +496,13 @@ class Handler(SimpleHTTPRequestHandler):
         path = self._request_path()
         if self._static_denied(path):
             return self._json(404, {"error": "not found"})
-        if path in ("/dashboard", "/dashboard/", "/dashboard/index.html"):
-            src = DIST_INDEX if os.path.isfile(DIST_INDEX) else LEGACY_INDEX
-            return self._serve_file(src, "text/html; charset=utf-8")
-        if path == "/dashboard/legacy.html":
+        if path in ("/dashboard", "/dashboard/", "/dashboard/index.html",
+                    "/dashboard/legacy.html"):
+            # The dashboard IS dashboard/index.html. The React build used to
+            # shadow this URL whenever a dist existed; it now has its own.
             return self._serve_file(LEGACY_INDEX, "text/html; charset=utf-8")
+        if path == "/dashboard/next.html" and os.path.isfile(DIST_INDEX):
+            return self._serve_file(DIST_INDEX, "text/html; charset=utf-8")
         if self.path == "/api/spotify/login":
             # FIXED redirect URI (not Host-derived): Spotify requires the exact
             # string to be pre-registered, and loopback must be 127.0.0.1 (not
@@ -566,6 +568,15 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"keys": askpass.keys()})  # names only, never secrets
         if self.path == "/api/pulse":
             return self._json(200, pulse.get())
+        if path == "/api/usage-series":
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                hours = int((q.get("hours") or ["12"])[0])
+            except ValueError:
+                return self._json(400, {"error": "hours must be an integer"})
+            return self._json(200, pulse.usage_series(max(1, min(hours, 48))))
+        if self.path == "/api/activity-grid":
+            return self._json(200, pulse.activity_grid())
         if path == "/api/briefing":
             # A cheap read of the last atomically generated plan. Git/model work
             # only happens in the explicit async generation endpoint.

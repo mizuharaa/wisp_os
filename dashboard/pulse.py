@@ -1067,6 +1067,7 @@ def _refresh():
         SNAP.clear()
         SNAP.update(snap)
     _write_cache(snap)
+    _record_usage(snap)
     try:
         # keep the subscribed calendar on disk (self-throttled to hourly) so the
         # briefing has your day even with no network. Never fatal to the loop.
@@ -1118,10 +1119,172 @@ def cached():
     return _normalise_cache(_read_json(CACHE))
 
 
+# ------------------------------------------------------- recorded history
+# pulse only ever knew "now": every refresh overwrote the last snapshot, so
+# nothing could draw usage over time or activity by hour. Two small recorders
+# fix that — an append-only utilisation log, and an incremental scan of the
+# CLI transcripts into absolute hour buckets.
+USAGE_LOG = os.path.join(ROOT, "state", "usage.jsonl")
+USAGE_GAP = 240          # min seconds between rows (the loop itself runs at 45s)
+USAGE_KEEP = 48 * 3600   # rolling window kept on disk
+ACTIVITY = os.path.join(ROOT, "state", "activity-grid.json")
+ACTIVITY_KEEP = 8 * 86400
+
+
+def _usage_rows():
+    try:
+        with open(USAGE_LOG, encoding="utf-8") as handle:
+            rows = []
+            for line in handle:
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+            return rows
+    except OSError:
+        return []
+
+
+def _record_usage(snap):
+    """Append one {ts, <connector>: pct} row. Claude reports per account, so the
+    band is the account nearest its ceiling — the one that actually gates work."""
+    row = {"ts": int(time.time())}
+    pcts = [a.get("pct") for a in (snap.get("claude") or {}).get("accounts") or []
+            if isinstance(a.get("pct"), (int, float))]
+    if pcts:
+        row["claude"] = max(pcts)
+    codex_pct = (snap.get("codex") or {}).get("pct")
+    if isinstance(codex_pct, (int, float)):
+        row["codex"] = codex_pct
+    if len(row) == 1:
+        return  # nothing measurable this cycle; don't write an empty sample
+    rows = _usage_rows()
+    if rows and row["ts"] - (rows[-1].get("ts") or 0) < USAGE_GAP:
+        return
+    rows.append(row)
+    cut = row["ts"] - USAGE_KEEP
+    kept = [r for r in rows if (r.get("ts") or 0) >= cut]
+    try:
+        if len(kept) != len(rows):   # trim by rewrite, else cheap append
+            with open(USAGE_LOG, "w", encoding="utf-8") as handle:
+                handle.writelines(json.dumps(r) + "\n" for r in kept)
+        else:
+            with open(USAGE_LOG, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(row) + "\n")
+    except OSError:
+        pass
+
+
+def usage_series(hours=12):
+    """{keys, rows} of recorded utilisation inside the window."""
+    cut = time.time() - hours * 3600
+    rows = [r for r in _usage_rows() if (r.get("ts") or 0) >= cut]
+    keys = sorted({k for r in rows for k in r if k != "ts"})
+    return {"keys": keys, "rows": rows, "window_hours": hours}
+
+
+def _transcript_dirs():
+    cfg = _cfg()
+    dirs = [os.path.expanduser("~/.claude/projects")]
+    for a in cfg.get("claude_accounts") or []:
+        if a.get("dir"):
+            dirs.append(os.path.join(a["dir"], "projects"))
+    dirs.append(os.path.join(_codex_dir(cfg), "sessions"))
+    return dirs
+
+
+def _scan_activity():
+    """Fold CLI transcript timestamps into absolute hour buckets, reading only
+    the bytes appended since the last pass. The first pass reads the whole 7-day
+    tail (tens of MB, seconds); every pass after it is near-free."""
+    doc = _read_json(ACTIVITY) or {}
+    files = doc.get("files") or {}
+    buckets = doc.get("buckets") or {}
+    now = time.time()
+    cut = now - ACTIVITY_KEEP
+    for base in _transcript_dirs():
+        if not os.path.isdir(base):
+            continue
+        for dirpath, _dirs, fns in os.walk(base):
+            for fn in fns:
+                if not fn.endswith(".jsonl"):
+                    continue
+                path = os.path.join(dirpath, fn)
+                try:
+                    size = os.path.getsize(path)
+                    if os.path.getmtime(path) < cut:
+                        files.pop(path, None)
+                        continue
+                except OSError:
+                    continue
+                start = files.get(path, 0)
+                if start > size:
+                    start = 0  # file was rotated/truncated -> re-read it
+                if start == size:
+                    continue
+                try:
+                    with open(path, encoding="utf-8", errors="ignore") as handle:
+                        handle.seek(start)
+                        for line in handle:
+                            hour = _line_hour(line)
+                            if hour:
+                                buckets[hour] = buckets.get(hour, 0) + 1
+                except OSError:
+                    continue
+                files[path] = size
+    keep = int(cut // 3600)
+    buckets = {h: c for h, c in buckets.items() if int(h) >= keep}
+    try:
+        _atomic_json_write(ACTIVITY, {"files": files, "buckets": buckets,
+                                      "asof": int(now)})
+    except OSError:
+        pass
+
+
+def _line_hour(line):
+    """Absolute epoch-hour of a transcript line, as a string key. Cheap: bails
+    on the substring test before any JSON parsing."""
+    i = line.find('"timestamp"')
+    if i < 0:
+        return None
+    j = line.find('"', line.find(":", i) + 1)
+    if j < 0:
+        return None
+    raw = line[j + 1:line.find('"', j + 1)]
+    try:
+        t = datetime.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.astimezone()
+    return str(int(t.timestamp() // 3600))
+
+
+def activity_grid():
+    """7x24 local-time counts for the last 7 days: grid[weekday][hour], Mon=0."""
+    doc = _read_json(ACTIVITY) or {}
+    grid = [[0] * 24 for _ in range(7)]
+    cut = time.time() - 7 * 86400
+    total = 0
+    for hour, count in (doc.get("buckets") or {}).items():
+        try:
+            stamp = int(hour) * 3600
+        except ValueError:
+            continue
+        if stamp < cut:
+            continue
+        local = datetime.datetime.fromtimestamp(stamp)
+        grid[local.weekday()][local.hour] += count
+        total += count
+    return {"grid": grid, "total": total, "asof": doc.get("asof") or 0,
+            "source": "claude + codex transcripts"}
+
+
 def _loop():
     while True:
         try:
             _refresh()
+            _scan_activity()
         except Exception as e:
             # a crash here used to kill the thread outright: the strip froze on
             # its last snapshot forever and said nothing. Log and keep looping.
@@ -1279,7 +1442,23 @@ def _selfcheck():
         locked = _read_json(p)
         assert "outlook2" in locked and "github2" in locked
         assert not os.path.exists(state_lock)
-    print("pulse selfcheck: ok (cache merge, state lock, cold start, Graph time/pagination, atomic write)")
+    # recorded history: line->hour extraction, and hour buckets -> 7x24 grid
+    assert _line_hour('{"a":1}') is None
+    assert _line_hour('{"type":"user","timestamp":"2026-07-14T09:30:00Z"}') \
+        == str(int(datetime.datetime(2026, 7, 14, 9, 30,
+                                     tzinfo=datetime.timezone.utc).timestamp() // 3600))
+    assert _line_hour('{"timestamp":"not-a-date"}') is None
+    marker = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
+    globals()["ACTIVITY"] = os.path.join(tempfile.gettempdir(), "pulse-selfcheck-grid.json")
+    _atomic_json_write(ACTIVITY, {"buckets": {
+        str(int(marker.timestamp() // 3600)): 5,
+        str(int((marker - datetime.timedelta(days=30)).timestamp() // 3600)): 99,
+    }})
+    live = activity_grid()
+    assert live["total"] == 5, live["total"]           # the 30-day-old bucket is dropped
+    assert live["grid"][marker.weekday()][marker.hour] == 5
+    os.remove(ACTIVITY)
+    print("pulse selfcheck: ok (cache merge, state lock, cold start, Graph time/pagination, atomic write, activity grid)")
     return 0
 
 

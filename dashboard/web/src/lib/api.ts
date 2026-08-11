@@ -96,6 +96,74 @@ export interface SkillRegistry {
   skills: Record<string, SkillEntry>
 }
 
+export interface ClaudeAccount {
+  name: string
+  email?: string | null
+  pct?: number | null
+  pct7d?: number | null
+  reset_at?: number | null
+  reset7d?: number | null
+  error?: string | null
+}
+
+export interface Pulse {
+  asof?: number
+  claude?: { accounts?: ClaudeAccount[]; error?: string }
+  codex?: {
+    email?: string
+    plan?: string
+    mode?: string
+    credits?: string
+    pct?: number
+    pct7d?: number
+    reset_at?: number
+    asof?: number
+    error?: string
+  }
+  github?: {
+    user?: string
+    today?: number
+    year?: number
+    streak?: number
+    days?: { date: string; count: number }[]
+    error?: string
+  }
+  [key: string]: unknown
+}
+
+export interface BrainPayload {
+  summary: {
+    attempts?: number
+    hits?: number
+    misses?: number
+    injected_tokens_estimate?: number
+  }
+  storage: {
+    status?: string
+    cards?: { active_count?: number; stale_count?: number; active_bytes?: number }
+  }
+  receipts: { ts?: string; outcome?: string }[]
+}
+
+export interface VaultTree {
+  vault: string
+  notes: { path: string; name: string; folder: string; mtime: number }[]
+  links: [number, number][]
+}
+
+export interface UsageSeries {
+  keys: string[]
+  rows: ({ ts: number } & Record<string, number>)[]
+  window_hours: number
+}
+
+export interface ActivityGrid {
+  grid: number[][]
+  total: number
+  asof: number
+  source: string
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, { cache: "no-store" })
   if (!res.ok) throw new Error(`${path}: ${res.status}`)
@@ -170,6 +238,26 @@ export async function postCeoMessage(
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.error || `ceo failed: ${res.status}`)
   return body
+}
+
+export function fetchPulse(): Promise<Pulse> {
+  return getJson("/api/pulse")
+}
+
+export function fetchBrain(): Promise<BrainPayload> {
+  return getJson("/api/brain")
+}
+
+export function fetchVault(): Promise<VaultTree> {
+  return getJson("/api/vault")
+}
+
+export function fetchUsageSeries(hours = 12): Promise<UsageSeries> {
+  return getJson(`/api/usage-series?hours=${hours}`)
+}
+
+export function fetchActivityGrid(): Promise<ActivityGrid> {
+  return getJson("/api/activity-grid")
 }
 
 export function fetchSkillRegistry(): Promise<SkillRegistry> {

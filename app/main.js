@@ -57,10 +57,11 @@ function createMainWindow() {
   mainWin.once("ready-to-show", () => {
     if (!SMOKE && !process.argv.includes("--minibar")) mainWin.show();
   });
-  mainWin.on("minimize", () => showMiniBar());
+  // the island is summoned, never volunteered: only Ctrl+Shift+Space (or the
+  // tray item) shows it. Minimising or closing the dashboard no longer does.
   mainWin.on("close", (e) => {
     // ponytail: close-to-tray; real quit only via tray menu
-    if (!app.isQuittingForReal) { e.preventDefault(); mainWin.hide(); showMiniBar(); }
+    if (!app.isQuittingForReal) { e.preventDefault(); mainWin.hide(); }
   });
 }
 
@@ -94,10 +95,12 @@ function createMiniBar() {
     y: Number.isFinite(saved.y) ? Math.min(Math.max(saved.y, 0), area.height - 62) : 10,
     frame: false,
     transparent: true,
-    resizable: true,           // width is the user's; height follows content
-    minWidth: 320,
-    maxWidth: 780,
-    minHeight: 56,
+    // the island owns its own bounds now: each state has a size and the window
+    // follows it, so a user-dragged width would only fight the morph
+    resizable: false,
+    minWidth: 72,
+    maxWidth: 820,
+    minHeight: 44,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false,
@@ -122,6 +125,28 @@ ipcMain.on("win:maximize", () => {
   if (!mainWin) return;
   mainWin.isMaximized() ? mainWin.unmaximize() : mainWin.maximize();
 });
+// The island morphs on both axes, so the window has to follow. It is resized
+// once per state transition (never per animation frame) and stays centred on
+// its own centre, the way a real Dynamic Island grows symmetrically.
+ipcMain.on("minibar:bounds", (_e, { w, h } = {}) => {
+  if (!miniBar) return;
+  const width = Math.max(72, Math.min(820, Math.round(Number(w) || 420)));
+  const height = Math.max(44, Math.min(600, Math.round(Number(h) || 62)));
+  const b = miniBar.getBounds();
+  if (b.width === width && b.height === height) return;
+  const cx = b.x + b.width / 2;
+  miniBar.setBounds({ x: Math.round(cx - width / 2), y: b.y, width, height });
+});
+
+// The island is dragged by the renderer, not by -webkit-app-region: a drag
+// region swallows every click, which is why clicking the island did nothing.
+ipcMain.on("minibar:move", (_e, { dx, dy } = {}) => {
+  if (!miniBar) return;
+  const b = miniBar.getBounds();
+  miniBar.setBounds({ ...b, x: Math.round(b.x + (Number(dx) || 0)),
+                            y: Math.round(b.y + (Number(dy) || 0)) });
+});
+
 ipcMain.on("minibar:hide", () => hideMiniBar());
 ipcMain.on("minibar:open-main", () => restoreMain());
 
@@ -166,8 +191,12 @@ app.whenReady().then(() => {
     createMiniBar();
     createTray();
     if (process.argv.includes("--minibar")) showMiniBar();
+    // Ctrl+Shift+Space swaps the two surfaces: dashboard away, island up —
+    // press again and the dashboard comes back. isFocused() used to be part of
+    // this test, so the swap silently did nothing whenever anything else held
+    // focus (including the island itself).
     globalShortcut.register("Control+Shift+Space", () => {
-      if (mainWin.isVisible() && mainWin.isFocused()) { mainWin.hide(); showMiniBar(); }
+      if (mainWin && mainWin.isVisible()) { mainWin.hide(); showMiniBar(); }
       else restoreMain();
     });
     if (SMOKE) { console.log("SMOKE_OK"); app.isQuittingForReal = true; setTimeout(() => app.quit(), 500); }

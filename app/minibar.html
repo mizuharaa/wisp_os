@@ -5,13 +5,15 @@
 <title>Wisp bar</title>
 <style>
   :root {
-    --paper: 252, 250, 246;
-    --ink: #201a26;
-    --ink-soft: rgba(32, 26, 38, 0.55);
-    --plum: #b5610b;
-    --hue-a: #f0a01e;
-    --hue-b: #d97706;
-    --hue-c: #e88a4d;
+    /* the island is its own object — dark glass, never the dashboard's paper */
+    --ink: #F4F2FF;
+    --ink-soft: rgba(244, 242, 255, 0.62);
+    --plum: #8B7CFF;                       /* the mark and the accent */
+    --iris: #6D5AE6;
+    /* sweep colours encode the activity; wired up in phase 2 */
+    --hue-a: #6D5AE6;
+    --hue-b: #8B7CFF;
+    --hue-c: #A78BFA;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -21,22 +23,33 @@
   }
 
   /* ── island: compact pill that morphs open ── */
+  /* the window is transparent and bigger than the island; this centres the
+     island inside it so the morph grows from the middle */
+  body { display: flex; align-items: flex-start; justify-content: center; }
   #island {
-    position: relative; margin: 8px 10px;
-    border-radius: 26px;
-    background: rgba(var(--paper), 0.9);
-    backdrop-filter: blur(26px) saturate(1.4);
-    box-shadow: 0 2px 6px rgba(22, 14, 30, 0.10),
-                0 14px 40px rgba(22, 14, 30, 0.20),
-                inset 0 1px 0 rgba(255, 255, 255, 0.7);
-    transition: border-radius .28s cubic-bezier(.2,.8,.3,1.1),
-                box-shadow .28s ease, background .28s ease;
+    position: relative; margin: 18px 0;   /* matches MARGIN in the script */
+    width: 200px; min-height: 34px;        /* dormant; JS springs these */
+    border-radius: 999px;
+    background: rgba(18, 14, 34, 0.72);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18),
+                0 20px 50px -14px rgba(0, 0, 0, 0.70);
+    color: var(--ink);
+    overflow: hidden;
   }
+  /* the container leads, the content follows 120ms behind — that lag is what
+     makes it read as one object deforming instead of a box being resized */
+  #island .pill > *, #island #panel { transition: opacity 140ms ease; }
+  #island.morphing .pill > *, #island.morphing #panel { opacity: 0; }
+  /* the ring is the running border: it belongs to work in progress, not to a
+     resting island. At rest it was a permanent violet outline. */
   #island::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit;
     padding: 1.5px; pointer-events: none;
     background: linear-gradient(115deg, var(--hue-a), var(--hue-b) 55%, var(--hue-c));
-    opacity: .4;
+    opacity: 0;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor; mask-composite: exclude;
     transition: opacity .25s ease;
@@ -48,11 +61,15 @@
   #island[data-open="1"] { border-radius: 20px; }
 
   /* pill row — the drag handle */
+  /* NOT -webkit-app-region:drag — an OS drag region never delivers a click,
+     which is why nothing happened when you clicked the island. The renderer
+     drags the window itself (see the pointer handlers below), so the same
+     surface can both move and be clicked. */
   .pill {
     display: flex; align-items: center; gap: 10px;
-    padding: 10px 16px; cursor: grab; min-height: 44px;
-    -webkit-app-region: drag;
+    padding: 10px 16px; cursor: grab; min-height: 34px;
   }
+  .pill:active { cursor: grabbing; }
   .pill svg { width: 15px; height: 15px; stroke: var(--plum); fill: none;
               stroke-width: 2; flex: none; }
   #ptext { flex: 1; min-width: 0; color: var(--ink-soft); font-size: 13px;
@@ -66,50 +83,66 @@
 
   .row { display: flex; align-items: center; gap: 6px; padding: 2px 12px 10px;
          -webkit-app-region: no-drag; }
-  input#q { flex: 1; min-width: 0; background: rgba(255,255,255,.65);
-    border: 1px solid rgba(255,255,255,.9); border-radius: 13px;
-    padding: 8px 12px; outline: 0; color: var(--ink); font: inherit; font-size: 13.5px; }
-  input#q:focus { border-color: var(--plum); }
-  input#q::placeholder { color: var(--ink-soft); }
+  input#q { flex: 1; min-width: 0; background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.16); border-radius: 13px;
+    padding: 9px 13px; outline: 0; color: var(--ink); font: inherit; font-size: 13.5px; }
+  input#q:focus { border-color: var(--plum); background: rgba(255,255,255,.10); }
+  input#q::placeholder { color: rgba(244,242,255,.42); }
 
   button { appearance: none; border: 0; background: transparent; cursor: pointer;
     width: 32px; height: 32px; border-radius: 11px; padding: 0;
     display: grid; place-items: center; color: var(--ink);
     -webkit-app-region: no-drag;
     transition: background .18s ease, transform .18s cubic-bezier(.2,.8,.3,1.2); }
-  button:hover { background: rgba(10, 132, 255, 0.10); transform: translateY(-1px); }
+  button:hover { background: rgba(139, 124, 255, 0.20); transform: translateY(-1px); }
   button:active { transform: scale(.94); }
   button:focus-visible { outline: 2px solid var(--plum); outline-offset: 2px; }
   button svg { width: 16px; height: 16px; stroke: currentColor; fill: none;
                stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
   #mic.live { color: #fff; background: var(--plum); }
-  #stop { display: none; color: #a11f3c; }
+  #stop { display: none; color: #FB7185; }
   body[data-state="working"] #stop { display: grid; }
 
   /* answer card */
-  #answer { display: none; margin: 0 12px 10px; padding: 11px 13px;
-    border-radius: 14px; background: rgba(255,255,255,.72);
-    border: 1px solid rgba(10,132,255,.14); font-size: 13px; line-height: 1.5;
-    max-height: 300px; overflow-y: auto; white-space: pre-wrap; user-select: text;
-    -webkit-app-region: no-drag; animation: rise .25s cubic-bezier(.2,.8,.3,1.1); }
+  #answer { display: none; margin: 0 12px 10px; padding: 12px 14px;
+    border-radius: 14px; background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12); font-size: 13px; line-height: 1.55;
+    color: var(--ink);
+    max-height: 300px; overflow-y: auto; user-select: text;
+    animation: rise .25s cubic-bezier(.2,.8,.3,1.1); }
+  /* the reply is markdown, so it is rendered as markdown — it used to be
+     dumped in as raw text with **stars** showing */
+  #answer p { margin: 0 0 8px; } #answer p:last-child { margin-bottom: 0; }
+  #answer strong { font-weight: 650; color: #fff; }
+  #answer em { font-style: italic; }
+  #answer ul { margin: 0 0 8px; padding-left: 18px; }
+  #answer li { margin: 2px 0; }
+  #answer h3 { font-size: 13.5px; font-weight: 650; margin: 2px 0 6px; color: #fff; }
+  #answer a { color: var(--plum); }
+  #answer code { font: 12px "JetBrains Mono", Consolas, ui-monospace, monospace;
+    background: rgba(255,255,255,.10); border-radius: 5px; padding: 1px 5px; }
+  #answer pre { background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.10);
+    border-radius: 10px; padding: 9px 11px; overflow-x: auto; margin: 0 0 8px; }
+  #answer pre code { background: none; padding: 0; }
   #answer.show { display: block; }
   @keyframes rise { from { opacity: 0; transform: translateY(6px) scale(.985); } }
 
   .appr { margin: 0 12px 10px; padding: 10px 13px; border-radius: 14px;
-    background: rgba(255,255,255,.78); border: 1px solid rgba(10,132,255,.22);
+    background: rgba(255,255,255,.06); border: 1px solid rgba(139,124,255,.32);
     font-size: 13px; -webkit-app-region: no-drag; animation: rise .25s ease; }
-  .appr .who { color: var(--ink-soft); font-size: 11px; letter-spacing: .03em;
+  .appr .who { color: rgba(244,242,255,.55); font-size: 11px; letter-spacing: .03em;
                text-transform: uppercase; margin-bottom: 2px; }
   .appr .what { margin-bottom: 8px; }
   .appr .acts { display: flex; gap: 8px; flex-wrap: wrap; }
   .appr .acts button { width: auto; height: 29px; padding: 0 13px; border-radius: 10px;
     font: 600 12.5px/1 Inter, "Segoe UI", system-ui, sans-serif; }
   .appr .allow { background: var(--plum); color: #fff; }
-  .appr .retry { border: 1px solid rgba(32,26,38,.2); }
-  .appr .deny { color: #a11f3c; border: 1px solid rgba(161,31,60,.3); }
+  .appr .retry { border: 1px solid rgba(255,255,255,.20); }
+  .appr .deny { color: #FB7185; border: 1px solid rgba(251,113,133,.36); }
 
   #note { display: none; margin: 0 12px 10px; padding: 9px 13px; border-radius: 13px;
-    background: rgba(255,255,255,.7); border: 1px solid rgba(10,132,255,.12);
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+    color: var(--ink);
     font-size: 12.5px; -webkit-app-region: no-drag; animation: rise .25s ease; }
   #note.show { display: block; }
 
@@ -122,8 +155,9 @@
 <body data-state="idle">
   <div id="island" data-open="0">
     <div class="pill" title="Drag to move — Esc hides">
-      <svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
-      <span id="ptext">Ask Wisp — hover to open</span>
+      <!-- the wisp mark, not a sparkle: the running border is the only spinner -->
+      <svg viewBox="0 0 24 24"><path d="M3 8c3.2 0 3.2 8 6.4 8S12.6 8 15.8 8 19 16 21 16"/></svg>
+      <span id="ptext">wisp</span>
     </div>
     <div id="panel"><div class="inner">
       <div class="row">
@@ -155,22 +189,143 @@
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let state = "idle", running = [], history = [], fromVoice = false;
-  const setState = (s) => { state = s; document.body.dataset.state = s; };
+  /* ── the morph: one element, one spring, three properties ──────────────
+     Width, height and radius all lerp off a single spring so the island is a
+     single object deforming and never two elements swapping. The window
+     follows once per transition (never per frame — that would jank). */
+  const ISLAND_SPRING = { k: 380, c: 30, m: 0.9 };
+  // the window hugs the island: just enough room for the drop shadow, so there
+  // is no wide transparent halo sitting on top of whatever is behind it
+  const MARGIN = 18;
+  const SIZE = { dormant:[200,34,999], listening:[420,48,999], thinking:[460,52,999],
+                 working:[520,64,26],  live:[320,38,999],      peek:[560,200,24],
+                 toast:[340,52,18],    minimized:[56,28,999] };
+  const RMOTION = matchMedia("(prefers-reduced-motion: reduce)");
+  const islandEl = document.getElementById("island");
+  let cur = { w:200, h:34, r:999 }, stopMorph = null, morphOff = 0, islandState = "dormant";
 
-  const fit = () => requestAnimationFrame(() =>
-    window.wisp && window.wisp.resize(Math.ceil(island.getBoundingClientRect().height) + 16));
+  function springTo(target, cfg, onFrame) {
+    if (RMOTION.matches) { onFrame(1); return () => {}; }
+    let x = 0, v = 0, raf = 0, last = performance.now();
+    (function step(now) {
+      const dt = Math.min((now - last) / 1000, 1 / 30); last = now;
+      for (let i = 0; i < 2; i++) {
+        const h = dt / 2;
+        v += ((-cfg.k * (x - target) - cfg.c * v) / cfg.m) * h;
+        x += v * h;
+      }
+      onFrame(x);
+      if (Math.abs(x - target) < 0.002 && Math.abs(v) < 0.02) return onFrame(target);
+      raf = requestAnimationFrame(step);
+    })(last);
+    return () => cancelAnimationFrame(raf);
+  }
+
+  function morph(next) {
+    if (!SIZE[next] || next === islandState) return;
+    const [w, h, r] = SIZE[next], from = { ...cur };
+    islandState = next;
+    document.body.dataset.island = next;
+    // the window is sized to the LARGER of the two states before the spring
+    // starts, so the island is never clipped mid-morph
+    if (window.wisp && window.wisp.bounds)
+      window.wisp.bounds(Math.max(from.w, w) + MARGIN * 2, Math.max(from.h, h) + MARGIN * 2);
+    islandEl.classList.add("morphing");
+    clearTimeout(morphOff);
+    morphOff = setTimeout(() => islandEl.classList.remove("morphing"),
+                          RMOTION.matches ? 0 : 120);
+    stopMorph && stopMorph();
+    stopMorph = springTo(1, ISLAND_SPRING, (t) => {
+      cur.w = from.w + (w - from.w) * t;
+      cur.h = from.h + (h - from.h) * t;
+      cur.r = from.r + (r - from.r) * t;
+      islandEl.style.width = cur.w.toFixed(1) + "px";
+      islandEl.style.minHeight = cur.h.toFixed(1) + "px";
+      islandEl.style.borderRadius = cur.r.toFixed(1) + "px";
+      if (t > 0.999 && window.wisp && window.wisp.bounds)
+        window.wisp.bounds(w + MARGIN * 2, h + MARGIN * 2);  // settle onto the state
+    });
+  }
+  window.islandState = (s) => { morph(s); return islandState; };
+
+  // No click-through: setIgnoreMouseEvents also swallows mousedown, so the
+  // island became undraggable. The window hugs the island instead (MARGIN).
+
+  /* ── drag and click, from the renderer ──────────────────────────────────
+     The pill used to be an OS drag region, which never delivers a click. Now
+     the island moves its own window on pointer drag, and anything under the
+     4px threshold is treated as a click instead. */
+  (function () {
+    let down = null;
+    islandEl.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("button, input, #answer, .appr")) return;
+      down = { x: e.screenX, y: e.screenY, moved: 0 };
+      islandEl.setPointerCapture(e.pointerId);
+    });
+    islandEl.addEventListener("pointermove", (e) => {
+      if (!down) return;
+      const dx = e.screenX - down.x, dy = e.screenY - down.y;
+      if (!dx && !dy) return;
+      down.moved += Math.abs(dx) + Math.abs(dy);
+      down.x = e.screenX; down.y = e.screenY;
+      window.wisp && window.wisp.move && window.wisp.move(dx, dy);
+    });
+    const end = (e) => {
+      if (!down) return;
+      const wasClick = down.moved < 4;
+      down = null;
+      try { islandEl.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (wasClick) island.dataset.open === "1" ? closeNow() : open();
+    };
+    islandEl.addEventListener("pointerup", end);
+    islandEl.addEventListener("pointercancel", end);
+  })();
+
+  function closeNow() {
+    clearTimeout(closeTimer);
+    island.dataset.open = "0";
+    morph(STATE_ISLAND[state] || "dormant");
+    setTimeout(fit, 320);
+  }
+
+  // activity states map onto the island's vocabulary
+  const STATE_ISLAND = { idle:"dormant", listening:"listening", thinking:"thinking",
+                         working:"working" };
+  const setState = (s) => {
+    state = s; document.body.dataset.state = s;
+    if (island.dataset.open !== "1") morph(STATE_ISLAND[s] || "dormant");
+  };
+
+  // peek is the one state that sizes to its payload (560 × auto, capped at 320)
+  const fit = () => requestAnimationFrame(() => {
+    if (!window.wisp) return;
+    if (islandState === "peek") {
+      const inner = island.querySelector("#panel .inner");
+      const h = Math.max(44, Math.min(320,
+        Math.ceil((inner ? inner.getBoundingClientRect().height : 0) + 52)));
+      cur.h = h;
+      island.style.minHeight = h + "px";
+      window.wisp.bounds && window.wisp.bounds(560 + MARGIN * 2, h + MARGIN * 2);
+    } else {
+      window.wisp.bounds && window.wisp.bounds(cur.w + MARGIN * 2, cur.h + MARGIN * 2);
+    }
+  });
 
   // ── morph open/close ──
   let closeTimer = 0;
-  function open() { clearTimeout(closeTimer); island.dataset.open = "1"; fit();
-                    setTimeout(fit, 320); }
+  function open() { clearTimeout(closeTimer); island.dataset.open = "1"; morph("peek");
+                    fit(); setTimeout(fit, 320); }
   function maybeClose() {
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => {
       const busy = state !== "idle" || answer.classList.contains("show") ||
                    approvalsBox.children.length || note.classList.contains("show") ||
                    document.activeElement === q;
-      if (!busy) { island.dataset.open = "0"; setTimeout(fit, 320); }
+      if (!busy) {
+        island.dataset.open = "0";
+        morph(STATE_ISLAND[state] || "dormant");
+        setTimeout(fit, 320);
+      }
     }, 700);
   }
   island.addEventListener("mouseenter", open);
@@ -178,6 +333,40 @@
   island.addEventListener("focusin", open);
 
   function pill(text) { ptext.textContent = text; }
+
+  /* ── markdown ────────────────────────────────────────────────────────────
+     Model replies are markdown. They were being written in with textContent,
+     so every **bold** and bullet showed its syntax. Escape first — this is
+     untrusted model output going into innerHTML — then render the subset that
+     actually turns up in a reply. */
+  function md(src) {
+    const esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const code = [];
+    let t = esc(String(src || "").trim())
+      .replace(/```(\w*)\n?([\s\S]*?)```/g, (_m, _lang, body) =>
+        " " + (code.push("<pre><code>" + body.replace(/\n$/, "") + "</code></pre>") - 1) + " ");
+    t = t
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[\s(])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+    // a list usually follows its lead-in line with no blank line between them,
+    // so blocks are scanned line by line rather than classified whole
+    const BULLET = /^\s*([-*+]|\d+\.)\s+/;
+    const out = t.split(/\n{2,}/).map((block) => {
+      let html = "", para = [], list = [];
+      const flushP = () => { if (para.length) { html += "<p>" + para.join("<br>") + "</p>"; para = []; } };
+      const flushL = () => { if (list.length) { html += "<ul>" + list.join("") + "</ul>"; list = []; } };
+      for (const line of block.split("\n")) {
+        if (BULLET.test(line)) { flushP(); list.push("<li>" + line.replace(BULLET, "") + "</li>"); }
+        else if (/^#{1,6}\s/.test(line)) { flushP(); flushL(); html += "<h3>" + line.replace(/^#{1,6}\s*/, "") + "</h3>"; }
+        else { flushL(); if (line.trim()) para.push(line); }
+      }
+      flushP(); flushL();
+      return html;
+    }).join("");
+    return out.replace(/ (\d+) /g, (_m, i) => code[+i]);
+  }
 
   // ── status like a real assistant, then the actual answer ──
   let statusTimer = 0;
@@ -189,9 +378,10 @@
   }
   function idlePill() {
     clearTimeout(statusTimer);
+    // dormant is 200px wide: it carries the mark and a word, nothing more
     pill(running.length
       ? running.length + " running — " + running.map((x) => x.title).join(" · ")
-      : "Ask Wisp — hover to open");
+      : "wisp");
   }
 
   const speak = (t) => { try { speechSynthesis.cancel();
@@ -237,7 +427,7 @@
     history.push({ role: "user", content: t },
                  { role: "assistant", content: r.data.reply });
     history = history.slice(-12);
-    answer.textContent = r.data.reply;
+    answer.innerHTML = md(r.data.reply);
     answer.classList.add("show"); open(); fit();
     q.value = ""; q.focus();
     if (voice) speak(r.data.reply.split(/(?<=[.!?])\s/)[0].slice(0, 220));

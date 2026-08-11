@@ -36,4 +36,4 @@ export const ROUTE_LABELS: Record<RouteId, string> = {
   guard: "Guard",
 }
 
-export const PORTED_ROUTES: ReadonlySet<RouteId> = new Set(["instances", "skills"])
+export const PORTED_ROUTES: ReadonlySet<RouteId> = new Set(["overview", "instances", "skills"])

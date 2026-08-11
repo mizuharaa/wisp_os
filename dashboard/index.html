@@ -37,14 +37,15 @@
   }
   /* account cards stay white in dark mode (they're brand cards) — re-scope the
      palette locally so their text keeps light-theme inks and stays readable */
-  html[data-theme="dark"] .ccard{
-    --ink:#21151d; --ink2:#6a5c66; --ink3:#a2989f; --canvas:#f5f0ed; --field:#fcf9fb;
-    --green:#5c1346; --green-mid:#7c1e60; --mint-soft:#efddea; --line:#e8dfe5; --line2:#dbcfd7;
-    --gh0:#ece3e9; --gh1:#e6b9d6; --gh2:#c96faa; --gh3:#8f2f70; --gh4:#5c1346}  /* white card → light heatmap ramp */
-  html[data-theme="dark"] .pill.warn,html[data-theme="dark"] .deltapill.neg,
-  html[data-theme="dark"] .rstat.failed,html[data-theme="dark"] .rstat.blocked{background:#46201c; color:#f2a99e}
-  html[data-theme="dark"] .rstat.review{background:#413015; color:#e8b568}
-  html[data-theme="dark"] .captrack{background:repeating-linear-gradient(45deg,#241a29 0 4px,#31243a 4px 6px)}
+  /* This local light re-scope was written when account cards were solid white
+     in dark mode. Under the glass material they are translucent panels like
+     everything else, so the light inks it forced produced white-on-white chips
+     (measured 1.15:1 on "resets in 0h 28m"). The cards now use the dark tokens. */
+  /* the pre-glass dark palette painted these as brown and olive slabs; the
+     status recipe near the end of this sheet now owns every state surface */
+  /* the empty-capacity hatch was plum; neutral white hatching keeps the page
+     on one accent */
+  html[data-theme="dark"] .captrack{background:repeating-linear-gradient(45deg,rgba(255,255,255,0.05) 0 4px,rgba(255,255,255,0.10) 4px 6px)}
   *{box-sizing:border-box; margin:0; padding:0}
   html{scroll-behavior:smooth}
   html,body{overflow-x:clip}
@@ -360,8 +361,11 @@
   .ccard.github .clogo{stroke:#24292e}
   html[data-theme="dark"] .ccard.github .clogo{stroke:#0d0d0d}
   /* contribution heatmap — plum ramp, column-major weeks, scales to card width */
-  :root{--gh0:#ece3e9; --gh1:#e6b9d6; --gh2:#c96faa; --gh3:#8f2f70; --gh4:#5c1346}
-  html[data-theme="dark"]{--gh0:#2a2030; --gh1:#4a2340; --gh2:#7c3564; --gh3:#ad5090; --gh4:#e08cc4}
+  :root{--gh0:#e9e6f4; --gh1:#c9c2ee; --gh2:#9c8fe4; --gh3:#6D5AE6; --gh4:#4C3FB5}
+  /* the ramp was the pre-glass plum family — a fifth hue on a page that now
+     runs on iris; walked onto the accent instead */
+  html[data-theme="dark"]{--gh0:rgba(255,255,255,0.07); --gh1:#332C56; --gh2:#4C4185;
+    --gh3:#6D5AE6; --gh4:#A99BFF}
   .ghg{display:grid; grid-template-rows:repeat(7,1fr); grid-auto-flow:column; grid-auto-columns:minmax(0,1fr);
     gap:2px; margin-top:13px; position:relative; z-index:1; min-width:0; overflow:hidden}
   .ghg i{aspect-ratio:1; border-radius:2px; background:var(--gh0); transition:transform .1s}
@@ -1216,18 +1220,19 @@
      panel (L*~97) is only 4.5 above, so the backdrop had to go deeper. */
   --void:#BFC3DC;
   --neb-1:#A79EE0; --neb-2:#A8BCE6; --neb-3:#BCA8DE; --neb-4:#A3B2E0;
-  --glass-fill:rgba(255,255,255,0.60);
+  --glass-fill:rgba(255,255,255,0.68);
   --glass-lift:blur(26px) saturate(180%);
-  --inner-fill:rgba(255,255,255,0.45);
+  --inner-fill:rgba(255,255,255,0.52);
   --inner-line:rgba(255,255,255,0.60);
   --hairline:rgba(255,255,255,0.80); --hairline-lit:rgba(255,255,255,0.95);
   /* shadows are violet-tinted, never grey or black */
   --panel-shadow:0 10px 34px -10px rgba(76,66,140,0.20), 0 2px 6px -2px rgba(76,66,140,0.10);
   --panel-inset:inset 0 1px 0 rgba(255,255,255,0.95);
-  --graph-line:rgba(26,24,48,0.16);
+  --graph-line:rgba(26,24,48,0.22);
   --panel-grain:0.02;
-  /* text */
-  --ink-glass:#1A1830; --ink-2-glass:rgba(26,24,48,0.62); --ink-3-glass:rgba(26,24,48,0.40);
+  /* text — secondary and muted were washing out against the lavender room;
+     0.62/0.40 measured under 4.5:1 on the panel fill */
+  --ink-glass:#141227; --ink-2-glass:rgba(20,18,39,0.80); --ink-3-glass:rgba(20,18,39,0.60);
   /* violet leads; the multicolour set carries chips and data series */
   --iris:#6D5AE6; --iris-glow:#8B7CFF; --mint-a:#10B981;
   --amber-a:#F59E0B; --cyan:#06B6D4; --coral:#F43F5E; --slate-a:#64748B;
@@ -1257,6 +1262,14 @@
   /* radius & spacing */
   --rune-radius-sm:14px; --rune-radius-md:14px; --rune-radius-lg:20px; --rune-radius-pill:999px;
 
+  /* --canvas is used 38 times as an INSET surface (recessed wells: recall
+     receipts, the role flow, tracks, empty states) but the glass migration
+     mapped it to --rune-paper, i.e. the room itself. Inside a translucent
+     panel that painted a slab of backdrop — near-black in dark, mid-grey in
+     light, matching neither. A recess is a small step away from its panel:
+     darker on light, lighter on dark. */
+  --canvas:rgba(20,18,39,0.06);
+
   --rail-w:68px; --rail-open:220px; --island-strip:60px;
   --wisp-glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M3 8c3.2 0 3.2 8 6.4 8S12.6 8 15.8 8 19 16 21 16'/%3E%3C/svg%3E");
 }
@@ -1266,16 +1279,62 @@
    left to lift into and collapses to a flat sheet. */
 html[data-theme="light"]{ color-scheme:light; }
 
+/* DARK — graphite, not violet-black: the Apple Music / productivity-app read.
+   The room goes near-neutral and the panels are the only thing carrying
+   colour. Everything below is a token swap; no component knows about themes.
+   Material spec: blur 16-40px, fill white 10%, edge white 20-25%. */
+html[data-theme="dark"]{
+  color-scheme:dark;
+  /* the room */
+  --void:#101013;
+  /* the blobs stay low-saturation so the room reads graphite, but they have to
+     carry enough light for the panels to lift off something */
+  --neb-1:#474066; --neb-2:#31465F; --neb-3:#4C3D60; --neb-4:#2B3B50;
+  /* the material */
+  --glass-fill:rgba(255,255,255,0.10);
+  --glass-lift:blur(30px) saturate(170%);
+  --inner-fill:rgba(255,255,255,0.07);
+  --inner-line:rgba(255,255,255,0.14);
+  --hairline:rgba(255,255,255,0.22); --hairline-lit:rgba(255,255,255,0.28);
+  --panel-shadow:0 18px 44px -14px rgba(0,0,0,0.66), 0 2px 8px -3px rgba(0,0,0,0.50);
+  --panel-inset:inset 0 1px 0 rgba(255,255,255,0.16);
+  --graph-line:rgba(244,244,247,0.20);
+  --panel-grain:0.03;
+  /* text — punched, not whispered */
+  --ink-glass:#F4F4F7;
+  --ink-2-glass:rgba(244,244,247,0.80);
+  --ink-3-glass:rgba(244,244,247,0.58);
+  --canvas:rgba(255,255,255,0.05);
+  /* the accent has to climb on a dark room or it reads as navy */
+  --iris:#8B7CFF; --iris-glow:#A99BFF;
+  --rune-accent-active:#7C6BFF; --rune-accent-soft:rgba(139,124,255,0.20);
+  --rune-on-accent:#12111A;
+  --rune-shadow-float:0 2px 10px -2px rgba(0,0,0,0.60);
+  --rune-shadow-overlay:0 16px 46px -10px rgba(0,0,0,0.75);
+}
+/* the thin material brightens the wall behind it, which is right on a light
+   room and blows out a dark one */
+html[data-theme="dark"] .glass-thin,
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] aside#side{
+  -webkit-backdrop-filter:blur(24px) saturate(160%) brightness(1.06);
+  backdrop-filter:blur(24px) saturate(160%) brightness(1.06); }
+
 
 /* ── type ───────────────────────────────────────────────────────────── */
 body{ font-family:var(--rune-font-text); font-size:var(--rune-text-sm);
-  letter-spacing:-0.011em; line-height:1.5; color:var(--ink-glass); }
+  letter-spacing:-0.011em; line-height:1.5; color:var(--ink-glass); font-weight:450; }
 h1,h2,h3,.wordmark,.h{ font-family:var(--rune-font-display); line-height:1.35; letter-spacing:-0.02em; }
-h1{font-size:var(--rune-text-2xl)} h2{font-size:var(--rune-text-xl)} h3{font-size:var(--rune-text-lg)}
+h1{font-size:var(--rune-text-2xl); font-weight:680}
+h2{font-size:var(--rune-text-xl); font-weight:660}
+h3{font-size:var(--rune-text-lg); font-weight:640}
 .mono,code,pre,.clockchip,.tag{ font-family:var(--rune-font-mono); }
 /* background-image, NOT the background shorthand — the shorthand resets
-   background-clip:text and the wordmark renders as a filled box */
-.wordmark{ background-image:linear-gradient(100deg,var(--ink-glass),var(--ink-2-glass)); }
+   background-clip:text and the wordmark renders as a filled box.
+   The old stop pair faded the second half of the word into --ink-2; it now
+   holds full ink until the tail and finishes on the accent. */
+.wordmark{ background-image:linear-gradient(100deg,var(--ink-glass) 0%,var(--ink-glass) 58%,var(--iris) 100%); }
+
 
 /* ── the backdrop: ambient mesh. Glass with nothing behind it is a grey box,
    so this layer is load-bearing, not decoration. translate3d only. ───── */
@@ -1399,7 +1458,9 @@ aside#side .taskrail,aside#side .vinyl,aside#side .glass,
     border-radius:var(--rune-radius-lg); overflow:hidden; gap:2px;
     align-self:start; }
   .shell.railopen aside#side{ overflow-y:auto; }
-  aside#side .logo{ height:34px; padding:0 0 16px; position:relative; }
+  /* 12px of side padding so the wordmark lines up with the icon column it
+     heads — it used to sit 12px to the left of every icon below it */
+  aside#side .logo{ height:34px; padding:0 12px 16px; position:relative; }
   aside#side .logo b,aside#side .logo small,aside#side .navlab{ opacity:0; transition:opacity .2s ease; }
   /* the collapsed mark is the wisp glyph itself — a filled square here reads
      as a broken image, which §4 forbids outright */
@@ -1458,29 +1519,45 @@ html.electron #tlights{ display:flex; }
 #tlights .tl-zoom:hover{ background:var(--mint-a); }
 .topbar{ border-radius:var(--rune-radius-lg); margin:0 0 16px; padding:8px 12px; }
 
+/* The in-page island is retired: the Dynamic Island is the Electron window
+   (app/minibar.html), summoned with Ctrl+Shift+Space. The controller below
+   still runs — it drives body[data-agent] for the mesh heartbeat — but it no
+   longer paints. Delete this rule to bring the in-page one back. */
+#island,#isl-notes{ display:none !important; }
+
 /* ── the Dynamic Island ─────────────────────────────────────────────── */
 @property --angle{ syntax:"<angle>"; initial-value:0deg; inherits:false; }
 #island{
-  position:fixed; top:12px; left:50%; z-index:80;
+  position:fixed; top:12px; left:50%; z-index:9999;
   display:flex; flex-direction:column; align-items:stretch;
-  width:180px; min-height:36px; padding:0; border-radius:999px;
+  width:200px; min-height:34px; padding:0; border-radius:999px;
   transform:translateX(-50%); transform-origin:top center;
-  background:linear-gradient(145deg,rgba(255,255,255,0.12) 0%,rgba(255,255,255,0.05) 46%,rgba(255,255,255,0.08) 100%);
-  -webkit-backdrop-filter:blur(32px) saturate(125%) brightness(1.08);
-  backdrop-filter:blur(32px) saturate(125%) brightness(1.08);
-  border:1px solid var(--hairline); border-top-color:var(--hairline-lit);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.3),
-    0 18px 50px -10px rgba(0,0,0,0.6);
+  /* the island is its own object, not a piece of the dashboard: dark glass in
+     both themes, so it never dissolves into the light lavender room */
+  background:rgba(18,14,34,0.72);
+  -webkit-backdrop-filter:blur(40px) saturate(180%);
+  backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.14);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.18),
+    0 20px 50px -14px rgba(0,0,0,0.70);
+  color:#F4F2FF;
   /* NOT overflow:hidden — the running border lives at inset:-1.5px and would be
      clipped away by it. Inner blocks clip themselves instead. */
   overflow:visible; isolation:isolate; cursor:pointer; -webkit-app-region:no-drag;
-  color:var(--ink-glass);
 }
+/* the container leads, the content follows 120ms behind — that lag is what
+   makes it read as one object deforming instead of a box being resized */
+#island .isl-row>*:not(.isl-mark),#island .isl-peek,#island .isl-sub{
+  transition:opacity 140ms ease; }
+#island.morphing .isl-row>*:not(.isl-mark),
+#island.morphing .isl-peek,#island.morphing .isl-sub{ opacity:0; }
 #island .isl-row,#island .isl-peek{ overflow:hidden; border-radius:inherit; }
 #island .isl-peek{ border-radius:0 0 var(--rune-radius-lg) var(--rune-radius-lg); }
 #island[data-state="dormant"]{ animation:islandbreathe 4s ease-in-out infinite; }
 @keyframes islandbreathe{ 0%,100%{transform:translateX(-50%) scale(1)} 50%{transform:translateX(-50%) scale(1.015)} }
-#island .isl-row{ display:flex; align-items:center; gap:10px; padding:0 14px; min-height:36px; flex:none; }
+/* the row must not out-size the state it lives in — it used to force 36px and
+   hold the 34px dormant island open */
+#island .isl-row{ display:flex; align-items:center; gap:10px; padding:0 14px; min-height:inherit; flex:none; }
 #island .isl-mark{ width:18px; height:18px; flex:none; fill:none;
   stroke:var(--iris-glow); stroke-width:2; stroke-linecap:round;
   filter:drop-shadow(0 0 6px rgba(139,124,255,0.55)); }
@@ -1500,7 +1577,20 @@ html.electron #tlights{ display:flex; }
   transition:width .5s cubic-bezier(.2,.9,.24,1); }
 #island[data-state="working"] .isl-sub,#island[data-state="peek"] .isl-sub{ display:block; }
 #island .isl-peek{ display:none; padding:0 14px 14px; }
-#island[data-state="peek"] .isl-peek{ display:block; }
+/* The .glass-thick group lists #island[data-state="peek"] and, being id +
+   attribute, outranks #island: entering peek dropped the island out of the
+   viewport into page flow (measured at y=2001) AND repainted it in the light
+   panel material. Peek is the same object, only larger. */
+#island[data-state="peek"]{
+  position:fixed;
+  background:rgba(18,14,34,0.72);
+  -webkit-backdrop-filter:blur(40px) saturate(180%);
+  backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.14);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.18),
+    0 20px 50px -14px rgba(0,0,0,0.70); }
+#island[data-state="peek"] .isl-peek{ display:block;
+  max-height:var(--isl-peek-max,320px); overflow-y:auto; }
 #island .isl-input{ flex:1; min-width:0; background:none; border:0; outline:0; color:var(--ink-glass);
   font:inherit; font-family:var(--rune-font-text); }
 
@@ -1520,6 +1610,17 @@ html.electron #tlights{ display:flex; }
 @keyframes islandspin{ to{ --angle:360deg; } }
 #island.pulse{ animation:islandpulse 360ms ease; }
 @keyframes islandpulse{ 0%,100%{transform:translateX(-50%) scale(1)} 40%{transform:translateX(-50%) scale(1.02)} }
+
+/* dev-only state switcher, present only with ?dev=island */
+#isl-dev{ position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:9999;
+  display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:92vw;
+  padding:8px 10px; border-radius:14px; background:rgba(18,14,34,0.82);
+  -webkit-backdrop-filter:blur(24px); backdrop-filter:blur(24px);
+  border:1px solid rgba(255,255,255,0.14); }
+#isl-dev button{ font:500 11px/1 var(--rune-font-mono); color:#F4F2FF; cursor:pointer;
+  padding:6px 9px; border-radius:8px; border:1px solid rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.06); }
+#isl-dev button:hover{ background:rgba(139,124,255,0.28); }
 
 /* notification pill dropped by the Island */
 #isl-notes{ position:fixed; top:56px; left:50%; transform:translateX(-50%); z-index:79;
@@ -1624,6 +1725,24 @@ img[src=""],img:not([src]){ display:none; }
 /* status chips are not buttons — they keep the pill */
 .pill,.bub,.tag,.clockchip,.cchip{ border-radius:999px; }
 
+/* The split Run-it control is ONE object. §5.3 above re-rounds .cmdgo to 10px
+   on all four corners, which left a fully-rounded button jammed against a
+   square-left chevron — two mismatched shapes with a seam between them. The
+   wrapper owns the radius and the fill; the halves are flat segments inside
+   it, split only by a hairline. */
+.cmdsplit{ flex:none; display:inline-flex; align-items:stretch; height:36px;
+  border-radius:10px; overflow:hidden; isolation:isolate;
+  background:linear-gradient(180deg,var(--iris-glow),var(--iris));
+  box-shadow:0 6px 20px -8px var(--iris); }
+.cmdsplit .cmdgo,.cmdsplit .cmddrop{ height:100%; min-height:0; border:0;
+  border-radius:0; background:none; box-shadow:none; color:#fff; }
+.cmdsplit .cmdgo{ padding:0 14px; }
+.cmdsplit .cmddrop{ width:34px; padding:0;
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.28); }
+.cmdsplit .cmdgo:hover,.cmdsplit .cmddrop:hover{
+  background:rgba(255,255,255,.14); }
+.cmdsplit .cmdgo:disabled{ opacity:.5; background:none; cursor:default; }
+
 /* §1.2 card headers: the title flexes and truncates, the action sits beside it.
    No absolutely-positioned corner buttons — that is what made "Live instances"
    and "Accounts" render underneath their own controls. */
@@ -1682,15 +1801,6 @@ hr{ display:none; }
 .orchsheet-head{ display:flex; align-items:center; gap:12px; max-width:1120px; margin:0 auto 16px; }
 .orchsheet-head h3{ flex:1; margin:0; }
 .orchsheet>.grid,.orchsheet>.card{ max-width:1120px; margin-inline:auto; }
-
-/* ── rebuild scaffold: layout only, no colour or material in this pass ── */
-.dashgrid{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr));
-  gap:20px; margin-bottom:24px; }
-.dashgrid>.ph{ min-width:0; overflow:hidden; display:flex; flex-direction:column; }
-.dashgrid>.ph>h3{ flex:none; }
-.phtodo{ flex:1; display:grid; place-items:center;
-  font-family:var(--rune-font-mono); font-size:12px; color:var(--ink-3-glass); }
-@media (max-width:1100px){ .dashgrid>.ph{ grid-column:span 12 !important; } }
 
 /* ── connections ────────────────────────────────────────────────────── */
 .conngrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
@@ -1765,6 +1875,65 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
   -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 24px,#000 calc(100% - 24px),transparent 100%); }
 .ctrack::-webkit-scrollbar{ display:none; }
 .page,.main{ min-width:0; }
+
+/* ── status: ONE recipe, four families ───────────────────────────────
+   The page had four competing systems for the same idea: hardcoded light
+   hexes (#f7e4e2/#fbeed8), hardcoded dark hexes (#46201c/#413015), token
+   pairs, and solid saturated fills. On the graphite room that produced brown
+   blocks, neon pills and orange paragraphs — lots of colour, little reading.
+   Every state now draws from one tinted ground plus one legible ink of the
+   same hue, and body copy inside a state block stays neutral so only the
+   label carries colour. */
+:root{
+  --ok-ink:#0B6E4F;   --ok-bg:rgba(16,185,129,0.16);
+  --warn-ink:#7A4E05; --warn-bg:rgba(245,158,11,0.18);
+  --bad-ink:#9C2038;  --bad-bg:rgba(244,63,94,0.16);
+  --info-ink:#0A6376; --info-bg:rgba(6,182,212,0.16);
+  --mut-ink:var(--ink-2-glass); --mut-bg:rgba(20,18,39,0.07);
+}
+html[data-theme="dark"]{
+  /* these grounds stack on the panel's own 7% white over graphite; at 14% the
+     amber one composited to an olive slab, so the ink carries the state and
+     the ground only warms it */
+  --ok-ink:#6EE7B7;   --ok-bg:rgba(52,211,153,0.10);
+  --warn-ink:#FBD07A; --warn-bg:rgba(251,191,36,0.09);
+  --bad-ink:#FDA4AF;  --bad-bg:rgba(251,113,133,0.10);
+  --info-ink:#7DD3FC; --info-bg:rgba(56,189,248,0.10);
+  --mut-ink:var(--ink-2-glass); --mut-bg:rgba(255,255,255,0.08);
+  /* the same hues as solid marks (graph nodes, diff bars) were electric */
+  --mint-a:#3FCF97; --amber-a:#E0A63C; --coral:#F2637C; --cyan:#45B4D4;
+}
+
+.pill.live,.rstat.done,.rstat.working,.deltapill.pos,
+.tag.ok,.tag.good,.tag.done,.tag.live,.ai-review[data-tone="good"]{
+  background:var(--ok-bg) !important; color:var(--ok-ink) !important;
+  border-color:transparent !important; }
+.rstat.review,.rstat.exhausted,.rstat.retrying,.rstat.repairing,.rstat.recovering,
+.rstat.waiting_permission,.rstat.waiting-permission,.tag.warn,.tag.review,
+.delivery-blocked,.ai-review[data-tone="warn"],.brief-notice.warn{
+  background:var(--warn-bg) !important; color:var(--warn-ink) !important;
+  border-color:transparent !important; }
+.pill.warn,.rstat.failed,.rstat.blocked,.rstat.error,.deltapill.neg,
+.tag.bad,.tag.error,.delivery-blocked.bad,.brief-notice.error{
+  background:var(--bad-bg) !important; color:var(--bad-ink) !important;
+  border-color:transparent !important; }
+.pill.idle,.rstat.pending,.rstat.skipped,.deltapill.mut{
+  background:var(--mut-bg) !important; color:var(--mut-ink) !important;
+  border-color:transparent !important; }
+/* a state block's prose is prose — only its label and marker wear the hue */
+.delivery-blocked span,.ai-review span,.brief-notice span,.proof-boundary span,
+.delivery-step-detail{
+  color:var(--ink-2-glass) !important; }
+.delivery-blocked b,.ai-review b,.brief-notice b,.proof-boundary b{ color:currentColor; }
+
+/* Storage health inherited white-space:nowrap from an ancestor, so its ledger
+   lines ran 300px past a 289px column with nothing to scroll — half of every
+   line was simply unreadable. */
+.memory-health-body,.memory-reasons,.memory-mirror{ white-space:normal; overflow-wrap:anywhere; }
+
+/* disabled meant invisible on a dark room: .45 alpha over 10% white fill */
+.btn[disabled],.btn:disabled,.cmdgo:disabled,.chatsend:disabled,
+:where(button,input,textarea,select):disabled{ opacity:.68; }
 
 .iris-flash{ animation:irisflash 600ms ease; }
 @keyframes irisflash{ 0%,100%{ box-shadow:inset 0 1px 0 rgba(255,255,255,0.18), 0 12px 40px -8px rgba(0,0,0,0.55); }
@@ -1858,42 +2027,6 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
             <div class="pnote">Auto routes per prompt: pure questions get a chat answer; real work runs <b>solo</b> — one Claude Code session with full tools that actually does it, no subagents; only genuinely big jobs go to the CEO roster.</div>
           </div>
         </div>
-      </div>
-      <!-- rebuild scaffold: 12-col grid, fixed heights, nothing filled in yet -->
-      <div class="dashgrid">
-        <section class="card ph ph-connector" style="grid-column:span 7;height:320px;max-height:320px">
-          <h3>Connector stack</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-mission" style="grid-column:span 5;height:320px;max-height:320px">
-          <h3>Mission stack</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-stat" style="grid-column:span 3;height:104px;max-height:104px">
-          <h3>Stat tile 1</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-stat" style="grid-column:span 3;height:104px;max-height:104px">
-          <h3>Stat tile 2</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-stat" style="grid-column:span 3;height:104px;max-height:104px">
-          <h3>Stat tile 3</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-stat" style="grid-column:span 3;height:104px;max-height:104px">
-          <h3>Stat tile 4</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-burndown" style="grid-column:span 6;height:200px;max-height:200px">
-          <h3>Usage burndown</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-heatmap" style="grid-column:span 6;height:200px;max-height:200px">
-          <h3>Action heatmap</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-recent" style="grid-column:span 8;height:240px;max-height:240px">
-          <h3>Recent actions</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-skill" style="grid-column:span 4;height:240px;max-height:240px">
-          <h3>Skill coverage</h3><div class="phtodo">TODO</div>
-        </section>
-        <section class="card ph ph-brain" style="grid-column:span 12;height:120px;max-height:120px">
-          <h3>Brain</h3><div class="phtodo">TODO</div>
-        </section>
       </div>
       <div class="morning-stack">
         <article class="card calendar-overview" aria-labelledby="calendar-overview-title">
@@ -2011,10 +2144,13 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
         <div class="composer" id="composer">
           <textarea id="chatinput" rows="1" placeholder="Ask Wisp to do something…"></textarea>
           <div class="composer-actions">
-            <button type="button" class="tbtn" id="chatopts" title="Model, effort and account" aria-label="Options">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></button>
-            <button type="button" class="tbtn" id="chatexpand" title="Advanced orchestration" aria-label="Expand">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
+            <!-- One control, one job. This was two buttons — a brightness sun
+                 ("Options") and a fullscreen frame ("Advanced orchestration") —
+                 wired to the same openSheet(); neither icon described it and
+                 nothing expanded or changed brightness. Sliders say "tune the
+                 run", which is what the sheet does. -->
+            <button type="button" class="tbtn" id="chatopts" title="Mission settings — model, effort, account and roster" aria-label="Mission settings">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h9M17 18h3"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="18" r="2"/></svg></button>
             <button type="button" class="btn solid" id="chatsend">Send</button>
           </div>
         </div>
@@ -2289,9 +2425,11 @@ input::placeholder,textarea::placeholder{ color:var(--ink-3-glass); }
 
 <script>
 "use strict";
-const GREEN="#5c1346", MID="#7c1e60", MINT="#dca9cd", INK="#21151d";
+// the chart palette was the pre-glass plum brand; the page runs on iris now,
+// so these walk the accent instead of adding a fifth hue
+const GREEN="#6D5AE6", MID="#8B7CFF", MINT="#B9AEFF", INK="#12111A";
 const CAPFILL=[GREEN, MINT, MID];              // rotating capsule fills (Donezo style)
-const PIE=[GREEN, MID, MINT, "#b879a5", "#cec5cb", "#958a92"]; // pie chart exempt from 3-color cap
+const PIE=[GREEN, MID, MINT, "#45B4D4", "#3FCF97", "#94A3B8"]; // pie chart exempt from 3-color cap
 const STAGES=["think","plan","build","review","test","ship"];
 const LIVE_MS=15*60*1000;
 // Outside sessions are derived fresh from S.events every poll (not an
@@ -3322,7 +3460,9 @@ function render(){
   $("f-wire").style.color=S.wire&&!S.paused?"":"#f0b4ac";
   $("f-guard").textContent=tokens.length?tokens.length+" open":"armed";
   $("f-goal").textContent=(earned+"/"+sk.length+" earned");
-  $("n-inst").textContent=aliveInst.length;$("n-skill").textContent=earned+"/"+sk.length;
+  // no #n-skill badge: the skill tree was folded into Brain, and this dead
+  // write was throwing on null every poll — aborting the rest of render().
+  $("n-inst").textContent=aliveInst.length;
   $("n-brain").textContent=S.solved.length;$("n-audit").textContent=S.events.length;
   $("n-int").textContent=S.integ?(S.integ.mcp.length+S.integ.agents.length):0;
   {const upcoming=calendarUpcoming(calendarData());
@@ -4513,7 +4653,7 @@ $("refreshbtn").addEventListener("click",()=>{S.paused=false;
 const Graph=(function(){
   const svg=$("graph"),workspace=$("graphspace"),drawer=$("gdrawer"),panel=$("gpanel");
   const NS="http://www.w3.org/2000/svg",GOLDEN=Math.PI*(3-Math.sqrt(5));
-  const FOLDCOL=["#5c1346","#7c1e60","#3f7c9a","#9a6a3f","#7d5c9a","#bfb6bc","#675d64","#c48a3f"];
+  const FOLDCOL=["#6D5AE6","#8B7CFF","#45B4D4","#3FCF97","#B9AEFF","#94A3B8","#E0A63C","#F2637C"];
   const MIN_Z=.18,MAX_Z=3.4,STEP=1000/60;
   let nodes=[],links=[],adj=[],degree=[],folders={},src="vault",sig="";
   let world={w:2200,h:1400},camera={x:1100,y:700,z:.5},fitZoom=.5,cameraReady=false,needsFit=true;
@@ -5271,7 +5411,6 @@ route();poll();loadCalendarRange();setInterval(poll,2500);
 
     const sheet = document.getElementById("orchsheet");
     const openSheet = ()=>{ sheet.hidden = false; };
-    document.getElementById("chatexpand").onclick = openSheet;
     document.getElementById("chatopts").onclick = openSheet;
     document.getElementById("orchclose").onclick = ()=>{ sheet.hidden = true; };
     sheet.addEventListener("click", e => { if (e.target === sheet) sheet.hidden = true; });
@@ -5402,14 +5541,22 @@ route();poll();loadCalendarRange();setInterval(poll,2500);
         elCaret  = island.querySelector("#isl-caret"),
         elPeek   = island.querySelector("#isl-peek");
 
-  // width, height, radius per state — one spring drives t, all three lerp off it
-  const SIZE = { dormant:[180,36,999], listening:[320,44,999], thinking:[420,56,999],
-                 working:[520,76,28],  peek:[560,200,24],      notification:[300,48,16] };
-  let cur = {w:180,h:36,r:999}, stopMorph = null, state = "dormant";
+  // width, height, radius per state — one spring drives t, all three lerp off it,
+  // so the island is a single element deforming and never two elements swapping
+  const SIZE = { dormant:[200,34,999], listening:[420,48,999], thinking:[460,52,999],
+                 working:[520,64,26],  live:[320,38,999],      peek:[560,120,24],
+                 toast:[340,52,18],    minimized:[56,28,999] };
+  const STATES = Object.keys(SIZE);
+  let cur = {w:200,h:34,r:999}, stopMorph = null, state = "dormant", morphOff = 0;
   function morph(next){
     if (next === state) return;
     const [w,h,r] = SIZE[next] || SIZE.dormant, from = {...cur};
     state = next; island.dataset.state = next;
+    // content ducks out, then fades back 120ms in while the container is still
+    // settling — the container always leads
+    island.classList.add("morphing");
+    clearTimeout(morphOff);
+    morphOff = setTimeout(()=>island.classList.remove("morphing"), RM.matches ? 0 : 120);
     stopMorph && stopMorph();
     stopMorph = spring(0, 1, SPRING.island, t => {
       cur.w = from.w + (w-from.w)*t; cur.h = from.h + (h-from.h)*t; cur.r = from.r + (r-from.r)*t;
@@ -5418,6 +5565,8 @@ route();poll();loadCalendarRange();setInterval(poll,2500);
       island.style.borderRadius = cur.r.toFixed(1)+"px";
     });
   }
+  // peek is the one state that sizes to its payload; everything else is fixed
+  island.style.setProperty("--isl-peek-max", "320px");
   // content follows the container by 120ms — that lag is what sells one object
   // changing shape instead of two boxes swapping
   let swapTimer = 0;
@@ -5460,6 +5609,24 @@ route();poll();loadCalendarRange();setInterval(poll,2500);
     const raw = elStatus.dataset.raw || "";
     if (raw.endsWith("…")) elStatus.textContent = raw.slice(0,-1) + ".".repeat(dots);
   }, 400);
+
+  /* ---------- dev-only state switcher (?dev=island) ----------
+     Not shipped chrome: it exists so every transition can be driven by hand
+     and watched. window.islandState(name) is the same door for a console. */
+  window.islandState = name => { if (SIZE[name]) morph(name); return state; };
+  if (new URLSearchParams(location.search).get("dev") === "island"){
+    const bar = document.createElement("div");
+    bar.id = "isl-dev";
+    bar.innerHTML = STATES.map(s => `<button data-s="${s}">${s}</button>`).join("") +
+      '<button data-s="cycle">cycle</button>';
+    document.body.appendChild(bar);
+    bar.onclick = e => {
+      const s = e.target.dataset && e.target.dataset.s;
+      if (!s) return;
+      if (s !== "cycle") return void morph(s);
+      STATES.forEach((n, i) => setTimeout(()=>morph(n), i * 900));
+    };
+  }
 
   /* ---------- drive it from the real wire ---------- */
   const LIVE = new Set(["planning","running","working","pending","retrying","repairing","recovering"]);

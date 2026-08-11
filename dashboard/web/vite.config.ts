@@ -15,6 +15,11 @@ export default defineConfig(({ command }) => ({
   // serves from its own root and is reached through the proxy below instead.
   base: command === "build" ? DIST_BASE : "/",
   plugins: [react(), tailwindcss()],
+  // Vite 8's default "baseline-widely-available" target makes Lightning CSS emit
+  // ONLY -webkit-backdrop-filter, which current Chromium ignores -- every glass
+  // panel silently loses its blur. Pin a modern target so the standard property
+  // survives the build (Electron ships its own recent Chromium anyway).
+  build: { target: "chrome120", cssTarget: "chrome120" },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

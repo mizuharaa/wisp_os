@@ -1,5 +1,10 @@
 # Rune handoff
 
+> Newer work (2026-07-29) lives in `docs/HANDOFF-ui-and-island.md`: dashboard
+> theming and contrast, the usage/activity recorders, the parked React
+> rebuild, and Phase 1 of the Dynamic Island. This document is still current
+> for the CEO and delivery pipeline, which that session did not touch.
+
 Current as of 2026-07-20. Repository:
 `C:\Users\user\OneDrive\Desktop\Python Env\agentic_os`
 (GitHub `mizuharaa/rune_agent_os`, renamed from `maestro_agent_os` — update
